@@ -31,7 +31,8 @@ export default function WorkspaceSelection({
 
       if (selected) {
         const path = typeof selected === 'string' ? selected : String(selected);
-        const name = path.split('/').pop() || 'Workspace';
+        // Handle both forward and backslashes for cross-platform support
+        const name = path.split(/[\\/]/).filter(Boolean).pop() || 'Workspace';
         
         const newWorkspace: Workspace = {
           id: Date.now().toString(),

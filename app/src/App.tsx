@@ -30,6 +30,7 @@ function App() {
     addMessage,
     getTotalTokens,
     deleteSession,
+    renameSession,
     maxSessionsReached,
   } = useChatSessions();
 
@@ -110,6 +111,7 @@ function App() {
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}
           onDeleteSession={deleteSession}
+          onRenameSession={renameSession}
           onBack={handleBackToWorkspace}
         />
       )}
