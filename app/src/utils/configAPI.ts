@@ -1,6 +1,13 @@
-import { readTextFile, writeTextFile, exists } from '@tauri-apps/plugin-fs';
-import { Command } from '@tauri-apps/plugin-shell';
+import { readTextFile, writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { Settings, ChatSession, Workspace } from '../types';
+
+// Session metadata type (without messages for efficient loading)
+interface SessionMetadata {
+  id: string;
+  name: string;
+  tokenUsage: number;
+  createdAt: string; // ISO string
+}
 
 export class Config {
   private baseDir: string;
@@ -18,8 +25,13 @@ export class Config {
   private async ensureDir(dirPath: string): Promise<void> {
     const dirExists = await exists(dirPath);
     if (!dirExists) {
-      const command = Command.create('cmd', ['/c', 'mkdir', dirPath, '/p']);
-      await command.execute();
+      try {
+        // plugin exports mkdir (not createDir). Use recursive option to mimic mkdir -p behavior
+        await mkdir(dirPath, { recursive: true });
+      } catch (err) {
+        // Fallback: some platforms might not support mkdir through the plugin; ignore and let callers handle errors
+        console.warn('mkdir failed for', dirPath, err);
+      }
     }
   }
 
@@ -85,107 +97,113 @@ export class Config {
     }
   }
 
-  // Save chat session to chatlist/workspaceName/sessionId.json
+  // Save chat session to chatlist/workspaceName/sessions/sessionId.json
   async saveChatSession(workspaceId: string, session: ChatSession): Promise<void> {
-    const workspaceDir = `${this.chatlistDir}\\${workspaceId}`;
-    await this.ensureDir(workspaceDir);
-    const sessionFile = `${workspaceDir}\\${session.id}.json`;
+    const sessionsDir = `${this.chatlistDir}\\${workspaceId}\\sessions`;
+    await this.ensureDir(sessionsDir);
+    const sessionFile = `${sessionsDir}\\${session.id}.json`;
+    console.log('saveChatSession: saving to', sessionFile, 'messages count:', session.messages.length);
     const json = JSON.stringify(session, null, 2);
     await writeTextFile(sessionFile, json);
+    console.log('saveChatSession: saved successfully');
   }
 
-  // Load chat session from chatlist/workspaceName/sessionId.json
+  // Load chat session from chatlist/workspaceName/sessions/sessionId.json
   async loadChatSession(workspaceId: string, sessionId: string): Promise<ChatSession | null> {
     try {
-      const sessionFile = `${this.chatlistDir}\\${workspaceId}\\${sessionId}.json`;
+      const sessionFile = `${this.chatlistDir}\\${workspaceId}\\sessions\\${sessionId}.json`;
       const existsSession = await exists(sessionFile);
       if (!existsSession) return null;
       const json = await readTextFile(sessionFile);
-      return JSON.parse(json);
+      const session = JSON.parse(json);
+      // Convert date strings back to Date objects
+      return {
+        ...session,
+        createdAt: new Date(session.createdAt),
+        messages: session.messages.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        })),
+      };
     } catch (error) {
       console.error('Failed to load chat session:', error);
       return null;
     }
   }
 
-  // List all workspaces in chatlist/
-  async listWorkspaces(): Promise<string[]> {
-    try {
-      const command = Command.create('cmd', ['/c', 'dir', '/b', '/ad', this.chatlistDir]);
-      const output = await command.execute();
-      if (output.code === 0) {
-        return output.stdout.trim().split('\n').filter(name => name.trim() !== '');
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to list workspaces:', error);
-      return [];
-    }
-  }
-
-  // List all sessions for a workspace
-  async listSessionsForWorkspace(workspaceId: string): Promise<string[]> {
-    try {
-      const workspaceDir = `${this.chatlistDir}\\${workspaceId}`;
-      const command = Command.create('cmd', ['/c', 'dir', '/b', `${workspaceDir}\\*.json`]);
-      const output = await command.execute();
-      if (output.code === 0) {
-        return output.stdout.trim().split('\n').filter(name => name.trim() !== '').map(name => name.replace('.json', ''));
-      }
-      return [];
-    } catch (error) {
-      console.error('Failed to list sessions:', error);
-      return [];
-    }
-  }
-
-  // Save sessions for a workspace
+  // Save sessions metadata for a workspace (without messages for efficiency)
   async saveSessions(workspaceId: string, sessions: ChatSession[]): Promise<void> {
     const sessionsFile = `${this.chatlistDir}\\${workspaceId}\\sessions.json`;
     await this.ensureDir(`${this.chatlistDir}\\${workspaceId}`);
-    const json = JSON.stringify(sessions, null, 2);
+    
+    // Convert to metadata format (without messages)
+    const metadata: SessionMetadata[] = sessions.map(s => ({
+      id: s.id,
+      name: s.name,
+      tokenUsage: s.tokenUsage,
+      createdAt: s.createdAt.toISOString(),
+    }));
+    
+    const json = JSON.stringify(metadata, null, 2);
     await writeTextFile(sessionsFile, json);
   }
 
-  // Load sessions for a workspace
+  // Load sessions metadata for a workspace (without messages for efficiency)
   async loadSessions(workspaceId: string): Promise<ChatSession[]> {
     try {
       const sessionsFile = `${this.chatlistDir}\\${workspaceId}\\sessions.json`;
       const existsSessions = await exists(sessionsFile);
       if (!existsSessions) return [];
       const json = await readTextFile(sessionsFile);
-      const sessions = JSON.parse(json);
-      // Convert date strings back to Date objects
-      return sessions.map((s: any) => ({
-        ...s,
-        createdAt: new Date(s.createdAt),
-        messages: s.messages.map((m: any) => ({
-          ...m,
-          timestamp: new Date(m.timestamp),
-        })),
-      }));
+      const metadata: SessionMetadata[] = JSON.parse(json);
+      
+      // Convert metadata to ChatSession objects (messages will be loaded on demand)
+      const sessions: ChatSession[] = await Promise.all(
+        metadata.map(async (meta) => {
+          const fullSession = await this.loadChatSession(workspaceId, meta.id);
+          return fullSession || {
+            id: meta.id,
+            name: meta.name,
+            messages: [],
+            tokenUsage: meta.tokenUsage,
+            createdAt: new Date(meta.createdAt),
+          };
+        })
+      );
+      
+      return sessions;
     } catch (error) {
       console.error('Failed to load sessions:', error);
       return [];
     }
   }
 
-  // Delete a single session file and update sessions.json if present
+  // Delete a session from sessions.json
   async deleteSession(workspaceId: string, sessionId: string): Promise<boolean> {
     try {
-      const workspaceDir = `${this.chatlistDir}\\${workspaceId}`;
-      const sessionFile = `${workspaceDir}\\${sessionId}.json`;
-      // Use cmd del to remove the file on Windows
-      const command = Command.create('cmd', ['/c', 'del', '/Q', sessionFile]);
-      await command.execute();
+      // Delete individual session file first
+      await this.deleteChatSession(workspaceId, sessionId);
       // Update sessions.json
       const sessions = await this.loadSessions(workspaceId);
       const filtered = sessions.filter(s => s.id !== sessionId);
       await this.saveSessions(workspaceId, filtered);
       return true;
     } catch (error) {
-      console.error('Failed to delete session file:', error);
+      console.error('Failed to delete session:', error);
       return false;
+    }
+  }
+
+  // Delete individual chat session file
+  async deleteChatSession(workspaceId: string, sessionId: string): Promise<void> {
+    try {
+      const sessionFile = `${this.chatlistDir}\\${workspaceId}\\sessions\\${sessionId}.json`;
+      const fileExists = await exists(sessionFile);
+      if (fileExists) {
+        await remove(sessionFile);
+      }
+    } catch (error) {
+      console.error('Failed to delete chat session file:', error);
     }
   }
 }

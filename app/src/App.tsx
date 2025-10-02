@@ -31,7 +31,7 @@ function App() {
     setCurrentSessionId,
     createNewSession,
     addMessage,
-    getTotalTokens,
+    getAggregatedStats,
     deleteSession,
     renameSession,
     maxSessionsReached,
@@ -44,10 +44,16 @@ function App() {
     }
   }, [settings.theme, isLoading]);
 
-  const handleSelectWorkspace = (workspace: Workspace) => {
+  const handleSelectWorkspace = async (workspace: Workspace) => {
     setCurrentWorkspace(workspace);
     updateLastOpened(workspace.id);
     addWorkspace(workspace);
+    
+    // Auto-create first session if no sessions exist
+    if (sessions.length === 0) {
+      await createNewSession();
+    }
+    
     setCurrentView('chat');
   };
 
@@ -106,7 +112,7 @@ function App() {
           currentSession={currentSession}
           currentSessionId={currentSessionId}
           maxSessionsReached={maxSessionsReached}
-          totalTokens={getTotalTokens()}
+          aggregatedStats={getAggregatedStats()}
           onCreateNewSession={createNewSession}
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}

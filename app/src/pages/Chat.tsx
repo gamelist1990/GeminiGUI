@@ -1,8 +1,48 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChatSession, ChatMessage, Workspace } from '../types';
 import { t } from '../utils/i18n';
-import { formatElapsedTime } from '../utils/storage';
+import { formatElapsedTime, formatNumber } from '../utils/storage';
+import { callGemini } from '../utils/geminiCUI';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import './Chat.css';
+
+// Markdown components for syntax highlighting
+const markdownComponents = {
+  code({ node, inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || '');
+    if (!inline && match) {
+      if (match[1] === 'markdown') {
+        // For markdown code blocks, render the content as markdown
+        return (
+          <div className="markdown-preview">
+            <ReactMarkdown>
+              {String(children)}
+            </ReactMarkdown>
+          </div>
+        );
+      } else {
+        return (
+          <SyntaxHighlighter
+            style={oneDark}
+            language={match[1]}
+            PreTag="div"
+            {...props}
+          >
+            {String(children).replace(/\n$/, '')}
+          </SyntaxHighlighter>
+        );
+      }
+    } else {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+  },
+};
 
 interface ChatProps {
   workspace: Workspace;
@@ -10,7 +50,7 @@ interface ChatProps {
   currentSession: ChatSession | undefined;
   currentSessionId: string;
   maxSessionsReached: boolean;
-  totalTokens: number;
+  aggregatedStats: any;
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
@@ -25,7 +65,7 @@ export default function Chat({
   currentSession,
   currentSessionId,
   maxSessionsReached,
-  totalTokens,
+  aggregatedStats,
   onCreateNewSession,
   onSwitchSession,
   onSendMessage,
@@ -42,12 +82,34 @@ export default function Chat({
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState('');
+  const [showStatsModal, setShowStatsModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentSession?.messages]);
+
+  // Update elapsed time in real-time
+  useEffect(() => {
+    if (!currentSession) {
+      setElapsedTime('');
+      return;
+    }
+
+    const updateElapsedTime = () => {
+      setElapsedTime(formatElapsedTime(currentSession.createdAt));
+    };
+
+    // Update immediately
+    updateElapsedTime();
+
+    // Update every second
+    const interval = setInterval(updateElapsedTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentSession]);
 
   // Handle command and file suggestions
   useEffect(() => {
@@ -161,17 +223,28 @@ export default function Chat({
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      const geminiResponse = await callGemini(inputValue, workspace.path);
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'こんにちは！これはモックレスポンスです。実際のAI統合では、ここで実際のレスポンスが表示されます。',
+        content: geminiResponse.response,
         timestamp: new Date(),
+        stats: geminiResponse.stats,
       };
       onSendMessage(currentSessionId, aiMessage);
+    } catch (error) {
+      console.error('Error calling Gemini:', error);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+      onSendMessage(currentSessionId, errorMessage);
+    } finally {
       setIsTyping(false);
-    }, 1000);
+    }
   };
 
   const handleNewChat = async () => {
@@ -209,18 +282,27 @@ export default function Chat({
           <div className="stat">
             <span className="stat-label">{t('chat.tokenUsage')}:</span>
             <span className="stat-value">
-              {currentSession?.tokenUsage.toFixed(0)} / {totalTokens.toFixed(0)}
+              {formatNumber(currentSession && currentSession.messages.length > 0 && currentSession.messages[currentSession.messages.length - 1]?.stats
+                ? Object.values(currentSession.messages[currentSession.messages.length - 1].stats!.models)[0]?.tokens.total || 0
+                : 0)}
             </span>
           </div>
           {currentSession && (
             <div className="stat">
               <span className="stat-label">{t('chat.elapsedTime')}:</span>
               <span className="stat-value">
-                {formatElapsedTime(currentSession.createdAt)}
+                {elapsedTime}
               </span>
             </div>
           )}
         </div>
+        <button
+          className="stats-button secondary"
+          onClick={() => setShowStatsModal(true)}
+          disabled={!aggregatedStats}
+        >
+          📊 統計
+        </button>
         <button
           className="new-chat-button primary"
           onClick={handleNewChat}
@@ -274,7 +356,7 @@ export default function Chat({
                       {session.name}
                     </span>
                   )}
-                  <span className="session-tokens">{session.tokenUsage.toFixed(0)} tokens</span>
+                  <span className="session-tokens">{formatNumber(session.tokenUsage)} tokens</span>
                 </div>
                 {sessions.length > 1 && (
                   <button
@@ -294,26 +376,28 @@ export default function Chat({
 
         <div className="chat-main">
           <div className="messages-container">
-            {currentSession?.messages.length === 0 ? (
-              <div className="empty-state">
-                <div className="gemini-logo">
-                  <svg width="64" height="64" viewBox="0 0 48 48" fill="none">
-                    <circle cx="24" cy="24" r="20" fill="url(#gradient)" />
-                    <defs>
-                      <linearGradient id="gradient" x1="4" y1="4" x2="44" y2="44">
-                        <stop offset="0%" stopColor="#4285f4" />
-                        <stop offset="100%" stopColor="#9334e6" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
+            {(() => {
+              return currentSession?.messages.length === 0 ? (
+                <div className="empty-state">
+                  <div className="gemini-logo">
+                    <svg width="64" height="64" viewBox="0 0 48 48" fill="none">
+                      <circle cx="24" cy="24" r="20" fill="url(#gradient)" />
+                      <defs>
+                        <linearGradient id="gradient" x1="4" y1="4" x2="44" y2="44">
+                          <stop offset="0%" stopColor="#4285f4" />
+                          <stop offset="100%" stopColor="#9334e6" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                  <p>{t('chat.noMessages')}</p>
                 </div>
-                <p>{t('chat.noMessages')}</p>
-              </div>
-            ) : (
-              currentSession?.messages.map((message) => (
-                <ChatMessageBubble key={message.id} message={message} />
-              ))
-            )}
+              ) : (
+                currentSession?.messages.map((message) => (
+                  <ChatMessageBubble key={message.id} message={message} />
+                ))
+              );
+            })()}
             {isTyping && (
               <div className="message assistant">
                 <div className="message-bubble">
@@ -386,6 +470,81 @@ export default function Chat({
           </div>
         </div>
       </div>
+
+      {/* Stats Modal */}
+      {showStatsModal && aggregatedStats && (
+        <div className="modal-overlay" onClick={() => setShowStatsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>セッション統計情報</h2>
+              <button className="modal-close" onClick={() => setShowStatsModal(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="stats-section">
+                <h3>使用モデル</h3>
+                {Object.entries(aggregatedStats.models).map(([modelName, modelData]: [string, any]) => (
+                  <div key={modelName} className="model-info">
+                    <div className="model-name">{modelName}</div>
+                    <div className="model-details">
+                      <div>リクエスト数: {modelData.api.totalRequests}</div>
+                      <div>エラー数: {modelData.api.totalErrors}</div>
+                      <div>レイテンシ: {modelData.api.totalLatencyMs}ms</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="stats-section">
+                <h3>トークン使用量</h3>
+                {Object.entries(aggregatedStats.models).map(([modelName, modelData]: [string, any]) => (
+                  <div key={modelName} className="token-info">
+                    <div>プロンプト: {modelData.tokens.prompt}</div>
+                    <div>応答: {modelData.tokens.candidates}</div>
+                    <div>合計: {modelData.tokens.total}</div>
+                    <div>キャッシュ: {modelData.tokens.cached}</div>
+                    <div>思考: {modelData.tokens.thoughts}</div>
+                    <div>ツール: {modelData.tokens.tool}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="stats-section">
+                <h3>ツール使用状況</h3>
+                <div className="tools-summary">
+                  <div>総呼び出し数: {aggregatedStats.tools.totalCalls}</div>
+                  <div>成功: {aggregatedStats.tools.totalSuccess}</div>
+                  <div>失敗: {aggregatedStats.tools.totalFail}</div>
+                  <div>総実行時間: {aggregatedStats.tools.totalDurationMs}ms</div>
+                </div>
+                {Object.keys(aggregatedStats.tools.byName).length > 0 && (
+                  <div className="tools-details">
+                    <h4>使用ツール詳細</h4>
+                    {Object.entries(aggregatedStats.tools.byName).map(([toolName, toolData]: [string, any]) => (
+                      <div key={toolName} className="tool-detail">
+                        <div className="tool-name">{toolName}</div>
+                        <div className="tool-stats">
+                          <div>使用回数: {toolData.count}</div>
+                          <div>実行時間: {toolData.durationMs}ms</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="stats-section">
+                <h3>ファイル変更</h3>
+                <div className="file-changes">
+                  <div>追加行数: {aggregatedStats.files.totalLinesAdded}</div>
+                  <div>削除行数: {aggregatedStats.files.totalLinesRemoved}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -395,13 +554,94 @@ interface ChatMessageBubbleProps {
 }
 
 function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
+  const [showStats, setShowStats] = useState(false);
+
   return (
     <div className={`message ${message.role}`}>
       <div className="message-avatar">
         {message.role === 'user' ? '👤' : '🤖'}
       </div>
       <div className="message-bubble">
-        <p>{message.content}</p>
+        {message.role === 'assistant' ? (
+          <ReactMarkdown components={markdownComponents}>
+            {message.content}
+          </ReactMarkdown>
+        ) : (
+          <p>{message.content}</p>
+        )}
+        {message.stats && (
+          <div className="message-stats-toggle">
+            <button 
+              className="stats-toggle-button"
+              onClick={() => setShowStats(!showStats)}
+            >
+              📊 詳細統計 {showStats ? '▲' : '▼'}
+            </button>
+            {showStats && (
+              <div className="message-stats">
+                <div className="stats-section">
+                  <h4>使用モデル</h4>
+                  {Object.entries(message.stats.models).map(([modelName, modelData]) => (
+                    <div key={modelName} className="model-info">
+                      <div className="model-name">{modelName}</div>
+                      <div className="model-details">
+                        <div>リクエスト数: {modelData.api.totalRequests}</div>
+                        <div>エラー数: {modelData.api.totalErrors}</div>
+                        <div>レイテンシ: {modelData.api.totalLatencyMs}ms</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="stats-section">
+                  <h4>トークン使用量</h4>
+                  {Object.entries(message.stats.models).map(([modelName, modelData]) => (
+                    <div key={modelName} className="token-info">
+                      <div>プロンプト: {modelData.tokens.prompt}</div>
+                      <div>応答: {modelData.tokens.candidates}</div>
+                      <div>合計: {modelData.tokens.total}</div>
+                      <div>キャッシュ: {modelData.tokens.cached}</div>
+                      <div>思考: {modelData.tokens.thoughts}</div>
+                      <div>ツール: {modelData.tokens.tool}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="stats-section">
+                  <h4>ツール使用状況</h4>
+                  <div className="tools-summary">
+                    <div>総呼び出し数: {message.stats.tools.totalCalls}</div>
+                    <div>成功: {message.stats.tools.totalSuccess}</div>
+                    <div>失敗: {message.stats.tools.totalFail}</div>
+                    <div>総実行時間: {message.stats.tools.totalDurationMs}ms</div>
+                  </div>
+                  {Object.keys(message.stats.tools.byName).length > 0 && (
+                    <div className="tools-details">
+                      <h5>使用ツール詳細</h5>
+                      {Object.entries(message.stats.tools.byName).map(([toolName, toolData]) => (
+                        <div key={toolName} className="tool-detail">
+                          <div className="tool-name">{toolName}</div>
+                          <div className="tool-stats">
+                            <div>使用回数: {toolData.count}</div>
+                            <div>実行時間: {toolData.durationMs}ms</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="stats-section">
+                  <h4>ファイル変更</h4>
+                  <div className="file-changes">
+                    <div>追加行数: {message.stats.files.totalLinesAdded}</div>
+                    <div>削除行数: {message.stats.files.totalLinesRemoved}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <span className="message-time">
           {message.timestamp.toLocaleTimeString()}
         </span>

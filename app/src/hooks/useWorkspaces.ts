@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Workspace } from '../types';
 import { Config } from '../utils/configAPI';
-import { mockWorkspaces } from '../mock';
 
 const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
 
@@ -11,7 +10,7 @@ export function useWorkspaces() {
   useEffect(() => {
     (async () => {
       const loaded = await config.loadWorkspaces();
-      setWorkspaces(loaded.length > 0 ? loaded : mockWorkspaces);
+      setWorkspaces(loaded.length > 0 ? loaded : []);
     })();
   }, []);
 
