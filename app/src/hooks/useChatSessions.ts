@@ -1,22 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChatSession, ChatMessage } from '../types';
+import { Config } from '../utils/configAPI';
 import { mockSessions } from '../mock';
 
 const MAX_SESSIONS = 5;
+const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
 
-export function useChatSessions() {
-  const [sessions, setSessions] = useState<ChatSession[]>(mockSessions);
+export function useChatSessions(workspaceName?: string) {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
 
-  // Ensure currentSessionId is set to the first session id once sessions are available
-  if (!currentSessionId && sessions.length > 0) {
-    setCurrentSessionId(sessions[0].id);
-  }
+  useEffect(() => {
+    if (workspaceName) {
+      (async () => {
+        const loaded = await config.loadSessions(workspaceName);
+        const finalSessions = loaded.length > 0 ? loaded : mockSessions;
+        setSessions(finalSessions);
+        if (!currentSessionId && finalSessions.length > 0) {
+          setCurrentSessionId(finalSessions[0].id);
+        }
+      })();
+    } else {
+      // No workspace selected, use empty sessions
+      setSessions([]);
+      setCurrentSessionId('');
+    }
+  }, [workspaceName]);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  const createNewSession = (): boolean => {
-    if (sessions.length >= MAX_SESSIONS) {
+  const createNewSession = async (): Promise<boolean> => {
+    if (sessions.length >= MAX_SESSIONS || !workspaceName) {
       return false; // Cannot create more sessions
     }
     
@@ -28,43 +42,61 @@ export function useChatSessions() {
       createdAt: new Date(),
     };
     
-    setSessions([...sessions, newSession]);
+    const updated = [...sessions, newSession];
+    setSessions(updated);
     setCurrentSessionId(newSession.id);
+    await config.saveSessions(workspaceName, updated);
     return true;
   };
 
-  const addMessage = (sessionId: string, message: ChatMessage) => {
-    setSessions(sessions.map(s => {
+  const addMessage = async (sessionId: string, message: ChatMessage) => {
+    const updated = sessions.map(s => {
       if (s.id === sessionId) {
-        return {
+        const newSession = {
           ...s,
           messages: [...s.messages, message],
           tokenUsage: s.tokenUsage + (message.content.length * 0.5), // Mock token calculation
         };
+        // Save individual session
+        if (workspaceName) {
+          config.saveChatSession(workspaceName, newSession);
+        }
+        return newSession;
       }
       return s;
-    }));
+    });
+    setSessions(updated);
+    if (workspaceName) {
+      await config.saveSessions(workspaceName, updated);
+    }
   };
 
-  const getTotalTokens = () => {
-    return sessions.reduce((sum, s) => sum + s.tokenUsage, 0);
-  };
-
-  const deleteSession = (sessionId: string) => {
+  const deleteSession = async (sessionId: string) => {
     const filtered = sessions.filter(s => s.id !== sessionId);
     setSessions(filtered);
     if (currentSessionId === sessionId && filtered.length > 0) {
       setCurrentSessionId(filtered[0].id);
     }
+    if (workspaceName) {
+      await config.saveSessions(workspaceName, filtered);
+    }
   };
 
-  const renameSession = (sessionId: string, newName: string) => {
-    setSessions(sessions.map(s => {
+  const renameSession = async (sessionId: string, newName: string) => {
+    const updated = sessions.map(s => {
       if (s.id === sessionId) {
         return { ...s, name: newName };
       }
       return s;
-    }));
+    });
+    setSessions(updated);
+    if (workspaceName) {
+      await config.saveSessions(workspaceName, updated);
+    }
+  };
+
+  const getTotalTokens = () => {
+    return sessions.reduce((sum, s) => sum + s.tokenUsage, 0);
   };
 
   return {

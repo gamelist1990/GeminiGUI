@@ -21,6 +21,9 @@ function App() {
     addWorkspace,
   } = useWorkspaces();
   
+  const [currentView, setCurrentView] = useState<View>('workspace');
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+
   const {
     sessions,
     currentSession,
@@ -32,10 +35,7 @@ function App() {
     deleteSession,
     renameSession,
     maxSessionsReached,
-  } = useChatSessions();
-
-  const [currentView, setCurrentView] = useState<View>('workspace');
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+  } = useChatSessions(currentWorkspace?.name);
 
   // Apply theme
   useEffect(() => {

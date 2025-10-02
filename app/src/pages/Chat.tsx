@@ -11,7 +11,7 @@ interface ChatProps {
   currentSessionId: string;
   maxSessionsReached: boolean;
   totalTokens: number;
-  onCreateNewSession: () => boolean;
+  onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
   onDeleteSession: (id: string) => void;
@@ -174,8 +174,8 @@ export default function Chat({
     }, 1000);
   };
 
-  const handleNewChat = () => {
-    const success = onCreateNewSession();
+  const handleNewChat = async () => {
+    const success = await onCreateNewSession();
     if (!success) {
       alert(t('chat.sessionLimit'));
     }

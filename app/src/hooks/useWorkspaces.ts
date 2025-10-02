@@ -8,11 +8,17 @@ export function useWorkspaces() {
 
   useEffect(() => {
     const loaded = loadWorkspaces();
-    // Use mock data if no workspaces saved
     setWorkspaces(loaded.length > 0 ? loaded : mockWorkspaces);
   }, []);
 
   const addWorkspace = (workspace: Workspace) => {
+    // Check if workspace with same path already exists
+    const exists = workspaces.some(w => w.path === workspace.path);
+    if (exists) {
+      // Update lastOpened for existing workspace
+      updateLastOpened(workspaces.find(w => w.path === workspace.path)!.id);
+      return;
+    }
     const updated = [...workspaces, workspace];
     setWorkspaces(updated);
     saveWorkspaces(updated);

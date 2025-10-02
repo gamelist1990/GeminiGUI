@@ -21,6 +21,11 @@ export default function WorkspaceSelection({
 }: WorkspaceSelectionProps) {
   const [isOpening, setIsOpening] = useState(false);
 
+  // Filter out favorite workspaces from recent workspaces to avoid duplicates
+  const filteredRecentWorkspaces = recentWorkspaces.filter(
+    recent => !favoriteWorkspaces.some(fav => fav.id === recent.id)
+  );
+
   const handleOpenWorkspace = async () => {
     setIsOpening(true);
     try {
@@ -91,7 +96,7 @@ export default function WorkspaceSelection({
               <div className="workspace-list">
                 {favoriteWorkspaces.map((workspace) => (
                   <WorkspaceCard
-                    key={workspace.id}
+                    key={workspace.id + '-fav'}
                     workspace={workspace}
                     onSelect={onSelectWorkspace}
                     onToggleFavorite={onToggleFavorite}
@@ -101,13 +106,13 @@ export default function WorkspaceSelection({
             </section>
           )}
 
-          {recentWorkspaces.length > 0 && (
+          {filteredRecentWorkspaces.length > 0 && (
             <section className="workspace-section">
               <h2>🕐 {t('workspace.recentWorkspaces')}</h2>
               <div className="workspace-list">
-                {recentWorkspaces.map((workspace) => (
+                {filteredRecentWorkspaces.map((workspace) => (
                   <WorkspaceCard
-                    key={workspace.id}
+                    key={workspace.id + '-recent'}
                     workspace={workspace}
                     onSelect={onSelectWorkspace}
                     onToggleFavorite={onToggleFavorite}

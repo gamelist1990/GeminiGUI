@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Settings, Language } from '../types';
-import { loadSettings, saveSettings } from '../utils/storage';
+import { Config } from '../utils/configAPI';
 import { loadLanguage } from '../utils/i18n';
 
 const defaultSettings: Settings = {
@@ -8,13 +8,15 @@ const defaultSettings: Settings = {
   theme: 'light',
 };
 
+const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
+
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const loadedSettings = loadSettings();
+      const loadedSettings = await config.loadConfig();
       if (loadedSettings) {
         setSettings(loadedSettings);
         await loadLanguage(loadedSettings.language as Language);
@@ -25,12 +27,12 @@ export function useSettings() {
     })();
   }, []);
 
-  const updateSettings = (newSettings: Partial<Settings>) => {
+  const updateSettings = async (newSettings: Partial<Settings>) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    saveSettings(updated);
+    await config.saveConfig(updated);
     if (newSettings.language) {
-      loadLanguage(newSettings.language as Language);
+      await loadLanguage(newSettings.language as Language);
     }
   };
 
