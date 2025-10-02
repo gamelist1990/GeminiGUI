@@ -523,6 +523,8 @@ export default function Chat({
         includes: includes.length > 0 ? includes : undefined,
         includeDirectories: directories.length > 0 ? directories : undefined,
         conversationHistory: conversationHistory && recentMessages.length > 0 ? conversationHistory : undefined,
+        workspaceId: workspace.id,
+        sessionId: currentSessionId,
       };
 
       console.log('Sending message with conversation history:', conversationHistory ? 'Yes' : 'No');
@@ -781,6 +783,8 @@ export default function Chat({
                             includes: includes.length > 0 ? includes : undefined,
                             includeDirectories: directories.length > 0 ? directories : undefined,
                             conversationHistory: conversationHistory && previousMessages.length > 0 ? conversationHistory : undefined,
+                            workspaceId: workspace.id,
+                            sessionId: currentSessionId,
                           };
                           
                           console.log('Resending message with conversation history:', conversationHistory ? 'Yes' : 'No');

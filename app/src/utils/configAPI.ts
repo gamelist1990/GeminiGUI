@@ -1,5 +1,6 @@
 import { readTextFile, writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
-import { Settings, ChatSession, Workspace } from '../types';
+import { locale } from '@tauri-apps/plugin-os';
+import { Settings, ChatSession, Workspace, Language } from '../types';
 
 // Session metadata type (without messages for efficient loading)
 interface SessionMetadata {
@@ -7,6 +8,37 @@ interface SessionMetadata {
   name: string;
   tokenUsage: number;
   createdAt: string; // ISO string
+}
+
+const SUPPORTED_LANGUAGE_PREFIXES: Record<string, Language> = {
+  ja: 'ja_JP',
+  en: 'en_US',
+};
+
+async function detectDefaultLanguage(): Promise<Language> {
+  try {
+    const systemLocale = (await locale())?.toLowerCase();
+    if (systemLocale) {
+      const prefix = systemLocale.split('-')[0];
+      const mapped = SUPPORTED_LANGUAGE_PREFIXES[prefix as keyof typeof SUPPORTED_LANGUAGE_PREFIXES];
+      if (mapped) {
+        return mapped;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to determine system locale via plugin:', error);
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.language) {
+    const browserLocale = navigator.language.toLowerCase();
+    const prefix = browserLocale.split('-')[0];
+    const mapped = SUPPORTED_LANGUAGE_PREFIXES[prefix as keyof typeof SUPPORTED_LANGUAGE_PREFIXES];
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  return 'en_US';
 }
 
 export class Config {
@@ -19,6 +51,18 @@ export class Config {
     this.configFile = `${this.baseDir}\\config.json`;
     // store chat sessions under Chatrequest/<workspaceId>/<sessionId>.json
     this.chatlistDir = `${this.baseDir}\\Chatrequest`;
+  }
+
+  private async buildDefaultSettings(): Promise<Settings> {
+    const language = await detectDefaultLanguage();
+    return {
+      language,
+      theme: 'light',
+      approvalMode: 'default',
+      model: 'default',
+      maxMessagesBeforeCompact: 25,
+      geminiAuth: false,
+    };
   }
 
   // Ensure directory exists
@@ -47,15 +91,7 @@ export class Config {
     try {
       const existsConfig = await exists(this.configFile);
       if (!existsConfig) {
-        // If config file doesn't exist, create default config
-        const defaultSettings: Settings = { 
-          language: 'en_US', 
-          theme: 'light', 
-          approvalMode: 'default', 
-          model: 'default', 
-          maxMessagesBeforeCompact: 25,
-          geminiAuth: false
-        };
+        const defaultSettings = await this.buildDefaultSettings();
         await this.saveConfig(defaultSettings);
         return defaultSettings;
       }
@@ -67,14 +103,7 @@ export class Config {
       // Try to ensure base dir and create default config, if possible
       try {
         await this.ensureDir(this.baseDir);
-        const defaultSettings: Settings = { 
-          language: 'en_US', 
-          theme: 'light', 
-          approvalMode: 'default', 
-          model: 'default', 
-          maxMessagesBeforeCompact: 25,
-          geminiAuth: false
-        };
+        const defaultSettings = await this.buildDefaultSettings();
         try {
           await writeTextFile(this.configFile, JSON.stringify(defaultSettings, null, 2));
         } catch (err) {

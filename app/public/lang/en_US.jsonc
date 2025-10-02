@@ -73,6 +73,12 @@
       "authSetupError": "Error during authentication setup:",
       "authStartError": "Error during authentication start:",
       "authVerifyError": "Error during authentication verification:"
+      ,"statusAllComplete": "✅ Gemini CLI, authentication, and Google Cloud Project are all configured"
+      ,"statusGeminiAuthReady": "✅ Gemini CLI and Google authentication are complete"
+      ,"statusProjectMissing": "⚠️ Please configure a Google Cloud Project"
+      ,"statusGeminiAuthNeeded": "⚠️ Google account authentication is required"
+      ,"statusNodeReadyGeminiMissing": "⚠️ Node.js is ready. Please install the Gemini CLI"
+      ,"statusNodeMissing": "✗ Node.js is not installed"
     }
   },
   "chat": {

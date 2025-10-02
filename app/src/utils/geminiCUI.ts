@@ -1,4 +1,6 @@
 import { Command } from '@tauri-apps/plugin-shell';
+import { writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { join, documentDir } from '@tauri-apps/api/path';
 
 type LogFunction = (message: string) => void;
 
@@ -58,6 +60,48 @@ export interface GeminiOptions {
   model?: string; // Model to use (e.g., 'gemini-2.5-flash')
   customApiKey?: string; // Custom API key
   conversationHistory?: string; // Conversation history as system message
+  workspaceId?: string;
+  sessionId?: string;
+}
+
+async function ensureDir(path: string) {
+  const dirExists = await exists(path);
+  if (!dirExists) {
+    await mkdir(path, { recursive: true });
+  }
+}
+
+async function writeConversationHistoryFile(
+  content: string,
+  workspaceId?: string,
+  sessionId?: string,
+  log?: LogFunction
+): Promise<string | null> {
+  try {
+    const baseDocuments = await documentDir();
+    const workspaceFolder = workspaceId || 'global';
+    const sessionFolder = sessionId || 'shared';
+
+    const tempDir = await join(
+      baseDocuments,
+      'PEXData',
+      'GeminiGUI',
+      'Chatrequest',
+      workspaceFolder,
+      'temp'
+    );
+
+    await ensureDir(tempDir);
+
+    const fileName = `conversation-${workspaceFolder}-${sessionFolder}.txt`;
+    const filePath = await join(tempDir, fileName);
+    await writeTextFile(filePath, content);
+    internalLog(`Conversation history saved to: ${filePath}`, log);
+    return filePath;
+  } catch (error) {
+    internalLog('Failed to write conversation history file: ' + String(error), log);
+    return null;
+  }
 }
 
 export async function callGemini(
@@ -81,22 +125,32 @@ export async function callGemini(
     
     // Build gemini command arguments as array
     const geminiArgs: string[] = [];
-    
-    // Build the full prompt with conversation history and includes
-    let fullPrompt = '';
-    
-    // Add conversation history at the beginning if provided
+
+    // Prepare includes array, optionally augmented with conversation history file
+    const includesList = [...(options?.includes || [])];
+
+    let fullPrompt = prompt;
+
     if (options?.conversationHistory) {
-      fullPrompt = `[Previous conversation context]\n${options.conversationHistory}\n\n[Current user message]\n`;
-  internalLog(`Adding conversation history to prompt, length: ${options.conversationHistory.length}`, log);
+      const conversationFile = await writeConversationHistoryFile(
+        options.conversationHistory,
+        options.workspaceId,
+        options.sessionId,
+        log
+      );
+
+      if (conversationFile) {
+        const normalized = conversationFile.replace(/\\/g, '/');
+        includesList.unshift(`file:${normalized}`);
+      } else {
+        // Fallback to inline history if file creation failed
+        fullPrompt = `[Previous conversation context]\n${options.conversationHistory}\n\n[Current user message]\n${prompt}`;
+        internalLog('Falling back to inline conversation history', log);
+      }
     }
-    
-    // Add the main prompt
-    fullPrompt += prompt;
-    
-    // Prepend @includes to the prompt
-    if (options?.includes && options.includes.length > 0) {
-      const includesStr = options.includes.map(inc => `@${inc}`).join(' ');
+
+    if (includesList.length > 0) {
+      const includesStr = includesList.map(inc => `@${inc}`).join(' ');
       fullPrompt = `${includesStr} ${fullPrompt}`;
     }
     

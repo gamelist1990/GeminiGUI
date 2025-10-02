@@ -69,31 +69,24 @@ const SetupModal: React.FC<SetupModalProps> = ({
       const result = await geminiCheck(addLog);
 
       if (result.geminiExists && result.isAuthenticated && result.hasProject === true) {
-        // Gemini CLI、認証、プロジェクトがすべて揃っている場合のみ完了
-        addLog("✓ Gemini CLI が既にインストールされています");
-        addLog("✓ Google アカウント認証も完了しています");
-        addLog("✓ Google Cloud Projectも設定されています");
+        addLog(t("setup.logs.statusAllComplete"));
         setCurrentStep("complete");
         setCanProceed(true);
       } else if (result.geminiExists && result.isAuthenticated && result.hasProject === false) {
-        // 認証は完了しているがプロジェクトがない場合
-        addLog("✓ Gemini CLI がインストールされています");
-        addLog("✓ Google アカウント認証も完了しています");
-        addLog("✗ Google Cloud Projectが必要です");
+        addLog(t("setup.logs.statusGeminiAuthReady"));
+        addLog(t("setup.logs.statusProjectMissing"));
         setCurrentStep("auth-verify");
         setCanProceed(true);
       } else if (result.geminiExists && !result.isAuthenticated) {
-        addLog("✓ Gemini CLI がインストールされています");
-        addLog("✗ Google アカウント認証が必要です");
+        addLog(t("setup.logs.statusGeminiAuthNeeded"));
         setCurrentStep("auth");
         setCanProceed(true);
       } else if (result.nodeExists) {
-        addLog("✓ Node.js がインストールされています");
-        addLog("✗ Gemini CLI がインストールされていません");
+        addLog(t("setup.logs.statusNodeReadyGeminiMissing"));
         setCurrentStep("gemini-install");
         setCanProceed(true);
       } else {
-        addLog("✗ Node.js がインストールされていません");
+        addLog(t("setup.logs.statusNodeMissing"));
         setCurrentStep("node-install");
         setCanProceed(true);
       }
@@ -110,8 +103,6 @@ const SetupModal: React.FC<SetupModalProps> = ({
     setIsProcessing(true);
     setCanProceed(false);
     addLog(t("setup.logs.nodeInstallStart"));
-    addLog(t("setup.logs.nodeDownloadPage"));
-    addLog(t("setup.logs.nodeInstallInstructions"));
 
     try {
       await setupGemini.installNodeJS(addLog);
@@ -152,11 +143,9 @@ const SetupModal: React.FC<SetupModalProps> = ({
   const handleGeminiInstall = async () => {
     setIsProcessing(true);
     setCanProceed(false);
-    addLog(t("setup.logs.geminiInstallStart"));
 
     try {
       await setupGemini.installGeminiCLI(addLog);
-      addLog(t("setup.logs.geminiInstallComplete"));
       setCurrentStep("auth");
       setCanProceed(true);
     } catch (error) {

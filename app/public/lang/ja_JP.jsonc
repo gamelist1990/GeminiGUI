@@ -73,6 +73,12 @@
       "authSetupError": "認証設定中にエラーが発生しました:",
       "authStartError": "認証開始中にエラーが発生しました:",
       "authVerifyError": "認証確認中にエラーが発生しました:"
+      ,"statusAllComplete": "✅ Gemini CLI・認証・Google Cloud Project の準備が完了しています"
+      ,"statusGeminiAuthReady": "✅ Gemini CLI と Google 認証は完了しています"
+      ,"statusProjectMissing": "⚠️ Google Cloud Project を設定してください"
+      ,"statusGeminiAuthNeeded": "⚠️ Google アカウント認証が必要です"
+      ,"statusNodeReadyGeminiMissing": "⚠️ Node.js は準備済みです。Gemini CLI をインストールしてください"
+      ,"statusNodeMissing": "✗ Node.js がインストールされていません"
     }
   },
   "chat": {

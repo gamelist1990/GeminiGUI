@@ -9,6 +9,7 @@ import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useChatSessions } from "./hooks/useChatSessions";
 import { Workspace, ChatMessage } from "./types";
 import { Config } from "./utils/configAPI";
+import { documentDir, join } from "@tauri-apps/api/path";
 
 type View = 'workspace' | 'chat' | 'settings';
 
@@ -27,9 +28,17 @@ function App() {
   
   // セットアップチェック済みフラグ（アプリケーション起動時に一度だけチェック）
   const [setupCheckCompleted, setSetupCheckCompleted] = useState(false);
+  const [globalConfig, setGlobalConfig] = useState<Config | null>(null);
 
-  // グローバルconfig.jsonのインスタンス
-  const globalConfig = new Config('config.json');
+  useEffect(() => {
+    (async () => {
+      if (!globalConfig) {
+        const baseDir = await documentDir();
+        const configPath = await join(baseDir, "PEXData", "GeminiGUI");
+        setGlobalConfig(new Config(configPath));
+      }
+    })();
+  }, [globalConfig]);
 
   const {
     sessions,
@@ -96,7 +105,7 @@ function App() {
     await compactSession(sessionId);
   };
 
-  if (isLoading) {
+  if (isLoading || !globalConfig) {
     return (
       <div style={{ 
         display: 'flex', 
