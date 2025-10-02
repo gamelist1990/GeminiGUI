@@ -40,18 +40,58 @@ export interface GeminiResponse {
   };
 }
 
-export async function callGemini(prompt: string, workspacePath?: string): Promise<GeminiResponse> {
+export interface GeminiOptions {
+  approvalMode?: 'default' | 'auto_edit' | 'yolo';
+  includeDirectories?: string[]; // Directories to include
+  includes?: string[]; // Files or patterns to include (e.g., ['file:src', 'codebase'])
+  checkpointing?: boolean; // Enable file change checkpointing
+}
+
+export async function callGemini(
+  prompt: string,
+  workspacePath?: string,
+  options?: GeminiOptions
+): Promise<GeminiResponse> {
   try {
     // gemini is a PowerShell script located at %APPDATA%\npm\gemini.ps1
     const geminiPath = 'C:\\Users\\issei\\AppData\\Roaming\\npm\\gemini.ps1';
     
     let commandArgs = ['-ExecutionPolicy', 'Bypass'];
     
+    // Build gemini command with options
+    let geminiArgs = `-p "${prompt}" -o json`;
+    
+    // Add checkpointing flag
+    if (options?.checkpointing) {
+      geminiArgs += ' --checkpointing';
+    }
+    
+    // Add approval mode
+    if (options?.approvalMode && options.approvalMode !== 'default') {
+      if (options.approvalMode === 'yolo') {
+        geminiArgs += ' --yolo';
+      } else {
+        geminiArgs += ` --approval-mode ${options.approvalMode}`;
+      }
+    }
+    
+    // Add include directories
+    if (options?.includeDirectories && options.includeDirectories.length > 0) {
+      geminiArgs += ` --include-directories ${options.includeDirectories.join(',')}`;
+    }
+    
+    // Add includes (files/patterns)
+    if (options?.includes && options.includes.length > 0) {
+      // Add @ prefix for each include
+      const includeArgs = options.includes.map(inc => `@${inc}`).join(' ');
+      geminiArgs = `${includeArgs} ${geminiArgs}`;
+    }
+    
     if (workspacePath) {
       // Change to workspace directory before running gemini
-      commandArgs.push('-Command', `cd "${workspacePath}"; & "${geminiPath}" -p "${prompt}" -o json`);
+      commandArgs.push('-Command', `cd "${workspacePath}"; & "${geminiPath}" ${geminiArgs}`);
     } else {
-      commandArgs.push('-File', geminiPath, '-p', prompt, '-o', 'json');
+      commandArgs.push('-File', geminiPath, ...geminiArgs.split(' '));
     }
     
     const command = Command.create('powershell.exe', commandArgs);

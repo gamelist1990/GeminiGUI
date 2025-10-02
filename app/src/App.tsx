@@ -34,6 +34,7 @@ function App() {
     getAggregatedStats,
     deleteSession,
     renameSession,
+    replayFromMessage,
     maxSessionsReached,
   } = useChatSessions(currentWorkspace?.id);
 
@@ -113,11 +114,14 @@ function App() {
           currentSessionId={currentSessionId}
           maxSessionsReached={maxSessionsReached}
           aggregatedStats={getAggregatedStats()}
+          approvalMode={settings.approvalMode}
+          checkpointing={settings.checkpointing}
           onCreateNewSession={createNewSession}
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}
           onDeleteSession={deleteSession}
           onRenameSession={renameSession}
+          onReplayFromMessage={replayFromMessage}
           onBack={handleBackToWorkspace}
         />
       )}

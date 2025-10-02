@@ -1073,3 +1073,41 @@
   color: var(--text-primary);
 }
 
+/* Message editing */
+.message-edit-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.message-edit-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: var(--spacing-md);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.message-edit-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+}
+
+.message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+.message-edit-actions button {
+  font-size: 13px;
+  padding: var(--spacing-sm) var(--spacing-md);
+}

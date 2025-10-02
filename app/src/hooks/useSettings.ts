@@ -6,6 +6,8 @@ import { loadLanguage } from '../utils/i18n';
 const defaultSettings: Settings = {
   language: 'en_US',
   theme: 'light',
+  approvalMode: 'default',
+  checkpointing: true,
 };
 
 const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');

@@ -61,6 +61,42 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
               </button>
             </div>
           </div>
+
+          <div className="setting-group">
+            <label className="setting-label">Approval Mode</label>
+            <select
+              className="setting-select"
+              value={localSettings.approvalMode}
+              onChange={(e) =>
+                setLocalSettings({ ...localSettings, approvalMode: e.target.value as 'default' | 'auto_edit' | 'yolo' })
+              }
+            >
+              <option value="default">Default (Prompt for approval)</option>
+              <option value="auto_edit">Auto Edit (Auto-approve edit tools)</option>
+              <option value="yolo">YOLO (Auto-approve all tools)</option>
+            </select>
+            <p className="setting-description">
+              Controls how Gemini handles tool approvals. Default requires manual approval, Auto Edit automatically approves edits, and YOLO approves all actions.
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">Checkpointing</label>
+            <div className="checkbox-container">
+              <input
+                type="checkbox"
+                id="checkpointing"
+                checked={localSettings.checkpointing}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, checkpointing: e.target.checked })
+                }
+              />
+              <label htmlFor="checkpointing">Enable file change checkpointing</label>
+            </div>
+            <p className="setting-description">
+              When enabled, Gemini will automatically track file changes and allow you to rollback to previous versions. This is useful when editing prompts and replaying conversations.
+            </p>
+          </div>
         </div>
 
         <div className="settings-footer">

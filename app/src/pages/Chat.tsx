@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { ChatSession, ChatMessage, Workspace } from '../types';
 import { t } from '../utils/i18n';
 import { formatElapsedTime, formatNumber } from '../utils/storage';
-import { callGemini } from '../utils/geminiCUI';
+import { callGemini, GeminiOptions } from '../utils/geminiCUI';
+import { scanWorkspace, getSuggestions, parseIncludes, FileItem } from '../utils/workspace';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -51,11 +52,14 @@ interface ChatProps {
   currentSessionId: string;
   maxSessionsReached: boolean;
   aggregatedStats: any;
+  approvalMode: 'default' | 'auto_edit' | 'yolo';
+  checkpointing: boolean;
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newName: string) => void;
+  onReplayFromMessage: (sessionId: string, messageId: string, editedContent: string) => Promise<void>;
   onBack: () => void;
 }
 
@@ -66,26 +70,49 @@ export default function Chat({
   currentSessionId,
   maxSessionsReached,
   aggregatedStats,
+  approvalMode,
+  checkpointing,
   onCreateNewSession,
   onSwitchSession,
   onSendMessage,
   onDeleteSession,
   onRenameSession,
+  onReplayFromMessage,
   onBack,
 }: ChatProps) {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingMessageContent, setEditingMessageContent] = useState('');
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [showFileSuggestions, setShowFileSuggestions] = useState(false);
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
+  const [workspaceSuggestions, setWorkspaceSuggestions] = useState<string[]>([]);
+  const [workspaceItems, setWorkspaceItems] = useState<FileItem[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [elapsedTime, setElapsedTime] = useState('');
   const [showStatsModal, setShowStatsModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Scan workspace for files and folders
+  useEffect(() => {
+    if (workspace?.path) {
+      scanWorkspace(workspace.path).then((items) => {
+        setWorkspaceItems(items); // Store original items
+        const suggestions = getSuggestions(items);
+        setWorkspaceSuggestions(suggestions);
+      }).catch((error) => {
+        console.error('Failed to scan workspace:', error);
+        // Fallback to basic suggestions
+        setWorkspaceSuggestions(['codebase']);
+        setWorkspaceItems([]);
+      });
+    }
+  }, [workspace?.path]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,10 +154,9 @@ export default function Chat({
     }
     // File suggestions
     else if (lastWord.startsWith('#')) {
-      const query = lastWord.substring(1).toLowerCase();
-      // Mock file suggestions - in production this would scan the workspace
-      const files = ['file:app', 'file:TauriPlugin.md', 'file:README.md', 'codebase'];
-      const filtered = files.filter(file => file.toLowerCase().includes(query));
+      const query = lastWord.toLowerCase();
+      // Use dynamic workspace suggestions (already include # prefix)
+      const filtered = workspaceSuggestions.filter(file => file.toLowerCase().includes(query));
       setFileSuggestions(filtered);
       setShowFileSuggestions(filtered.length > 0);
       setShowCommandSuggestions(false);
@@ -138,14 +164,14 @@ export default function Chat({
       setShowCommandSuggestions(false);
       setShowFileSuggestions(false);
     }
-  }, [inputValue, cursorPosition]);
+  }, [inputValue, cursorPosition, workspaceSuggestions]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(e.target.value);
     setCursorPosition(e.target.selectionStart || 0);
   };
 
-  const insertSuggestion = (suggestion: string, prefix: string) => {
+  const insertSuggestion = (suggestion: string) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
@@ -161,7 +187,8 @@ export default function Chat({
 
     const before = text.substring(0, wordStart);
     const after = text.substring(cursorPos);
-    const newText = before + prefix + suggestion + ' ' + after;
+    // Suggestion already includes the prefix (# or /)
+    const newText = before + suggestion + ' ' + after;
     
     setInputValue(newText);
     setShowCommandSuggestions(false);
@@ -169,7 +196,7 @@ export default function Chat({
     
     // Set cursor position after the inserted text
     setTimeout(() => {
-      const newPos = wordStart + prefix.length + suggestion.length + 1;
+      const newPos = wordStart + suggestion.length + 1;
       textarea.setSelectionRange(newPos, newPos);
       textarea.focus();
     }, 0);
@@ -224,7 +251,17 @@ export default function Chat({
     setIsTyping(true);
 
     try {
-      const geminiResponse = await callGemini(inputValue, workspace.path);
+      // Parse includes from input with workspace items for directory verification
+      const { includes, directories } = parseIncludes(inputValue, workspaceItems);
+      
+      const options: GeminiOptions = {
+        approvalMode: approvalMode,
+        checkpointing: checkpointing,
+        includes: includes.length > 0 ? includes : undefined,
+        includeDirectories: directories.length > 0 ? directories : undefined,
+      };
+
+      const geminiResponse = await callGemini(inputValue, workspace.path, options);
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -272,6 +309,59 @@ export default function Chat({
     setEditingSessionName('');
   };
 
+  const handleEditMessage = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditingMessageContent(content);
+  };
+
+  const handleSaveEdit = async (messageId: string) => {
+    if (editingMessageContent.trim()) {
+      // Replay from this message with edited content
+      await onReplayFromMessage(currentSessionId, messageId, editingMessageContent.trim());
+      setEditingMessageId(null);
+      setEditingMessageContent('');
+      
+      // Re-send the edited message to Gemini
+      setIsTyping(true);
+      try {
+        const { includes, directories } = parseIncludes(editingMessageContent, workspaceItems);
+        
+        const options: GeminiOptions = {
+          approvalMode: approvalMode,
+          checkpointing: checkpointing,
+          includes: includes.length > 0 ? includes : undefined,
+          includeDirectories: directories.length > 0 ? directories : undefined,
+        };
+
+        const geminiResponse = await callGemini(editingMessageContent, workspace.path, options);
+        const aiMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: geminiResponse.response,
+          timestamp: new Date(),
+          stats: geminiResponse.stats,
+        };
+        onSendMessage(currentSessionId, aiMessage);
+      } catch (error) {
+        console.error('Error re-sending edited message:', error);
+        const errorMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      } finally {
+        setIsTyping(false);
+      }
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingMessageContent('');
+  };
+
   return (
     <div className="chat-page">
       <div className="chat-header">
@@ -282,9 +372,7 @@ export default function Chat({
           <div className="stat">
             <span className="stat-label">{t('chat.tokenUsage')}:</span>
             <span className="stat-value">
-              {formatNumber(currentSession && currentSession.messages.length > 0 && currentSession.messages[currentSession.messages.length - 1]?.stats
-                ? Object.values(currentSession.messages[currentSession.messages.length - 1].stats!.models)[0]?.tokens.total || 0
-                : 0)}
+              {formatNumber(currentSession?.tokenUsage || 0)}
             </span>
           </div>
           {currentSession && (
@@ -394,7 +482,16 @@ export default function Chat({
                 </div>
               ) : (
                 currentSession?.messages.map((message) => (
-                  <ChatMessageBubble key={message.id} message={message} />
+                  <ChatMessageBubble 
+                    key={message.id} 
+                    message={message}
+                    isEditing={editingMessageId === message.id}
+                    editingContent={editingMessageContent}
+                    onEdit={handleEditMessage}
+                    onSaveEdit={handleSaveEdit}
+                    onCancelEdit={handleCancelEdit}
+                    onEditingContentChange={setEditingMessageContent}
+                  />
                 ))
               );
             })()}
@@ -419,7 +516,7 @@ export default function Chat({
                   <div
                     key={cmd}
                     className="suggestion-item"
-                    onClick={() => insertSuggestion(cmd, '/')}
+                    onClick={() => insertSuggestion(`/${cmd}`)}
                   >
                     /{cmd} - {t(`chat.commands.${cmd}`)}
                   </div>
@@ -428,9 +525,9 @@ export default function Chat({
                   <div
                     key={file}
                     className="suggestion-item"
-                    onClick={() => insertSuggestion(file, '#')}
+                    onClick={() => insertSuggestion(file)}
                   >
-                    #{file}
+                    {file}
                   </div>
                 ))}
               </div>
@@ -451,9 +548,9 @@ export default function Chat({
                 if ((e.key === 'Enter' || e.key === 'Tab') && (showCommandSuggestions || showFileSuggestions)) {
                   e.preventDefault();
                   const suggestions = showCommandSuggestions ? commandSuggestions : fileSuggestions;
-                  const prefix = showCommandSuggestions ? '/' : '#';
                   if (suggestions.length > 0) {
-                    insertSuggestion(suggestions[0], prefix);
+                    const suggestion = showCommandSuggestions ? `/${suggestions[0]}` : suggestions[0];
+                    insertSuggestion(suggestion);
                   }
                 }
               }}
@@ -551,9 +648,23 @@ export default function Chat({
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
+  isEditing: boolean;
+  editingContent: string;
+  onEdit: (messageId: string, content: string) => void;
+  onSaveEdit: (messageId: string) => void;
+  onCancelEdit: () => void;
+  onEditingContentChange: (content: string) => void;
 }
 
-function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
+function ChatMessageBubble({ 
+  message, 
+  isEditing, 
+  editingContent, 
+  onEdit, 
+  onSaveEdit, 
+  onCancelEdit, 
+  onEditingContentChange 
+}: ChatMessageBubbleProps) {
   const [showStats, setShowStats] = useState(false);
 
   return (
@@ -562,12 +673,44 @@ function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
         {message.role === 'user' ? '👤' : '🤖'}
       </div>
       <div className="message-bubble">
-        {message.role === 'assistant' ? (
-          <ReactMarkdown components={markdownComponents}>
-            {message.content}
-          </ReactMarkdown>
+        {isEditing && message.role === 'user' ? (
+          <div className="message-edit-container">
+            <textarea
+              className="message-edit-textarea"
+              value={editingContent}
+              onChange={(e) => onEditingContentChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                  e.preventDefault();
+                  onSaveEdit(message.id);
+                } else if (e.key === 'Escape') {
+                  onCancelEdit();
+                }
+              }}
+              autoFocus
+            />
+            <div className="message-edit-actions">
+              <button className="secondary" onClick={onCancelEdit}>
+                キャンセル
+              </button>
+              <button className="primary" onClick={() => onSaveEdit(message.id)}>
+                再送信 (Ctrl+Enter)
+              </button>
+            </div>
+          </div>
         ) : (
-          <p>{message.content}</p>
+          <div 
+            onDoubleClick={() => message.role === 'user' && onEdit(message.id, message.content)}
+            style={{ cursor: message.role === 'user' ? 'pointer' : 'default' }}
+          >
+            {message.role === 'assistant' ? (
+              <ReactMarkdown components={markdownComponents}>
+                {message.content}
+              </ReactMarkdown>
+            ) : (
+              <p>{message.content}</p>
+            )}
+          </div>
         )}
         {message.stats && (
           <div className="message-stats-toggle">

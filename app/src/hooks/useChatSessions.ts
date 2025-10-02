@@ -68,7 +68,7 @@ export function useChatSessions(workspaceId?: string) {
           const newSession = {
             ...s,
             messages: newMessages,
-            tokenUsage: s.tokenUsage + (message.content.length * 0.5), // Mock token calculation
+            tokenUsage: s.tokenUsage + (message.stats ? Object.values(message.stats.models)[0]?.tokens.total || 0 : 0),
           };
           // Save individual session with messages
           if (workspaceId) {
@@ -114,6 +114,52 @@ export function useChatSessions(workspaceId?: string) {
     setSessions(updated);
     if (workspaceId) {
       await config.saveSessions(workspaceId, updated);
+    }
+  };
+
+  const replayFromMessage = async (sessionId: string, messageId: string, editedContent: string): Promise<void> => {
+    // Find the session
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    // Find the message index
+    const messageIndex = session.messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+
+    // Calculate tokens to subtract from deleted messages
+    const deletedMessages = session.messages.slice(messageIndex + 1);
+    const tokensToSubtract = deletedMessages.reduce((sum, msg) => {
+      if (msg.stats && msg.role === 'assistant') {
+        return sum + (Object.values(msg.stats.models)[0]?.tokens.total || 0);
+      }
+      return sum;
+    }, 0);
+
+    // Remove all messages after this one (including the AI response)
+    const newMessages = session.messages.slice(0, messageIndex);
+    
+    // Update the message with edited content
+    const editedMessage: ChatMessage = {
+      ...session.messages[messageIndex],
+      content: editedContent,
+    };
+    
+    newMessages.push(editedMessage);
+
+    // Update session with truncated messages and adjusted tokenUsage
+    const updatedSession = {
+      ...session,
+      messages: newMessages,
+      tokenUsage: session.tokenUsage - tokensToSubtract,
+    };
+
+    const updatedSessions = sessions.map(s => s.id === sessionId ? updatedSession : s);
+    setSessions(updatedSessions);
+
+    // Save to disk
+    if (workspaceId) {
+      await config.saveChatSession(workspaceId, updatedSession);
+      await config.saveSessions(workspaceId, updatedSessions);
     }
   };
 
@@ -201,6 +247,7 @@ export function useChatSessions(workspaceId?: string) {
     getAggregatedStats,
     deleteSession,
     renameSession,
+    replayFromMessage,
     maxSessionsReached: sessions.length >= MAX_SESSIONS,
   };
 }

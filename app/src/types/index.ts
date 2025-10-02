@@ -73,7 +73,10 @@ export interface ChatMessage {
 export interface Settings {
   language: string;
   theme: 'light' | 'dark';
+  approvalMode: 'default' | 'auto_edit' | 'yolo';
+  checkpointing: boolean;
 }
 
 export type Theme = 'light' | 'dark';
 export type Language = 'ja_JP' | 'en_US';
+export type ApprovalMode = 'default' | 'auto_edit' | 'yolo';
