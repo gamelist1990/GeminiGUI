@@ -9,6 +9,21 @@
     "noFavorites": "No favorite workspaces",
     "settings": "Settings"
   },
+  "setup": {
+    "checking": "Checking Gemini CLI",
+    "nodeInstall": "Node.js Installation",
+    "geminiInstall": "Gemini CLI Installation",
+    "auth": "Authentication Setup",
+    "complete": "Setup Complete",
+    "error": "Error",
+    "installNode": "Install Node.js",
+    "installComplete": "Installation Complete - Next",
+    "installGemini": "Install Gemini CLI",
+    "startAuth": "Start Authentication",
+    "finish": "Finish",
+    "retry": "Retry",
+    "processing": "Processing..."
+  },
   "chat": {
     "title": "Chat",
     "newChat": "New Chat",
@@ -70,6 +85,11 @@
     "autoEditApproval": "Auto Edit (Auto-approve edit tools)",
     "yoloApproval": "YOLO (Auto-approve all tools)",
     "approvalDescription": "Controls how Gemini handles tool approvals. Default requires manual approval, Auto Edit automatically approves edits, and YOLO approves all actions.",
+    "geminiSetupCheck": "🤖 Gemini CLI Setup Check",
+    "checkSetup": "🔍 Check Setup",
+    "setupCheckDescription": "Check the status of Gemini CLI and Google account authentication. If setup is required, the setup wizard will start automatically.",
+    "setupOk": "✓ Gemini CLI is properly set up",
+    "setupCheckError": "An error occurred during setup check",
     "backupWarning": "⚠️ Backup Recommended",
     "backupText": "This application does not have checkpointing functionality. It is strongly recommended to take appropriate backups using Git or other version control systems before making code changes with AI.",
     "backupTip1": "✓ Commit to Git before starting changes",

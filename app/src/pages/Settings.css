@@ -419,6 +419,41 @@
   .setting-select {
     background-color: rgba(0, 0, 0, 0.3);
   }
+
+  /* Enhanced hover effects for dark mode */
+  .setup-button:hover {
+    border-color: var(--primary);
+    background-color: rgba(99, 102, 241, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
+  }
+
+  .setup-button.setup-button-secondary:hover {
+    background: linear-gradient(135deg, var(--primary-hover) 0%, var(--primary) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.5);
+  }
+
+  .theme-option:hover {
+    background-color: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.6);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
+  }
+
+  .setting-select:hover {
+    border-color: rgba(99, 102, 241, 0.6);
+    background-color: rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  }
+
+  .setting-input:hover {
+    border-color: rgba(99, 102, 241, 0.6);
+    background-color: rgba(0, 0, 0, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  }
 }
 
 /* Scrollbar styling for settings content */
@@ -530,26 +565,58 @@
   opacity: 0.8;
 }
 
-/* Animation for setting groups */
-@keyframes settingGroupAppear {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Action buttons for settings */
+.setting-action {
+  margin-top: var(--spacing-sm);
 }
 
-.setting-group {
-  animation: settingGroupAppear 0.3s ease forwards;
+.action-button {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 140px;
+  justify-content: center;
 }
 
-.setting-group:nth-child(1) { animation-delay: 0.05s; }
-.setting-group:nth-child(2) { animation-delay: 0.1s; }
-.setting-group:nth-child(3) { animation-delay: 0.15s; }
-.setting-group:nth-child(4) { animation-delay: 0.2s; }
-.setting-group:nth-child(5) { animation-delay: 0.25s; }
-.setting-group:nth-child(6) { animation-delay: 0.3s; }
-.setting-group:nth-child(7) { animation-delay: 0.35s; }
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+  background: linear-gradient(135deg, var(--primary-hover) 0%, var(--primary) 100%);
+}
+
+.action-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.action-button.secondary {
+  border-color: var(--border);
+  background: var(--background);
+  color: var(--text-primary);
+}
+
+.action-button.secondary:hover {
+  border-color: var(--primary);
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+}
+
+/* Dark mode adjustments for action buttons */
+@media (prefers-color-scheme: dark) {
+  .action-button:hover {
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.5);
+  }
+
+  .action-button.secondary:hover {
+    background-color: rgba(99, 102, 241, 0.15);
+  }
+}

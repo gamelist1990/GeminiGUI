@@ -15,6 +15,14 @@
     "fs:allow-mkdir",
     "fs:allow-write-text-file",
     "fs:scope-document-recursive",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME/.gemini" },
+        { "path": "$HOME/.gemini/*" },
+        { "path": "$HOME/.gemini/**" }
+      ]
+    },
     "notification:default",
     "shell:allow-kill",
     "shell:allow-open",

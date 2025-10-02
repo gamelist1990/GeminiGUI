@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Settings as SettingsType } from '../types';
 import { t } from '../utils/i18n';
+import SetupModal from './Setup';
 import './Settings.css';
 
 interface SettingsProps {
@@ -11,6 +12,7 @@ interface SettingsProps {
 
 export default function Settings({ settings, onUpdateSettings, onClose }: SettingsProps) {
   const [localSettings, setLocalSettings] = useState(settings);
+  const [showSetupModal, setShowSetupModal] = useState(false);
 
   const handleSave = () => {
     onUpdateSettings(localSettings);
@@ -19,8 +21,21 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
     window.location.reload();
   };
 
+  const handleCheckGeminiSetup = async () => {
+    // SetupModal を直接開いてチェックを実行
+    setShowSetupModal(true);
+  };
+
+  const handleSetupComplete = () => {
+    setShowSetupModal(false);
+    // セットアップ完了をローカルストレージに保存
+    localStorage.setItem('geminiSetupCompleted', 'true');
+  };
+
   return (
     <div className="settings-page">
+      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} />
+      
       <div className="settings-container">
         <div className="settings-header">
           <h1>{t('settings.title')}</h1>
@@ -140,6 +155,21 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
               📊 このメッセージ数に達すると、<code>/compact</code>コマンドまたは新セッション作成を推奨します。
               <br />
               <small>会話が長くなるとトークン消費が増加するため、定期的な整理を推奨します。</small>
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">{t('settings.geminiSetupCheck')}</label>
+            <div className="setting-action">
+              <button
+                className="action-button primary"
+                onClick={handleCheckGeminiSetup}
+              >
+                {t('settings.checkSetup')}
+              </button>
+            </div>
+            <p className="setting-description">
+              {t('settings.setupCheckDescription')}
             </p>
           </div>
 

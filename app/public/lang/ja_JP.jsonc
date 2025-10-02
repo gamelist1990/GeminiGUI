@@ -9,6 +9,21 @@
     "noFavorites": "お気に入りのワークスペースはありません",
     "settings": "設定"
   },
+  "setup": {
+    "checking": "Gemini CLI チェック中",
+    "nodeInstall": "Node.js インストール",
+    "geminiInstall": "Gemini CLI インストール",
+    "auth": "認証設定",
+    "complete": "セットアップ完了",
+    "error": "エラー",
+    "installNode": "Node.js をインストール",
+    "installComplete": "インストール完了 - 次へ",
+    "installGemini": "Gemini CLI をインストール",
+    "startAuth": "認証を開始",
+    "finish": "完了",
+    "retry": "再試行",
+    "processing": "処理中..."
+  },
   "chat": {
     "title": "チャット",
     "newChat": "新しいチャット",
@@ -70,6 +85,11 @@
     "autoEditApproval": "自動編集 (編集ツールを自動承認)",
     "yoloApproval": "YOLO (すべてのツールを自動承認)",
     "approvalDescription": "Gemini がツール承認をどのように処理するかを制御します。デフォルトでは手動承認が必要です。自動編集では編集ツールを自動承認し、YOLO ではすべてのアクションを自動承認します。",
+    "geminiSetupCheck": "🤖 Gemini CLI セットアップ確認",
+    "checkSetup": "🔍 セットアップを確認",
+    "setupCheckDescription": "Gemini CLI と Google アカウント認証の状態を確認します。セットアップが必要な場合は自動的にセットアップウィザードが開始されます。",
+    "setupOk": "✓ Gemini CLI は正常にセットアップされています",
+    "setupCheckError": "セットアップチェック中にエラーが発生しました",
     "backupWarning": "⚠️ バックアップの推奨",
     "backupText": "このアプリケーションにはチェックポイント機能がありません。AIによるコード変更を行う前に、必ずGitやその他のバージョン管理システムで適切なバックアップを取ることを強くお勧めします。",
     "backupTip1": "✓ Gitでコミットしてから変更を開始する",

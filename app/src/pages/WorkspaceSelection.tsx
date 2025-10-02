@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Workspace } from '../types';
 import { t } from '../utils/i18n';
+import { geminiCheck } from '../utils/setupAPI';
+import SetupModal from './Setup';
 import './WorkspaceSelection.css';
 
 interface WorkspaceSelectionProps {
@@ -20,6 +22,52 @@ export default function WorkspaceSelection({
   onToggleFavorite,
 }: WorkspaceSelectionProps) {
   const [isOpening, setIsOpening] = useState(false);
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(true);
+
+  // Check Gemini CLI on component mount
+  useEffect(() => {
+    const checkGeminiSetup = async () => {
+      try {
+        // ローカルストレージでセットアップ完了状態を確認
+        const setupCompleted = localStorage.getItem('geminiSetupCompleted') === 'true';
+        
+        if (setupCompleted) {
+          console.log('[Setup Check] セットアップは既に完了しています');
+          setIsCheckingSetup(false);
+          return;
+        }
+
+        const result = await geminiCheck((msg) => console.log('[Setup Check]', msg));
+        
+        console.log('[Setup Check] Result:', result);
+        
+        // Show setup modal if Gemini CLI is not installed OR not authenticated
+        if (!result.geminiExists || !result.isAuthenticated) {
+          console.log('[Setup Check] セットアップが必要です');
+          setShowSetupModal(true);
+        } else {
+          console.log('[Setup Check] セットアップは不要です');
+          // セットアップが完了している場合、ローカルストレージに保存
+          localStorage.setItem('geminiSetupCompleted', 'true');
+        }
+      } catch (error) {
+        console.error('Failed to check Gemini setup:', error);
+        // Show setup modal on error as well
+        setShowSetupModal(true);
+      } finally {
+        setIsCheckingSetup(false);
+      }
+    };
+
+    checkGeminiSetup();
+  }, []);
+
+  const handleSetupComplete = () => {
+    setShowSetupModal(false);
+    // セットアップ完了をローカルストレージに保存
+    localStorage.setItem('geminiSetupCompleted', 'true');
+  };
 
   // Filter out favorite workspaces from recent workspaces to avoid duplicates
   // Dedupe by id: keep favorite order, then recent unique by id
@@ -62,71 +110,82 @@ export default function WorkspaceSelection({
 
   return (
     <div className="workspace-selection">
-      <div className="workspace-header">
-        <div className="logo-container">
-          <div className="logo-gradient">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <circle cx="24" cy="24" r="20" fill="url(#gradient)" />
-              <defs>
-                <linearGradient id="gradient" x1="4" y1="4" x2="44" y2="44">
-                  <stop offset="0%" stopColor="#4285f4" />
-                  <stop offset="100%" stopColor="#9334e6" />
-                </linearGradient>
-              </defs>
-            </svg>
+      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} />
+      
+      {isCheckingSetup ? (
+        <div className="workspace-loading">
+          <div className="spinner"></div>
+          <p>Checking Gemini CLI setup...</p>
+        </div>
+      ) : (
+        <>
+          <div className="workspace-header">
+            <div className="logo-container">
+              <div className="logo-gradient">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                  <circle cx="24" cy="24" r="20" fill="url(#gradient)" />
+                  <defs>
+                    <linearGradient id="gradient" x1="4" y1="4" x2="44" y2="44">
+                      <stop offset="0%" stopColor="#4285f4" />
+                      <stop offset="100%" stopColor="#9334e6" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <h1>{t('workspace.title')}</h1>
+            </div>
+            <button className="settings-button secondary" onClick={onOpenSettings}>
+              ⚙️ {t('workspace.settings')}
+            </button>
           </div>
-          <h1>{t('workspace.title')}</h1>
-        </div>
-        <button className="settings-button secondary" onClick={onOpenSettings}>
-          ⚙️ {t('workspace.settings')}
-        </button>
-      </div>
 
-      <div className="workspace-content">
-        <div className="workspace-actions">
-          <button
-            className="open-workspace-button primary"
-            onClick={handleOpenWorkspace}
-            disabled={isOpening}
-          >
-            📁 {t('workspace.openWorkspace')}
-          </button>
-        </div>
+          <div className="workspace-content">
+            <div className="workspace-actions">
+              <button
+                className="open-workspace-button primary"
+                onClick={handleOpenWorkspace}
+                disabled={isOpening}
+              >
+                📁 {t('workspace.openWorkspace')}
+              </button>
+            </div>
 
-        <div className="workspace-sections">
-          {uniqueFavorites.length > 0 && (
-            <section className="workspace-section">
-              <h2>⭐ {t('workspace.favoriteWorkspaces')}</h2>
-              <div className="workspace-list">
-                {uniqueFavorites.map((workspace) => (
-                  <WorkspaceCard
-                    key={workspace.id + '-fav'}
-                    workspace={workspace}
-                    onSelect={onSelectWorkspace}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+            <div className="workspace-sections">
+              {uniqueFavorites.length > 0 && (
+                <section className="workspace-section">
+                  <h2>⭐ {t('workspace.favoriteWorkspaces')}</h2>
+                  <div className="workspace-list">
+                    {uniqueFavorites.map((workspace) => (
+                      <WorkspaceCard
+                        key={workspace.id + '-fav'}
+                        workspace={workspace}
+                        onSelect={onSelectWorkspace}
+                        onToggleFavorite={onToggleFavorite}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
 
-          {uniqueRecents.length > 0 && (
-            <section className="workspace-section">
-              <h2>🕐 {t('workspace.recentWorkspaces')}</h2>
-              <div className="workspace-list">
-                {uniqueRecents.map((workspace) => (
-                  <WorkspaceCard
-                    key={workspace.id + '-recent'}
-                    workspace={workspace}
-                    onSelect={onSelectWorkspace}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      </div>
+              {uniqueRecents.length > 0 && (
+                <section className="workspace-section">
+                  <h2>🕐 {t('workspace.recentWorkspaces')}</h2>
+                  <div className="workspace-list">
+                    {uniqueRecents.map((workspace) => (
+                      <WorkspaceCard
+                        key={workspace.id + '-recent'}
+                        workspace={workspace}
+                        onSelect={onSelectWorkspace}
+                        onToggleFavorite={onToggleFavorite}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
