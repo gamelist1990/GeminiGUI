@@ -7,8 +7,14 @@ export async function loadLanguage(lang: Language): Promise<void> {
   try {
     const response = await fetch(`/lang/${lang}.jsonc`);
     const text = await response.text();
-    // Remove comments from JSONC
-    const jsonText = text.replace(/\/\/.*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    // Remove comments from JSONC and clean up whitespace
+    let jsonText = text
+      .split('\n')
+      .filter(line => !line.trim().startsWith('//')) // Remove comment lines
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+      .replace(/,\s*\n\s*\n/g, ',\n') // Clean up extra newlines after commas
+      .trim();
     translations = JSON.parse(jsonText);
     currentLanguage = lang;
   } catch (error) {

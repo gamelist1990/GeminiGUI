@@ -1,0 +1,375 @@
+import { readTextFile, exists } from '@tauri-apps/plugin-fs';
+import { Command } from '@tauri-apps/plugin-shell';
+
+type LogFunction = (message: string) => void;
+
+interface OAuthCredentials {
+  access_token: string;
+  refresh_token: string;
+  scope: string;
+  token_type: string;
+  id_token: string;
+  expiry_date: number;
+}
+
+interface CloudProjectSetupResult {
+  success: boolean;
+  projectId?: string;
+  error?: string;
+}
+
+/**
+ * OAuth認証情報を読み込む
+ */
+async function loadOAuthCredentials(): Promise<OAuthCredentials | null> {
+  try {
+    const homeDir = await Command.create('powershell.exe', [
+      '-Command',
+      'echo $env:USERPROFILE'
+    ]).execute();
+
+    const userProfile = homeDir.stdout.trim();
+    const oauthPath = `${userProfile}\\.gemini\\oauth_creds.json`;
+    
+    const fileExists = await exists(oauthPath);
+    if (!fileExists) {
+      return null;
+    }
+
+    const content = await readTextFile(oauthPath);
+    return JSON.parse(content) as OAuthCredentials;
+  } catch (error) {
+    console.error('Failed to load OAuth credentials:', error);
+    return null;
+  }
+}
+
+/**
+ * アクセストークンが有効かチェック
+ */
+function isTokenValid(creds: OAuthCredentials): boolean {
+  return creds.expiry_date > Date.now();
+}
+
+/**
+ * リフレッシュトークンで新しいアクセストークンを取得
+ * 注: Gemini CLIのクライアント認証情報を使用
+ */
+async function refreshAccessToken(refreshToken: string): Promise<string | null> {
+  try {
+    // Gemini CLI公式のOAuth認証情報
+    // これらは公開されているクライアント認証情報です
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: '77185425430.apps.googleusercontent.com',
+        client_secret: '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',
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  } catch (error) {
+    console.error('Failed to refresh token:', error);
+    return null;
+  }
+}
+
+/**
+ * アクセストークンを取得（必要なら更新）
+ */
+async function getValidAccessToken(): Promise<string | null> {
+  const creds = await loadOAuthCredentials();
+  if (!creds) {
+    return null;
+  }
+
+  // トークンが有効ならそのまま返す
+  if (isTokenValid(creds)) {
+    return creds.access_token;
+  }
+
+  // 期限切れなら更新
+  return await refreshAccessToken(creds.refresh_token);
+}
+
+/**
+ * ランダムなプロジェクトIDを生成
+ */
+function generateProjectId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8);
+  return `gemini-project-${timestamp}-${random}`;
+}
+
+/**
+ * Google Cloud Projectを自動作成
+ */
+async function createCloudProject(
+  accessToken: string,
+  log: LogFunction
+): Promise<string | null> {
+  try {
+    const projectId = generateProjectId();
+    log(`プロジェクトID: ${projectId} を作成しています...`);
+
+    const response = await fetch(
+      'https://cloudresourcemanager.googleapis.com/v1/projects',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId: projectId,
+          name: `Gemini Project ${new Date().toLocaleDateString('ja-JP')}`,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      log(`⚠️ プロジェクト作成エラー: ${error}`);
+      return null;
+    }
+
+    await response.json(); // レスポンスを消費
+    log(`✓ プロジェクトが作成されました: ${projectId}`);
+    
+    // プロジェクト作成は非同期なので、少し待つ
+    log('プロジェクトの準備を待っています...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    return projectId;
+  } catch (error) {
+    log(`エラー: プロジェクト作成に失敗しました: ${error}`);
+    return null;
+  }
+}
+
+/**
+ * Gemini APIを有効化
+ */
+async function enableGeminiAPI(
+  accessToken: string,
+  projectId: string,
+  log: LogFunction
+): Promise<boolean> {
+  try {
+    log(`プロジェクト "${projectId}" でGemini APIを有効化しています...`);
+
+    const serviceName = 'generativelanguage.googleapis.com';
+    const response = await fetch(
+      `https://serviceusage.googleapis.com/v1/projects/${projectId}/services/${serviceName}:enable`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      log(`⚠️ API有効化エラー: ${error}`);
+      return false;
+    }
+
+    log('✓ Gemini APIが有効化されました');
+    
+    // API有効化も非同期なので、少し待つ
+    log('API有効化の完了を待っています...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    return true;
+  } catch (error) {
+    log(`エラー: API有効化に失敗しました: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * 環境変数を設定
+ */
+async function setEnvironmentVariable(
+  projectId: string,
+  log: LogFunction
+): Promise<boolean> {
+  try {
+    log(`環境変数 GOOGLE_CLOUD_PROJECT を設定しています...`);
+
+    const setEnvCommand = await Command.create('powershell.exe', [
+      '-Command',
+      `[System.Environment]::SetEnvironmentVariable('GOOGLE_CLOUD_PROJECT', '${projectId}', [System.EnvironmentVariableTarget]::User)`,
+    ]).execute();
+
+    if (setEnvCommand.code === 0) {
+      log(`✓ 環境変数を設定しました: GOOGLE_CLOUD_PROJECT=${projectId}`);
+      return true;
+    } else {
+      log(`⚠️ 環境変数の設定に失敗しました`);
+      return false;
+    }
+  } catch (error) {
+    log(`エラー: 環境変数の設定に失敗しました: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * Google Cloud Projectの自動セットアップ（メイン関数）
+ */
+export async function autoSetupCloudProject(
+  log: LogFunction
+): Promise<CloudProjectSetupResult> {
+  try {
+    log('🚀 Google Cloud Project の自動セットアップを開始します...');
+    log('');
+
+    // 1. OAuth認証情報を取得
+    log('1️⃣ OAuth認証情報を読み込んでいます...');
+    const accessToken = await getValidAccessToken();
+    
+    if (!accessToken) {
+      log('❌ OAuth認証情報が見つかりません');
+      log('先にGoogle アカウントでログインしてください');
+      return { success: false, error: 'OAuth credentials not found' };
+    }
+    log('✓ 認証情報を取得しました');
+    log('');
+
+    // 2. プロジェクトを作成
+    log('2️⃣ Google Cloud Projectを作成しています...');
+    const projectId = await createCloudProject(accessToken, log);
+    
+    if (!projectId) {
+      log('❌ プロジェクトの作成に失敗しました');
+      return { success: false, error: 'Failed to create project' };
+    }
+    log('');
+
+    // 3. Gemini APIを有効化
+    log('3️⃣ Gemini APIを有効化しています...');
+    const apiEnabled = await enableGeminiAPI(accessToken, projectId, log);
+    
+    if (!apiEnabled) {
+      log('⚠️ API有効化に失敗しましたが、プロジェクトは作成されています');
+      log('手動でAPIを有効化してください');
+      return { 
+        success: false, 
+        projectId, 
+        error: 'Failed to enable API' 
+      };
+    }
+    log('');
+
+    // 4. 環境変数を設定
+    log('4️⃣ 環境変数を設定しています...');
+    const envSet = await setEnvironmentVariable(projectId, log);
+    
+    if (!envSet) {
+      log('⚠️ 環境変数の設定に失敗しましたが、プロジェクトとAPIは準備できています');
+      log('手動で環境変数を設定してください');
+    }
+    log('');
+
+    log('🎉 自動セットアップが完了しました!');
+    log(`プロジェクトID: ${projectId}`);
+    log('');
+    log('💡 このアプリケーションを再起動すると、設定が反映されます');
+
+    return { success: true, projectId };
+  } catch (error) {
+    log(`❌ 自動セットアップ中にエラーが発生しました: ${error}`);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Google Cloud Projectが最低1つ存在するかチェック
+ */
+export async function hasCloudProject(log?: LogFunction): Promise<boolean> {
+  try {
+    const accessToken = await getValidAccessToken();
+    if (!accessToken) {
+      if (log) log('⚠️ OAuth認証情報が見つかりません');
+      return false;
+    }
+
+    if (log) log('Google Cloud Projectの存在を確認しています...');
+    const response = await fetch(
+      'https://cloudresourcemanager.googleapis.com/v1/projects?pageSize=1',
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (log) log('⚠️ プロジェクト一覧の取得に失敗しました');
+      return false;
+    }
+
+    const data = await response.json();
+    const projects = data.projects || [];
+    
+    if (projects.length > 0) {
+      if (log) log(`✓ Google Cloud Projectが見つかりました (プロジェクト数: ${projects.length}+)`);
+      return true;
+    } else {
+      if (log) log('✗ Google Cloud Projectが見つかりません');
+      return false;
+    }
+  } catch (error) {
+    if (log) log(`エラー: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * 既存のプロジェクト一覧を取得
+ */
+export async function listCloudProjects(log: LogFunction): Promise<string[]> {
+  try {
+    const accessToken = await getValidAccessToken();
+    if (!accessToken) {
+      log('❌ OAuth認証情報が見つかりません');
+      return [];
+    }
+
+    log('既存のプロジェクトを取得しています...');
+    const response = await fetch(
+      'https://cloudresourcemanager.googleapis.com/v1/projects',
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      log('⚠️ プロジェクト一覧の取得に失敗しました');
+      return [];
+    }
+
+    const data = await response.json();
+    const projects = data.projects || [];
+    
+    return projects.map((p: any) => p.projectId);
+  } catch (error) {
+    log(`エラー: ${error}`);
+    return [];
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Workspace } from '../types';
+import { Workspace, Settings } from '../types';
 import { t } from '../utils/i18n';
 import { geminiCheck } from '../utils/setupAPI';
 import SetupModal from './Setup';
@@ -12,6 +12,7 @@ interface WorkspaceSelectionProps {
   onSelectWorkspace: (workspace: Workspace) => void;
   onOpenSettings: () => void;
   onToggleFavorite: (id: string) => void;
+  settings: Settings; // 設定を受け取る
 }
 
 export default function WorkspaceSelection({
@@ -20,6 +21,7 @@ export default function WorkspaceSelection({
   onSelectWorkspace,
   onOpenSettings,
   onToggleFavorite,
+  settings,
 }: WorkspaceSelectionProps) {
   const [isOpening, setIsOpening] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -29,11 +31,9 @@ export default function WorkspaceSelection({
   useEffect(() => {
     const checkGeminiSetup = async () => {
       try {
-        // ローカルストレージでセットアップ完了状態を確認
-        const setupCompleted = localStorage.getItem('geminiSetupCompleted') === 'true';
-        
-        if (setupCompleted) {
-          console.log('[Setup Check] セットアップは既に完了しています');
+        // config.jsonのgeminiAuthフラグを確認
+        if (settings.geminiAuth === true) {
+          console.log('[Setup Check] config.json でセットアップ完了済みと確認');
           setIsCheckingSetup(false);
           return;
         }
@@ -48,8 +48,6 @@ export default function WorkspaceSelection({
           setShowSetupModal(true);
         } else {
           console.log('[Setup Check] セットアップは不要です');
-          // セットアップが完了している場合、ローカルストレージに保存
-          localStorage.setItem('geminiSetupCompleted', 'true');
         }
       } catch (error) {
         console.error('Failed to check Gemini setup:', error);
@@ -61,12 +59,11 @@ export default function WorkspaceSelection({
     };
 
     checkGeminiSetup();
-  }, []);
+  }, [settings.geminiAuth]);
 
   const handleSetupComplete = () => {
     setShowSetupModal(false);
-    // セットアップ完了をローカルストレージに保存
-    localStorage.setItem('geminiSetupCompleted', 'true');
+    // セットアップ完了はconfig.jsonに保存される
   };
 
   // Filter out favorite workspaces from recent workspaces to avoid duplicates

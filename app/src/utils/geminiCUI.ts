@@ -60,8 +60,11 @@ export async function callGemini(
     console.log('Workspace path:', workspacePath);
     console.log('Options:', options);
     
-    // gemini is a PowerShell script located at %APPDATA%\npm\gemini.ps1
-    const geminiPath = 'C:\\Users\\issei\\AppData\\Roaming\\npm\\gemini.ps1';
+
+    // gemini is a PowerShell script located at "C:\nvm4w\nodejs\gemini.ps1"
+    const geminiPath = `C:\\nvm4w\\nodejs\\gemini.ps1`;
+
+    console.log('Using gemini path:', geminiPath);
     
     // Build gemini command arguments as array
     const geminiArgs: string[] = [];

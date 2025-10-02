@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChatSession, ChatMessage } from '../types';
 import { Config } from '../utils/configAPI';
+import { documentDir } from '@tauri-apps/api/path';
 
 const MAX_SESSIONS = 5;
-const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
 
 // simple uuid v4 generator
 function uuidv4() {
@@ -17,9 +17,21 @@ function uuidv4() {
 export function useChatSessions(workspaceId?: string) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [config, setConfig] = useState<Config | null>(null);
 
   useEffect(() => {
-    if (workspaceId) {
+    (async () => {
+      if (!config) {
+        const baseDir = await documentDir();
+        const configPath = `${baseDir}\\GeminiGUI`;
+        const configInstance = new Config(configPath);
+        setConfig(configInstance);
+      }
+    })();
+  }, [config]);
+
+  useEffect(() => {
+    if (workspaceId && config) {
       (async () => {
         console.log('useChatSessions: loading sessions for workspaceId:', workspaceId);
         const loaded = await config.loadSessions(workspaceId);
@@ -42,7 +54,7 @@ export function useChatSessions(workspaceId?: string) {
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
   const createNewSession = async (): Promise<boolean> => {
-    if (sessions.length >= MAX_SESSIONS || !workspaceId) {
+    if (sessions.length >= MAX_SESSIONS || !workspaceId || !config) {
       return false; // Cannot create more sessions
     }
     
@@ -93,7 +105,7 @@ export function useChatSessions(workspaceId?: string) {
     });
     
     // Save both the individual session file and sessions.json after state update
-    if (workspaceId) {
+    if (workspaceId && config) {
       const sessionToSave = updatedSessions.find(s => s.id === sessionId);
       if (sessionToSave) {
         try {
@@ -152,7 +164,7 @@ export function useChatSessions(workspaceId?: string) {
     });
     
     // Save both the individual session file and sessions.json after state update
-    if (workspaceId) {
+    if (workspaceId && config) {
       const sessionToSave = updatedSessions.find(s => s.id === sessionId);
       if (sessionToSave) {
         try {
@@ -166,6 +178,7 @@ export function useChatSessions(workspaceId?: string) {
   }, [workspaceId]);
 
   const deleteSession = async (sessionId: string) => {
+    if (!config) return;
     const filtered = sessions.filter(s => s.id !== sessionId);
     setSessions(filtered);
     if (currentSessionId === sessionId && filtered.length > 0) {
@@ -178,6 +191,7 @@ export function useChatSessions(workspaceId?: string) {
   };
 
   const renameSession = async (sessionId: string, newName: string) => {
+    if (!config) return;
     const updated = sessions.map(s => {
       if (s.id === sessionId) {
         return { ...s, name: newName };
@@ -225,7 +239,7 @@ export function useChatSessions(workspaceId?: string) {
     });
     
     // Save the compacted session
-    if (workspaceId) {
+    if (workspaceId && config) {
       const sessionToSave = updatedSessions.find(s => s.id === sessionId);
       if (sessionToSave) {
         try {

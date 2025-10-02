@@ -1,12 +1,19 @@
 import { Command } from '@tauri-apps/plugin-shell';
 import * as opener from '@tauri-apps/plugin-opener';
+import { t } from './i18n';
 
 type LogFunction = (message: string) => void;
 
-interface CheckResult {
+export interface CheckResult {
   geminiExists: boolean;
   nodeExists: boolean;
   isAuthenticated: boolean;
+}
+
+export interface VerifyAuthResult {
+  success: boolean;
+  needsCloudSetup: boolean;
+  hasProject?: boolean; // Google Cloud Projectが存在するか
 }
 
 /**
@@ -21,7 +28,7 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
 
   try {
     // Node.js の存在確認
-    log('Node.js のインストールを確認しています...');
+    log(t('setup.logs.nodeCheck'));
     const nodeCheck = await Command.create('powershell.exe', [
       '-Command',
       'node --version',
@@ -29,14 +36,14 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
 
     if (nodeCheck.code === 0) {
       result.nodeExists = true;
-      log(`✓ Node.js が見つかりました: ${nodeCheck.stdout.trim()}`);
+      log(`${t('setup.logs.nodeFound')} ${nodeCheck.stdout.trim()}`);
     } else {
-      log('✗ Node.js が見つかりません');
+      log(t('setup.logs.nodeNotFound'));
       return result;
     }
 
     // Gemini CLI (ps1) の存在確認
-    log('Gemini CLI の存在を確認しています...');
+    log(t('setup.logs.geminiCheck'));
     const geminiCheck = await Command.create('powershell.exe', [
       '-Command',
       'Get-Command gemini -ErrorAction SilentlyContinue',
@@ -44,10 +51,10 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
 
     if (geminiCheck.code === 0 && geminiCheck.stdout.trim()) {
       result.geminiExists = true;
-      log('✓ Gemini CLI が見つかりました');
+      log(t('setup.logs.geminiFound'));
       
       // 認証状態の確認 - google_accounts.json の存在チェック（PowerShellで実行）
-      log('認証状態を確認しています...');
+      log(t('setup.logs.authCheck'));
       const authCheckCommand = await Command.create('powershell.exe', [
         '-Command',
         'Test-Path "$env:USERPROFILE\\.gemini\\google_accounts.json"',
@@ -58,9 +65,9 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
         log(`認証チェック結果: "${testResult}"`);
         if (testResult === 'True') {
           result.isAuthenticated = true;
-          log('✓ Google アカウント認証が確認されました');
+          log(t('setup.logs.authConfirmed'));
         } else {
-          log('✗ Google アカウント認証が必要です');
+          log(t('setup.logs.authRequired'));
         }
       } else {
         log(`✗ 認証ファイルの確認に失敗しました (終了コード: ${authCheckCommand.code})`);
@@ -69,14 +76,14 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
         }
       }
     } else {
-      log('✗ Gemini CLI が見つかりません');
+      log(t('setup.logs.nodeNotFound'));
     }
   } catch (error) {
-    log(`チェック中にエラーが発生しました: ${error}`);
+    log(`${t('setup.logs.checkError')} ${error}`);
     throw error;
   }
 
-  log(`チェック完了 - geminiExists: ${result.geminiExists}, nodeExists: ${result.nodeExists}, isAuthenticated: ${result.isAuthenticated}`);
+  log(`${t('setup.logs.checkComplete')} ${result.geminiExists}, nodeExists: ${result.nodeExists}, isAuthenticated: ${result.isAuthenticated}`);
   return result;
 }
 
@@ -89,12 +96,12 @@ export const setupGemini = {
    */
   async installNodeJS(log: LogFunction): Promise<void> {
     try {
-      log('Node.js のダウンロードページを開いています...');
+      log(t('setup.logs.nodeDownloadPage'));
       await opener.openUrl('https://nodejs.org/ja/download');
-      log('ブラウザで Node.js のダウンロードページが開きました');
-      log('インストーラーをダウンロードして実行してください');
+      log(t('setup.logs.nodeDownloadComplete'));
+      log(t('setup.logs.nodeInstallInstructions'));
     } catch (error) {
-      log(`Node.js ダウンロードページを開けませんでした: ${error}`);
+      log(`${t('setup.logs.installNodeError')} ${error}`);
       throw error;
     }
   },
@@ -104,8 +111,8 @@ export const setupGemini = {
    */
   async installGeminiCLI(log: LogFunction): Promise<void> {
     try {
-      log('npm を使用して Gemini CLI をインストールしています...');
-      log('これには数分かかる場合があります...');
+      log(t('setup.logs.geminiInstallStart'));
+      log(t('setup.logs.geminiInstallNote'));
 
       const installCommand = await Command.create('powershell.exe', [
         '-Command',
@@ -113,17 +120,17 @@ export const setupGemini = {
       ]).execute();
 
       if (installCommand.code === 0) {
-        log('✓ Gemini CLI のインストールが完了しました');
+        log(t('setup.logs.geminiInstallComplete'));
         if (installCommand.stdout) {
           log(`出力: ${installCommand.stdout}`);
         }
       } else {
         const errorMsg = installCommand.stderr || 'インストールに失敗しました';
-        log(`✗ エラー: ${errorMsg}`);
+        log(`${t('setup.logs.geminiInstallError')} ${errorMsg}`);
         throw new Error(errorMsg);
       }
     } catch (error) {
-      log(`Gemini CLI のインストール中にエラーが発生しました: ${error}`);
+      log(`${t('setup.logs.installGeminiError')} ${error}`);
       throw error;
     }
   },
@@ -133,7 +140,7 @@ export const setupGemini = {
    */
   async configureAuth(log: LogFunction): Promise<void> {
     try {
-      log('認証設定ファイルを作成しています...');
+      log(t('setup.logs.authConfigCreate'));
 
       // PowerShellを使用して .gemini ディレクトリと settings.json を作成
       const createSettingsCommand = await Command.create('powershell.exe', [
@@ -148,14 +155,14 @@ export const setupGemini = {
 
       if (createSettingsCommand.code === 0) {
         const settingsPath = createSettingsCommand.stdout.trim();
-        log(`✓ 設定ファイルを作成しました: ${settingsPath}`);
+        log(`${t('setup.logs.authConfigComplete')} ${settingsPath}`);
       } else {
         const errorMsg = createSettingsCommand.stderr || '設定ファイルの作成に失敗しました';
-        log(`✗ エラー: ${errorMsg}`);
+        log(`${t('setup.logs.authConfigError')} ${errorMsg}`);
         throw new Error(errorMsg);
       }
     } catch (error) {
-      log(`認証設定中にエラーが発生しました: ${error}`);
+      log(`${t('setup.logs.authSetupError')} ${error}`);
       throw error;
     }
   },
@@ -165,9 +172,9 @@ export const setupGemini = {
    */
   async startAuth(log: LogFunction): Promise<void> {
     try {
-      log('Gemini CLI を起動して認証を開始します...');
-      log('ブラウザが自動的に開きます...');
-      log('Google アカウントでログインしてください');
+      log(t('setup.logs.authProcessStart'));
+      log(t('setup.logs.authBrowserOpen'));
+      log(t('setup.logs.authLoginPrompt'));
 
       // gemini コマンドを実行して認証を開始
       // 注: この処理は対話的なので、バックグラウンドで実行
@@ -177,19 +184,19 @@ export const setupGemini = {
       ]).execute();
 
       if (authCommand.code === 0) {
-        log('✓ 認証プロセスを開始しました');
-        log('PowerShell ウィンドウが開きます');
-        log('ブラウザで認証を完了してください');
+        log(t('setup.logs.authProcessStarted'));
+        log(t('setup.logs.authPowershellOpen'));
+        log(t('setup.logs.authCompleteInBrowser'));
         log('');
-        log('⚠️ 重要: PowerShell ウィンドウで Gemini のロゴが表示されたら、');
-        log('そのウィンドウを閉じてから「認証を確認」をクリックしてください');
+        log(t('setup.logs.authImportantNote'));
+        log(t('setup.logs.authCloseWindow'));
       } else {
         const errorMsg = authCommand.stderr || '認証開始に失敗しました';
-        log(`✗ エラー: ${errorMsg}`);
+        log(`${t('setup.logs.authStartError')} ${errorMsg}`);
         throw new Error(errorMsg);
       }
     } catch (error) {
-      log(`認証開始中にエラーが発生しました: ${error}`);
+      log(`${t('setup.logs.authStartError')} ${error}`);
       throw error;
     }
   },
@@ -197,9 +204,9 @@ export const setupGemini = {
   /**
    * 認証完了の確認
    */
-  async verifyAuth(log: LogFunction): Promise<boolean> {
+  async verifyAuth(log: LogFunction): Promise<VerifyAuthResult> {
     try {
-      log('認証状態を確認しています...');
+      log(t('setup.logs.authVerifyStart'));
 
       // PowerShellで google_accounts.json の存在を確認
       const authCheckCommand = await Command.create('powershell.exe', [
@@ -211,21 +218,116 @@ export const setupGemini = {
         const testResult = authCheckCommand.stdout.trim();
         
         if (testResult === 'True') {
-          log('✓ Google アカウント認証が確認されました!');
-          log('✓ Gemini CLI のセットアップが完全に完了しました');
-          return true;
+          // 認証ファイルが存在する場合、Gemini CLIを実行して確認
+          log('認証ファイルが見つかりました。Gemini CLIで確認しています...');
+          
+          const geminiTestCommand = await Command.create('powershell.exe', [
+            '-Command',
+            'gemini "test" 2>&1',
+          ]).execute();
+
+          const output = geminiTestCommand.stdout + geminiTestCommand.stderr;
+          
+          // GOOGLE_CLOUD_PROJECT エラーをチェック
+          if (output.includes('GOOGLE_CLOUD_PROJECT')) {
+            log('⚠️ Google Cloud Project の設定が必要です');
+            
+            // プロジェクト存在チェックを実行
+            log('Google Cloud Projectの存在を確認しています...');
+            const { hasCloudProject } = await import('./cloudSetup');
+            const hasProject = await hasCloudProject(log);
+            
+            return { 
+              success: false, 
+              needsCloudSetup: true,
+              hasProject 
+            };
+          }
+          
+          log(t('setup.logs.authVerifyComplete'));
+          
+          // 認証成功時もプロジェクト存在チェック
+          log('Google Cloud Projectの存在を確認しています...');
+          const { hasCloudProject } = await import('./cloudSetup');
+          const hasProject = await hasCloudProject(log);
+          
+          if (hasProject) {
+            log('✓ Google Cloud環境の設定が完了しています');
+            log(t('setup.logs.authSetupComplete'));
+            return { success: true, needsCloudSetup: false, hasProject: true };
+          } else {
+            log('⚠️ Google Cloud Projectが見つかりません');
+            log('プロジェクトを作成する必要があります');
+            return { success: false, needsCloudSetup: true, hasProject: false };
+          }
         } else {
-          log('✗ 認証ファイルが見つかりません');
-          log('PowerShell ウィンドウで認証が完了していることを確認してください');
-          log('ヒント: ブラウザで認証完了後、PowerShell に戻って Gemini のロゴが表示されるまで待ってください');
-          return false;
+          log(t('setup.logs.authFileNotFound'));
+          log(t('setup.logs.authNotComplete'));
+          log(t('setup.logs.authHint'));
+          return { success: false, needsCloudSetup: false };
         }
       } else {
-        log('✗ 認証ファイルの確認に失敗しました');
-        return false;
+        log(t('setup.logs.authVerifyFailed'));
+        return { success: false, needsCloudSetup: false };
       }
     } catch (error) {
-      log(`認証確認中にエラーが発生しました: ${error}`);
+      log(`${t('setup.logs.authVerifyError')} ${error}`);
+      throw error;
+    }
+  },
+
+  /**
+   * Google Cloud Project 作成ページを開く
+   */
+  async openCloudProjectCreate(log: LogFunction): Promise<void> {
+    try {
+      log('Google Cloud Project 作成ページを開いています...');
+      await opener.openUrl('https://console.cloud.google.com/projectcreate');
+      log('✓ ブラウザでプロジェクト作成ページを開きました');
+    } catch (error) {
+      log(`エラー: Google Cloud Console を開けませんでした: ${error}`);
+      throw error;
+    }
+  },
+
+  /**
+   * Gemini API 有効化ページを開く
+   */
+  async openGeminiAPIEnable(projectId: string, log: LogFunction): Promise<void> {
+    try {
+      log(`プロジェクト "${projectId}" の Gemini API 有効化ページを開いています...`);
+      const url = `https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com?hl=ja&project=${projectId}`;
+      await opener.openUrl(url);
+      log('✓ ブラウザでGemini API有効化ページを開きました');
+    } catch (error) {
+      log(`エラー: API有効化ページを開けませんでした: ${error}`);
+      throw error;
+    }
+  },
+
+  /**
+   * GOOGLE_CLOUD_PROJECT 環境変数を設定
+   */
+  async setCloudProjectEnv(projectId: string, log: LogFunction): Promise<void> {
+    try {
+      log(`環境変数 GOOGLE_CLOUD_PROJECT を "${projectId}" に設定しています...`);
+      
+      // PowerShellでシステム環境変数を設定（管理者権限が必要な場合があります）
+      const setEnvCommand = await Command.create('powershell.exe', [
+        '-Command',
+        `[System.Environment]::SetEnvironmentVariable('GOOGLE_CLOUD_PROJECT', '${projectId}', [System.EnvironmentVariableTarget]::User)`,
+      ]).execute();
+
+      if (setEnvCommand.code === 0) {
+        log('✓ 環境変数を設定しました');
+        log('注: この設定を反映するには、アプリケーションを再起動する必要があります');
+      } else {
+        const errorMsg = setEnvCommand.stderr || '環境変数の設定に失敗しました';
+        log(`✗ エラー: ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+    } catch (error) {
+      log(`環境変数の設定中にエラーが発生しました: ${error}`);
       throw error;
     }
   },

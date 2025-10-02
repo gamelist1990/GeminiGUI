@@ -245,7 +245,7 @@ export default function Chat({
       if (!currentSession) return;
       
       setShowProcessingModal(true);
-      setProcessingMessage('会話履歴を要約しています...');
+      setProcessingMessage(t('chat.stats.processing.compacting'));
       const startTime = Date.now();
       
       // Update elapsed time every second
@@ -265,7 +265,7 @@ export default function Chat({
           const errorMessage: ChatMessage = {
             id: Date.now().toString(),
             role: 'assistant',
-            content: '❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。',
+            content: t('chat.stats.processing.compactError'),
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, errorMessage);
@@ -278,7 +278,7 @@ export default function Chat({
         
         console.log('Compacting conversation, history length:', historyText.length);
         
-        const summaryPrompt = `以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:\n\n${historyText}`;
+        const summaryPrompt = `${t('chat.stats.processing.compactPrompt')}\n\n${historyText}`;
         
         console.log('Calling Gemini for summary...');
         const summaryResponse = await callGemini(summaryPrompt, workspace.path, {
@@ -1100,26 +1100,26 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
         <div className="modal-body">
           {/* Overview Section */}
           <div className="stats-section overview-section">
-            <h3>📈 概要</h3>
+            <h3>📈 {t('chat.stats.overview')}</h3>
             <div className="overview-grid">
               <div className="overview-card">
                 <div className="overview-icon">💬</div>
                 <div className="overview-content">
-                  <div className="overview-label">セッション数</div>
+                  <div className="overview-label">{t('chat.stats.sessionCount')}</div>
                   <div className="overview-value">{sessions.length}</div>
                 </div>
               </div>
               <div className="overview-card">
                 <div className="overview-icon">🎯</div>
                 <div className="overview-content">
-                  <div className="overview-label">合計トークン</div>
+                  <div className="overview-label">{t('chat.stats.totalTokensSummary')}</div>
                   <div className="overview-value">{formatNumber(totalTokens)}</div>
                 </div>
               </div>
               <div className="overview-card">
                 <div className="overview-icon">💬</div>
                 <div className="overview-content">
-                  <div className="overview-label">総メッセージ数</div>
+                  <div className="overview-label">{t('chat.stats.totalMessages')}</div>
                   <div className="overview-value">
                     {sessions.reduce((sum, s) => sum + s.messages.length, 0)}
                   </div>
@@ -1140,54 +1140,54 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
                   
                   <div className="stats-grid">
                     <div className="stat-group">
-                      <h4>API 統計</h4>
+                      <h4>{t('chat.stats.apiStats')}</h4>
                       <div className="stat-row">
                         <span className="stat-icon">📤</span>
-                        <span className="stat-label">リクエスト数:</span>
+                        <span className="stat-label">{t('chat.stats.requests')}</span>
                         <span className="stat-value">{modelData.api.totalRequests}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">❌</span>
-                        <span className="stat-label">エラー数:</span>
+                        <span className="stat-label">{t('chat.stats.errors')}</span>
                         <span className="stat-value">{modelData.api.totalErrors}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">⏱️</span>
-                        <span className="stat-label">レイテンシ:</span>
+                        <span className="stat-label">{t('chat.stats.latency')}</span>
                         <span className="stat-value">{modelData.api.totalLatencyMs}ms</span>
                       </div>
                     </div>
 
                     <div className="stat-group">
-                      <h4>トークン使用量</h4>
+                      <h4>{t('chat.stats.tokenUsage')}</h4>
                       <div className="stat-row">
                         <span className="stat-icon">📝</span>
-                        <span className="stat-label">プロンプト:</span>
+                        <span className="stat-label">{t('chat.stats.promptTokens')}</span>
                         <span className="stat-value highlight-primary">{formatNumber(modelData.tokens.prompt)}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">💬</span>
-                        <span className="stat-label">応答:</span>
+                        <span className="stat-label">{t('chat.stats.responseTokens')}</span>
                         <span className="stat-value highlight-success">{formatNumber(modelData.tokens.candidates)}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">🎯</span>
-                        <span className="stat-label">合計:</span>
+                        <span className="stat-label">{t('chat.stats.totalTokens')}</span>
                         <span className="stat-value highlight-total">{formatNumber(modelData.tokens.total)}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">💾</span>
-                        <span className="stat-label">キャッシュ:</span>
+                        <span className="stat-label">{t('chat.stats.cachedTokens')}</span>
                         <span className="stat-value">{formatNumber(modelData.tokens.cached)}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">💭</span>
-                        <span className="stat-label">思考:</span>
+                        <span className="stat-label">{t('chat.stats.thoughtsTokens')}</span>
                         <span className="stat-value">{formatNumber(modelData.tokens.thoughts)}</span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">🔧</span>
-                        <span className="stat-label">ツール:</span>
+                        <span className="stat-label">{t('chat.stats.toolTokens')}</span>
                         <span className="stat-value">{formatNumber(modelData.tokens.tool)}</span>
                       </div>
                     </div>
@@ -1203,40 +1203,40 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
             <div className="tool-summary-card">
               <div className="stat-row">
                 <span className="stat-icon">📞</span>
-                <span className="stat-label">総呼び出し数:</span>
+                <span className="stat-label">{t('chat.stats.totalCalls')}</span>
                 <span className="stat-value">{aggregateStats.tools.totalCalls}</span>
               </div>
               <div className="stat-row">
                 <span className="stat-icon">✅</span>
-                <span className="stat-label">成功:</span>
+                <span className="stat-label">{t('chat.stats.success')}</span>
                 <span className="stat-value highlight-success">{aggregateStats.tools.totalSuccess}</span>
               </div>
               <div className="stat-row">
                 <span className="stat-icon">⚠️</span>
-                <span className="stat-label">失敗:</span>
+                <span className="stat-label">{t('chat.stats.fail')}</span>
                 <span className="stat-value highlight-error">{aggregateStats.tools.totalFail}</span>
               </div>
               <div className="stat-row">
                 <span className="stat-icon">⏱️</span>
-                <span className="stat-label">総実行時間:</span>
+                <span className="stat-label">{t('chat.stats.totalDuration')}</span>
                 <span className="stat-value">{aggregateStats.tools.totalDurationMs}ms</span>
               </div>
             </div>
             
             {Object.keys(aggregateStats.tools.byName).length > 0 && (
               <div className="tools-details">
-                <h4>ツール詳細</h4>
+                <h4>{t('chat.stats.toolDetails')}</h4>
                 <div className="tools-grid">
                   {Object.entries(aggregateStats.tools.byName).map(([toolName, toolData]: [string, any]) => (
                     <div key={toolName} className="tool-detail-card">
                       <div className="tool-name">🔨 {toolName}</div>
                       <div className="tool-stats">
                         <div className="stat-row">
-                          <span className="stat-label">使用回数:</span>
+                          <span className="stat-label">{t('chat.stats.usageCount')}</span>
                           <span className="stat-value">{toolData.count}</span>
                         </div>
                         <div className="stat-row">
-                          <span className="stat-label">実行時間:</span>
+                          <span className="stat-label">{t('chat.stats.executionTime')}</span>
                           <span className="stat-value">{toolData.durationMs}ms</span>
                         </div>
                       </div>
@@ -1253,17 +1253,17 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
             <div className="file-changes-card">
               <div className="stat-row">
                 <span className="stat-icon">➕</span>
-                <span className="stat-label">追加行数:</span>
+                <span className="stat-label">{t('chat.stats.linesAdded')}</span>
                 <span className="stat-value highlight-success">{aggregateStats.files.totalLinesAdded}</span>
               </div>
               <div className="stat-row">
                 <span className="stat-icon">➖</span>
-                <span className="stat-label">削除行数:</span>
+                <span className="stat-label">{t('chat.stats.linesRemoved')}</span>
                 <span className="stat-value highlight-error">{aggregateStats.files.totalLinesRemoved}</span>
               </div>
               <div className="stat-row">
                 <span className="stat-icon">📊</span>
-                <span className="stat-label">差分:</span>
+                <span className="stat-label">{t('chat.stats.diff')}</span>
                 <span className="stat-value">
                   {aggregateStats.files.totalLinesAdded - aggregateStats.files.totalLinesRemoved > 0 ? '+' : ''}
                   {aggregateStats.files.totalLinesAdded - aggregateStats.files.totalLinesRemoved}
@@ -1536,10 +1536,10 @@ function ChatMessageBubble({
                 </div>
 
                 <div className="stats-section">
-                  <h4>ファイル変更</h4>
+                  <h4>{t('chat.stats.messageStats.fileChanges')}</h4>
                   <div className="file-changes">
-                    <div>追加行数: {message.stats.files.totalLinesAdded}</div>
-                    <div>削除行数: {message.stats.files.totalLinesRemoved}</div>
+                    <div>{t('chat.stats.messageStats.linesAdded')} {message.stats.files.totalLinesAdded}</div>
+                    <div>{t('chat.stats.messageStats.linesRemoved')} {message.stats.files.totalLinesRemoved}</div>
                   </div>
                 </div>
               </div>

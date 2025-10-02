@@ -26,6 +26,14 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
     setShowSetupModal(true);
   };
 
+  const handleResetGeminiAuth = () => {
+    // geminiAuth を false に戻してセットアップを再実行可能にする
+    const updatedSettings = { ...localSettings, geminiAuth: false };
+    setLocalSettings(updatedSettings);
+    onUpdateSettings(updatedSettings);
+    setShowSetupModal(true);
+  };
+
   const handleSetupComplete = () => {
     setShowSetupModal(false);
     // セットアップ完了をローカルストレージに保存
@@ -96,7 +104,7 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
           </div>
 
           <div className="setting-group">
-            <label className="setting-label">🤖 モデル選択</label>
+            <label className="setting-label">{t('settings.modelSelection')}</label>
             <select
               className="setting-select"
               value={localSettings.model}
@@ -104,39 +112,39 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
                 setLocalSettings({ ...localSettings, model: e.target.value as 'default' | 'gemini-2.5-flash' })
               }
             >
-              <option value="default">デフォルトGemini 2.5 Pro</option>
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash (高速・節約)</option>
+              <option value="default">{t('settings.defaultModel')}</option>
+              <option value="gemini-2.5-flash">{t('settings.flashModel')}</option>
             </select>
             <p className="setting-description">
-              Gemini 2.5 Flashは応答速度が速く、トークン消費が少ないモデルです。
+              {t('settings.flashDescription')}
             </p>
           </div>
 
           <div className="setting-group api-key-group">
             <label className="setting-label">
               <span className="label-icon">🔑</span>
-              カスタムAPIキー (オプション)
+              {t('settings.customApiKey')}
             </label>
             <input
               type="password"
               className="setting-input"
-              placeholder="YOUR_API_KEY_HERE"
+              placeholder={t('settings.apiKeyPlaceholder')}
               value={localSettings.customApiKey || ''}
               onChange={(e) =>
                 setLocalSettings({ ...localSettings, customApiKey: e.target.value })
               }
             />
             <p className="setting-description">
-              💡 カスタムAPIキーを設定すると、環境変数 <code>GEMINI_API_KEY</code> として使用されます。
+              {t('settings.apiKeyDescription')}
               <br />
-              <small>空白のままにすると、システムのデフォルトAPIキーが使用されます。</small>
+              <small>{t('settings.apiKeyDefaultNote')}</small>
             </p>
           </div>
 
           <div className="setting-group compact-group">
             <label className="setting-label">
               <span className="label-icon">💬</span>
-              会話整理の推奨タイミング
+              {t('settings.conversationCleanup')}
             </label>
             <div className="number-input-container">
               <input
@@ -149,42 +157,57 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
                   setLocalSettings({ ...localSettings, maxMessagesBeforeCompact: parseInt(e.target.value) })
                 }
               />
-              <span className="input-suffix">メッセージ</span>
+              <span className="input-suffix">{t('settings.messages')}</span>
             </div>
             <p className="setting-description">
-              📊 このメッセージ数に達すると、<code>/compact</code>コマンドまたは新セッション作成を推奨します。
+              {t('settings.cleanupDescription')}
               <br />
-              <small>会話が長くなるとトークン消費が増加するため、定期的な整理を推奨します。</small>
+              <small>{t('settings.cleanupReason')}</small>
             </p>
           </div>
 
           <div className="setting-group">
             <label className="setting-label">{t('settings.geminiSetupCheck')}</label>
-            <div className="setting-action">
+            <div className="setting-action" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 className="action-button primary"
                 onClick={handleCheckGeminiSetup}
               >
                 {t('settings.checkSetup')}
               </button>
+              {localSettings.geminiAuth && (
+                <button
+                  className="action-button secondary"
+                  onClick={handleResetGeminiAuth}
+                  title="セットアップ状態をリセットして再実行"
+                >
+                  🔄 セットアップをリセット
+                </button>
+              )}
             </div>
             <p className="setting-description">
               {t('settings.setupCheckDescription')}
+              {localSettings.geminiAuth && (
+                <>
+                  <br />
+                  <span style={{ color: 'var(--vscode-charts-green)' }}>
+                    ✓ Gemini CLIのセットアップが完了しています
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
           <div className="setting-group">
-            <label className="setting-label">⚠️ バックアップの推奨</label>
+            <label className="setting-label">{t('settings.backupWarning')}</label>
             <div className="backup-warning">
               <p className="warning-text">
-                このアプリケーションにはチェックポイント機能がありません。
-                AIによるコード変更を行う前に、必ずGitやその他のバージョン管理システムで
-                適切なバックアップを取ることを強くお勧めします。
+                {t('settings.backupText')}
               </p>
               <ul className="backup-tips">
-                <li>✓ Gitでコミットしてから変更を開始する</li>
-                <li>✓ 重要なファイルは別途バックアップを作成する</li>
-                <li>✓ 大きな変更の前にブランチを作成する</li>
+                <li>{t('settings.backupTip1')}</li>
+                <li>{t('settings.backupTip2')}</li>
+                <li>{t('settings.backupTip3')}</li>
               </ul>
             </div>
           </div>

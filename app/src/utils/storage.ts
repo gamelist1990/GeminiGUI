@@ -1,26 +1,37 @@
 import { Settings, Workspace } from '../types';
 import { Config } from './configAPI';
+import { documentDir } from '@tauri-apps/api/path';
 
 // Delegate to Config class (file-backed storage)
-const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
+let config: Config | null = null;
 
-export function saveSettings(settings: Settings): void {
-  // fire-and-forget async write
-  void config.saveConfig(settings);
+async function getConfig(): Promise<Config> {
+  if (!config) {
+    const baseDir = await documentDir();
+    const configPath = `${baseDir}\\GeminiGUI`;
+    config = new Config(configPath);
+  }
+  return config;
 }
 
-export function loadSettings(): Settings | null {
-  // synchronous fallback: attempt to return null and let callers use async Config where available
-  return null;
+export async function saveSettings(settings: Settings): Promise<void> {
+  const cfg = await getConfig();
+  await cfg.saveConfig(settings);
 }
 
-export function saveWorkspaces(workspaces: Workspace[]): void {
-  void config.saveWorkspaces(workspaces);
+export async function loadSettings(): Promise<Settings | null> {
+  const cfg = await getConfig();
+  return await cfg.loadConfig();
 }
 
-export function loadWorkspaces(): Workspace[] {
-  // synchronous wrapper is not available; return empty and let hooks use async Config
-  return [];
+export async function saveWorkspaces(workspaces: Workspace[]): Promise<void> {
+  const cfg = await getConfig();
+  await cfg.saveWorkspaces(workspaces);
+}
+
+export async function loadWorkspaces(): Promise<Workspace[]> {
+  const cfg = await getConfig();
+  return await cfg.loadWorkspaces();
 }
 
 export function formatElapsedTime(startTime: Date): string {

@@ -78,6 +78,7 @@ export interface Settings {
   model: 'default' | 'gemini-2.5-flash';
   customApiKey?: string;
   maxMessagesBeforeCompact: number;
+  geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
 }
 
 export type Theme = 'light' | 'dark';

@@ -48,7 +48,14 @@ export class Config {
       const existsConfig = await exists(this.configFile);
       if (!existsConfig) {
         // If config file doesn't exist, create default config
-        const defaultSettings: Settings = { language: 'en_US', theme: 'light', approvalMode: 'default', model: 'default', maxMessagesBeforeCompact: 25 };
+        const defaultSettings: Settings = { 
+          language: 'en_US', 
+          theme: 'light', 
+          approvalMode: 'default', 
+          model: 'default', 
+          maxMessagesBeforeCompact: 25,
+          geminiAuth: false
+        };
         await this.saveConfig(defaultSettings);
         return defaultSettings;
       }
@@ -60,7 +67,14 @@ export class Config {
       // Try to ensure base dir and create default config, if possible
       try {
         await this.ensureDir(this.baseDir);
-        const defaultSettings: Settings = { language: 'en_US', theme: 'light', approvalMode: 'default', model: 'default', maxMessagesBeforeCompact: 25 };
+        const defaultSettings: Settings = { 
+          language: 'en_US', 
+          theme: 'light', 
+          approvalMode: 'default', 
+          model: 'default', 
+          maxMessagesBeforeCompact: 25,
+          geminiAuth: false
+        };
         try {
           await writeTextFile(this.configFile, JSON.stringify(defaultSettings, null, 2));
         } catch (err) {

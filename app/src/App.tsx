@@ -113,6 +113,7 @@ function App() {
           onSelectWorkspace={handleSelectWorkspace}
           onOpenSettings={handleOpenSettings}
           onToggleFavorite={toggleFavorite}
+          settings={settings}
         />
       )}
       
