@@ -22,7 +22,7 @@ export function useSettings() {
   useEffect(() => {
     (async () => {
       const baseDir = await documentDir();
-      const configPath = `${baseDir}\\GeminiGUI`;
+      const configPath = `${baseDir}\\PEXData\\GeminiGUI`;
       const configInstance = new Config(configPath);
       setConfig(configInstance);
 

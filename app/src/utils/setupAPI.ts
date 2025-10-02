@@ -225,6 +225,7 @@ export const setupGemini = {
   async verifyAuth(log: LogFunction): Promise<VerifyAuthResult> {
     try {
       log(t('setup.logs.authVerifyStart'));
+      log('[VerifyAuth] Step 1: Checking google_accounts.json existence');
 
       // PowerShellで google_accounts.json の存在を確認
       const authCheckCommand = await Command.create('powershell.exe', [
@@ -232,12 +233,30 @@ export const setupGemini = {
         'Test-Path "$env:USERPROFILE\\.gemini\\google_accounts.json"',
       ]).execute();
 
+      log(`[VerifyAuth] google_accounts.json check result: code=${authCheckCommand.code}, stdout="${authCheckCommand.stdout.trim()}"`);
+
       if (authCheckCommand.code === 0) {
         const testResult = authCheckCommand.stdout.trim();
         
         if (testResult === 'True') {
+          log('[VerifyAuth] google_accounts.json exists, checking OAuth credentials');
+          
+          // OAuth認証情報（oauth_creds.json）の存在も確認
+          const oauthCheckCommand = await Command.create('powershell.exe', [
+            '-Command',
+            'Test-Path "$env:USERPROFILE\\.gemini\\oauth_creds.json"',
+          ]).execute();
+
+          log(`[VerifyAuth] oauth_creds.json check result: code=${oauthCheckCommand.code}, stdout="${oauthCheckCommand.stdout.trim()}"`);
+
+          if (oauthCheckCommand.code !== 0 || oauthCheckCommand.stdout.trim() !== 'True') {
+            log('⚠️ OAuth認証情報が見つかりません');
+            log('Gemini CLIで再度認証を実行してください');
+            return { success: false, needsCloudSetup: false };
+          }
+
           // 認証ファイルが存在する場合、Gemini CLIを実行して確認
-          log('認証ファイルが見つかりました。Gemini CLIで確認しています...');
+          log('[VerifyAuth] Step 2: Testing with Gemini CLI');
           
           const geminiTestCommand = await Command.create('powershell.exe', [
             '-Command',
@@ -245,29 +264,41 @@ export const setupGemini = {
           ]).execute();
 
           const output = geminiTestCommand.stdout + geminiTestCommand.stderr;
+          log(`[VerifyAuth] Gemini CLI test output length: ${output.length} chars`);
           
           // GOOGLE_CLOUD_PROJECT エラーをチェック
           if (output.includes('GOOGLE_CLOUD_PROJECT')) {
             log('⚠️ Google Cloud Project の設定が必要です');
             
             // プロジェクト存在チェックを実行
-            log('Google Cloud Projectの存在を確認しています...');
+            log('[VerifyAuth] Step 3: Checking for existing Cloud Projects');
             const { hasCloudProject } = await import('./cloudSetup');
             const hasProject = await hasCloudProject(log);
+            log(`[VerifyAuth] hasProject result: ${hasProject}`);
             
-            return { 
-              success: false, 
-              needsCloudSetup: true,
-              hasProject 
-            };
+            if (hasProject) {
+              // プロジェクトがあれば、環境変数を設定すればOK
+              log('✓ Google Cloud Projectが見つかりました');
+              log(t('setup.logs.authSetupComplete'));
+              return { success: true, needsCloudSetup: false, hasProject: true };
+            } else {
+              // プロジェクトがないので作成が必要
+              log('[VerifyAuth] No projects found, need to create one');
+              return { 
+                success: false, 
+                needsCloudSetup: true,
+                hasProject: false
+              };
+            }
           }
           
           log(t('setup.logs.authVerifyComplete'));
           
           // 認証成功時もプロジェクト存在チェック
-          log('Google Cloud Projectの存在を確認しています...');
+          log('[VerifyAuth] Step 3: Checking for Cloud Projects (success case)');
           const { hasCloudProject } = await import('./cloudSetup');
           const hasProject = await hasCloudProject(log);
+          log(`[VerifyAuth] hasProject result: ${hasProject}`);
           
           if (hasProject) {
             log('✓ Google Cloud環境の設定が完了しています');
@@ -279,17 +310,20 @@ export const setupGemini = {
             return { success: false, needsCloudSetup: true, hasProject: false };
           }
         } else {
+          log('[VerifyAuth] google_accounts.json does not exist');
           log(t('setup.logs.authFileNotFound'));
           log(t('setup.logs.authNotComplete'));
           log(t('setup.logs.authHint'));
           return { success: false, needsCloudSetup: false };
         }
       } else {
+        log('[VerifyAuth] Failed to check google_accounts.json');
         log(t('setup.logs.authVerifyFailed'));
         return { success: false, needsCloudSetup: false };
       }
     } catch (error) {
       log(`${t('setup.logs.authVerifyError')} ${error}`);
+      log(`[VerifyAuth] Error details: ${error instanceof Error ? error.stack : 'Unknown'}`);
       throw error;
     }
   },

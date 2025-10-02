@@ -8,7 +8,7 @@ let config: Config | null = null;
 async function getConfig(): Promise<Config> {
   if (!config) {
     const baseDir = await documentDir();
-    const configPath = `${baseDir}\\GeminiGUI`;
+    const configPath = `${baseDir}\\PEXData\\GeminiGUI`;
     config = new Config(configPath);
   }
   return config;

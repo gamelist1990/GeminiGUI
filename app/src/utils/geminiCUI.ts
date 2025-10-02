@@ -53,12 +53,14 @@ export interface GeminiOptions {
 export async function callGemini(
   prompt: string,
   workspacePath?: string,
-  options?: GeminiOptions
+  options?: GeminiOptions,
+  googleCloudProjectId?: string
 ): Promise<GeminiResponse> {
   try {
     console.log('callGemini called with prompt length:', prompt.length);
     console.log('Workspace path:', workspacePath);
     console.log('Options:', options);
+    console.log('Google Cloud Project ID:', googleCloudProjectId);
     
 
     // gemini is a PowerShell script located at "C:\nvm4w\nodejs\gemini.ps1"
@@ -93,11 +95,6 @@ export async function callGemini(
     // Add output format
     geminiArgs.push('-o', 'json');
     
-    // Add checkpointing flag
-    if (options?.checkpointing) {
-      geminiArgs.push('--checkpointing');
-    }
-    
     // Add approval mode
     if (options?.approvalMode && options.approvalMode !== 'default') {
       if (options.approvalMode === 'yolo') {
@@ -124,10 +121,14 @@ export async function callGemini(
       '-Command',
     ];
     
-    // Add custom API key as environment variable if provided
+    // Add custom API key and Google Cloud Project ID as environment variables if provided
     let psCommand = '';
     if (options?.customApiKey) {
       psCommand += `$env:GEMINI_API_KEY='${options.customApiKey.replace(/'/g, "''")}'; `;
+    }
+    if (googleCloudProjectId) {
+      psCommand += `$env:GOOGLE_CLOUD_PROJECT='${googleCloudProjectId.replace(/'/g, "''")}'; `;
+      console.log('Setting GOOGLE_CLOUD_PROJECT environment variable:', googleCloudProjectId);
     }
     
     psCommand += `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ` +

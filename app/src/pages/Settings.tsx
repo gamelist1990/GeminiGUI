@@ -141,6 +141,27 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
             </p>
           </div>
 
+          <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">☁️</span>
+              Google Cloud Project ID
+            </label>
+            <input
+              type="text"
+              className="setting-input"
+              placeholder="gemini-project-xxxxx"
+              value={localSettings.googleCloudProjectId || ''}
+              onChange={(e) =>
+                setLocalSettings({ ...localSettings, googleCloudProjectId: e.target.value })
+              }
+            />
+            <p className="setting-description">
+              Google Cloud ProjectのIDを入力してください。自動セットアップで作成されたIDが自動的に設定されます。
+              <br />
+              <small>※ 環境変数にPATHが設定済みの場合は不要です</small>
+            </p>
+          </div>
+
           <div className="setting-group compact-group">
             <label className="setting-label">
               <span className="label-icon">💬</span>

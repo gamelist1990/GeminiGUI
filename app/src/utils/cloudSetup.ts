@@ -338,13 +338,18 @@ export async function autoSetupCloudProject(
  */
 export async function hasCloudProject(log?: LogFunction): Promise<boolean> {
   try {
+    if (log) log('[hasCloudProject] Starting project existence check');
+    
     const accessToken = await getValidAccessToken();
     if (!accessToken) {
-      if (log) log('⚠️ OAuth認証情報が見つかりません');
+      if (log) {
+        log('[hasCloudProject] ⚠️ OAuth認証情報が見つかりません');
+        log('[hasCloudProject] oauth_creds.json ファイルが存在しないか、読み取りに失敗しました');
+      }
       return false;
     }
 
-    if (log) log('Google Cloud Projectの存在を確認しています...');
+    if (log) log('[hasCloudProject] Access token acquired, calling Cloud Resource Manager API');
     const response = await fetch(
       'https://cloudresourcemanager.googleapis.com/v1/projects?pageSize=1',
       {
@@ -354,23 +359,34 @@ export async function hasCloudProject(log?: LogFunction): Promise<boolean> {
       }
     );
 
+    if (log) log(`[hasCloudProject] API response status: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
-      if (log) log('⚠️ プロジェクト一覧の取得に失敗しました');
+      if (log) {
+        log('[hasCloudProject] ⚠️ プロジェクト一覧の取得に失敗しました');
+        const errorText = await response.text();
+        log(`[hasCloudProject] Error response: ${errorText.substring(0, 200)}`);
+      }
       return false;
     }
 
     const data = await response.json();
     const projects = data.projects || [];
     
+    if (log) log(`[hasCloudProject] Found ${projects.length} project(s)`);
+    
     if (projects.length > 0) {
-      if (log) log(`✓ Google Cloud Projectが見つかりました (プロジェクト数: ${projects.length}+)`);
+      if (log) log(`[hasCloudProject] ✓ Google Cloud Projectが見つかりました (プロジェクト数: ${projects.length}+)`);
       return true;
     } else {
-      if (log) log('✗ Google Cloud Projectが見つかりません');
+      if (log) log('[hasCloudProject] ✗ Google Cloud Projectが見つかりません');
       return false;
     }
   } catch (error) {
-    if (log) log(`エラー: ${error}`);
+    if (log) {
+      log(`[hasCloudProject] エラーが発生しました: ${error}`);
+      log(`[hasCloudProject] Error details: ${error instanceof Error ? error.stack : 'Unknown'}`);
+    }
     return false;
   }
 }
@@ -408,5 +424,41 @@ export async function listCloudProjects(log: LogFunction): Promise<string[]> {
   } catch (error) {
     log(`エラー: ${error}`);
     return [];
+  }
+}
+
+/**
+ * 既存プロジェクトの最初のIDを取得して環境変数を設定
+ */
+export async function setupExistingProject(log: LogFunction): Promise<{success: boolean, projectId?: string}> {
+  console.log('[CloudSetup] setupExistingProject: Starting');
+  try {
+    const projectIds = await listCloudProjects(log);
+    
+    if (projectIds.length === 0) {
+      console.error('[CloudSetup] No projects found');
+      log('❌ プロジェクトが見つかりませんでした');
+      return {success: false};
+    }
+
+    const projectId = projectIds[0];
+    console.log('[CloudSetup] Using first project:', projectId);
+    log(`✓ プロジェクトを使用します: ${projectId}`);
+    
+    // 環境変数を設定
+    const success = await setEnvironmentVariable(projectId, log);
+    
+    if (success) {
+      console.log('[CloudSetup] Environment variable set successfully');
+      log('✓ 環境変数を設定しました');
+      log('💡 アプリケーションを再起動すると設定が反映されます');
+      return {success: true, projectId};
+    }
+    
+    return {success: false};
+  } catch (error) {
+    console.error('[CloudSetup] setupExistingProject error:', error);
+    log(`エラー: ${error}`);
+    return {success: false};
   }
 }

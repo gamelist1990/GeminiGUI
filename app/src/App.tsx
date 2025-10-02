@@ -8,6 +8,7 @@ import { useSettings } from "./hooks/useSettings";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useChatSessions } from "./hooks/useChatSessions";
 import { Workspace, ChatMessage } from "./types";
+import { Config } from "./utils/configAPI";
 
 type View = 'workspace' | 'chat' | 'settings';
 
@@ -23,6 +24,12 @@ function App() {
   
   const [currentView, setCurrentView] = useState<View>('workspace');
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+  
+  // セットアップチェック済みフラグ（アプリケーション起動時に一度だけチェック）
+  const [setupCheckCompleted, setSetupCheckCompleted] = useState(false);
+
+  // グローバルconfig.jsonのインスタンス
+  const globalConfig = new Config('config.json');
 
   const {
     sessions,
@@ -114,6 +121,9 @@ function App() {
           onOpenSettings={handleOpenSettings}
           onToggleFavorite={toggleFavorite}
           settings={settings}
+          globalConfig={globalConfig}
+          setupCheckCompleted={setupCheckCompleted}
+          onSetupCheckCompleted={() => setSetupCheckCompleted(true)}
         />
       )}
       
@@ -127,6 +137,7 @@ function App() {
           approvalMode={settings.approvalMode}
           totalTokens={getTotalTokens()}
           customApiKey={settings.customApiKey}
+          googleCloudProjectId={settings.googleCloudProjectId}
           maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
           onCreateNewSession={createNewSession}
           onSwitchSession={setCurrentSessionId}

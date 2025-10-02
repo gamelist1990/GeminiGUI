@@ -55,6 +55,7 @@ interface ChatProps {
   approvalMode: 'default' | 'auto_edit' | 'yolo';
   totalTokens: number;
   customApiKey?: string;
+  googleCloudProjectId?: string;
   maxMessagesBeforeCompact: number;
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
@@ -75,6 +76,7 @@ export default function Chat({
   approvalMode,
   totalTokens,
   customApiKey,
+  googleCloudProjectId,
   maxMessagesBeforeCompact,
   onCreateNewSession,
   onSwitchSession,
@@ -97,7 +99,6 @@ export default function Chat({
   const [workspaceItems, setWorkspaceItems] = useState<FileItem[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [elapsedTime, setElapsedTime] = useState('');
-  const [responseTime, setResponseTime] = useState<string | null>(null);
   const [textareaHeight, setTextareaHeight] = useState('auto');
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showProcessingModal, setShowProcessingModal] = useState(false);
@@ -285,7 +286,7 @@ export default function Chat({
           approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
           model: 'gemini-2.5-flash', // Use fast model for summary
           customApiKey: customApiKey,
-        });
+        }, googleCloudProjectId);
         
         console.log('Summary response received:', summaryResponse.response.substring(0, 100) + '...');
         
@@ -382,7 +383,7 @@ export default function Chat({
           approvalMode: approvalMode,
           model: 'gemini-2.5-flash', // Use fast model
           customApiKey: customApiKey,
-        });
+        }, googleCloudProjectId);
         
         clearInterval(interval);
         setShowProcessingModal(false);
@@ -491,7 +492,6 @@ export default function Chat({
     setIsTyping(true);
   // start timer for this request
   requestStartRef.current = Date.now();
-  setResponseTime(null);
   setRequestElapsedTime(0);
 
   // Start elapsed time counter
@@ -526,7 +526,7 @@ export default function Chat({
       };
 
       console.log('Sending message with conversation history:', conversationHistory ? 'Yes' : 'No');
-      const geminiResponse = await callGemini(inputValue, workspace.path, options);
+      const geminiResponse = await callGemini(inputValue, workspace.path, options, googleCloudProjectId);
       
       // Calculate total tokens from stats
       let totalTokens = 0;
@@ -545,10 +545,9 @@ export default function Chat({
         stats: geminiResponse.stats,
       };
       onSendMessage(currentSessionId, aiMessage);
-      // compute response time
+      
+      // Reset request timer
       if (requestStartRef.current) {
-        const ms = Date.now() - requestStartRef.current;
-        setResponseTime(`${ms} ms`);
         requestStartRef.current = null;
       }
     } catch (error) {
@@ -630,7 +629,7 @@ export default function Chat({
             <div className="stat">
               <span className="stat-label">{t('chat.elapsedTime')}:</span>
               <span className="stat-value">
-                {isTyping ? '' : (responseTime || elapsedTime)}
+                {elapsedTime}
               </span>
             </div>
           )}
@@ -752,7 +751,6 @@ export default function Chat({
                         setIsTyping(true);
                         // Start timer for resend request
                         requestStartRef.current = Date.now();
-                        setResponseTime(null);
                         setRequestElapsedTime(0);
 
                         // Start elapsed time counter
@@ -786,7 +784,7 @@ export default function Chat({
                           };
                           
                           console.log('Resending message with conversation history:', conversationHistory ? 'Yes' : 'No');
-                          const geminiResponse = await callGemini(newMessage.content, workspace.path, options);
+                          const geminiResponse = await callGemini(newMessage.content, workspace.path, options, googleCloudProjectId);
                           
                           // Check if the response contains a FatalToolExecutionError
                           let responseContent = geminiResponse.response;

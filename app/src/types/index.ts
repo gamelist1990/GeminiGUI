@@ -79,6 +79,7 @@ export interface Settings {
   customApiKey?: string;
   maxMessagesBeforeCompact: number;
   geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
+  googleCloudProjectId?: string; // Google Cloud Project ID
 }
 
 export type Theme = 'light' | 'dark';
