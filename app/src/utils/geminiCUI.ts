@@ -1,5 +1,15 @@
 import { Command } from '@tauri-apps/plugin-shell';
 
+type LogFunction = (message: string) => void;
+
+function internalLog(msg: string, log?: LogFunction) {
+  if (log) {
+    try { log(msg); } catch (_) { console.log('[GeminiCUI]', msg); }
+  } else {
+    console.log('[GeminiCUI]', msg);
+  }
+}
+
 export interface GeminiResponse {
   response: string;
   stats: {
@@ -54,19 +64,20 @@ export async function callGemini(
   prompt: string,
   workspacePath?: string,
   options?: GeminiOptions,
-  googleCloudProjectId?: string
+  googleCloudProjectId?: string,
+  log?: LogFunction
 ): Promise<GeminiResponse> {
   try {
-    console.log('callGemini called with prompt length:', prompt.length);
-    console.log('Workspace path:', workspacePath);
-    console.log('Options:', options);
-    console.log('Google Cloud Project ID:', googleCloudProjectId);
+    internalLog(`callGemini called with prompt length: ${prompt.length}`, log);
+    internalLog(`Workspace path: ${workspacePath}`, log);
+    internalLog(`Options: ${JSON.stringify(options)}`, log);
+    internalLog(`Google Cloud Project ID: ${googleCloudProjectId}`, log);
     
 
     // gemini is a PowerShell script located at "C:\nvm4w\nodejs\gemini.ps1"
     const geminiPath = `C:\\nvm4w\\nodejs\\gemini.ps1`;
 
-    console.log('Using gemini path:', geminiPath);
+  internalLog(`Using gemini path: ${geminiPath}`, log);
     
     // Build gemini command arguments as array
     const geminiArgs: string[] = [];
@@ -77,7 +88,7 @@ export async function callGemini(
     // Add conversation history at the beginning if provided
     if (options?.conversationHistory) {
       fullPrompt = `[Previous conversation context]\n${options.conversationHistory}\n\n[Current user message]\n`;
-      console.log('Adding conversation history to prompt, length:', options.conversationHistory.length);
+  internalLog(`Adding conversation history to prompt, length: ${options.conversationHistory.length}`, log);
     }
     
     // Add the main prompt
@@ -128,7 +139,7 @@ export async function callGemini(
     }
     if (googleCloudProjectId) {
       psCommand += `$env:GOOGLE_CLOUD_PROJECT='${googleCloudProjectId.replace(/'/g, "''")}'; `;
-      console.log('Setting GOOGLE_CLOUD_PROJECT environment variable:', googleCloudProjectId);
+  internalLog(`Setting GOOGLE_CLOUD_PROJECT environment variable: ${googleCloudProjectId}`, log);
     }
     
     psCommand += `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ` +
@@ -139,17 +150,17 @@ export async function callGemini(
         return `'${escaped}'`;
       }).join(' ')}`;
     
-    console.log('PowerShell command:', psCommand.substring(0, 200) + '...');
+  internalLog('PowerShell command: ' + psCommand.substring(0, 200) + '...', log);
     
     commandArgs.push(psCommand);
     
     const command = Command.create('powershell.exe', commandArgs);
-    console.log('Executing command...');
-    const output = await command.execute();
-    
-    console.log('Command exit code:', output.code);
-    console.log('Command stdout length:', output.stdout.length);
-    console.log('Command stderr:', output.stderr);
+  internalLog('Executing command...', log);
+  const output = await command.execute();
+
+  internalLog(`Command exit code: ${output.code}`, log);
+  internalLog(`Command stdout length: ${output.stdout.length}`, log);
+  internalLog(`Command stderr: ${output.stderr}`, log);
 
     // Check if stdout or stderr contains FatalToolExecutionError even if exit code is not 0
     const stdoutString = output.stdout.trim();
@@ -165,27 +176,27 @@ export async function callGemini(
       if (jsonMatch) {
         jsonString = jsonMatch[0];
         jsonSource = 'stderr';
-        console.log('Found JSON in stderr');
+        internalLog('Found JSON in stderr', log);
       }
     }
     
     // If not found in stderr, check stdout
     if (!jsonString && stdoutString) {
-      jsonString = stdoutString;
-      jsonSource = 'stdout';
-      console.log('Using stdout as JSON');
+  jsonString = stdoutString;
+  jsonSource = 'stdout';
+  internalLog('Using stdout as JSON', log);
     }
     
     if (jsonString) {
       try {
-        console.log(`JSON response preview from ${jsonSource}:`, jsonString.substring(0, 200) + '...');
+  internalLog(`JSON response preview from ${jsonSource}: ${jsonString.substring(0, 200)}...`, log);
         const parsedResponse = JSON.parse(jsonString);
         
         // Check if the response contains a FatalToolExecutionError
         if (parsedResponse && typeof parsedResponse === 'object' && parsedResponse.error) {
           const errorObj = parsedResponse.error;
           if (errorObj.type === 'FatalToolExecutionError') {
-            console.log('FatalToolExecutionError detected in response:', errorObj);
+            internalLog('FatalToolExecutionError detected in response: ' + JSON.stringify(errorObj), log);
             // Return as a response with error information embedded
             const response: GeminiResponse = {
               response: JSON.stringify(parsedResponse),
@@ -217,14 +228,14 @@ export async function callGemini(
         // Normal response
         if (output.code === 0) {
           const response: GeminiResponse = parsedResponse;
-          console.log('Response parsed successfully, response length:', response.response.length);
+          internalLog('Response parsed successfully, response length: ' + response.response.length, log);
           return response;
         } else {
           // Exit code is not 0 but JSON is valid and not FatalToolExecutionError
           throw new Error(`Command failed with code ${output.code}: ${stderrString}`);
         }
       } catch (parseError) {
-        console.error('Failed to parse JSON:', parseError);
+        internalLog('Failed to parse JSON: ' + String(parseError), log);
         // If we can't parse JSON and exit code is not 0, throw error
         if (output.code !== 0) {
           throw new Error(`Command failed with code ${output.code}: ${stderrString}`);
@@ -240,7 +251,7 @@ export async function callGemini(
 
     throw new Error('No output from gemini command');
   } catch (error) {
-    console.error('Error calling Gemini:', error);
+    internalLog('Error calling Gemini: ' + String(error), log);
     throw error;
   }
 }

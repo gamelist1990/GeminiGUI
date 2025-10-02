@@ -30,6 +30,7 @@
       "nodeNotFound": "✗ Node.js が見つかりません",
       "geminiCheck": "Gemini CLI の存在を確認しています...",
       "geminiFound": "✓ Gemini CLI が見つかりました",
+  "geminiNotFound": "✗ Gemini CLI がインストールされていません",
       "authCheck": "認証状態を確認しています...",
       "authConfirmed": "✓ Google アカウント認証が確認されました",
       "authRequired": "✗ Google アカウント認証が必要です",

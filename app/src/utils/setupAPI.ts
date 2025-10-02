@@ -94,7 +94,8 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
         }
       }
     } else {
-      log(t('setup.logs.nodeNotFound'));
+      // Gemini CLI が見つからない場合は nodeNotFound ではなく専用メッセージを表示
+      log(t('setup.logs.geminiNotFound'));
     }
   } catch (error) {
     log(`${t('setup.logs.checkError')} ${error}`);

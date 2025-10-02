@@ -194,23 +194,23 @@ const SetupModal: React.FC<SetupModalProps> = ({
   };
 
   const handleAuthVerify = async () => {
-    console.log('[Setup] handleAuthVerify started');
+    addLog('[Setup] handleAuthVerify started');
     setIsProcessing(true);
     setCanProceed(false);
     addLog(t("setup.logs.authVerifyStart"));
 
     try {
-      console.log('[Setup] Calling setupGemini.verifyAuth');
+      addLog('[Setup] Calling setupGemini.verifyAuth');
       addLog('[Debug] verifyAuth を呼び出しています...');
-      
+
       const result = await setupGemini.verifyAuth(addLog);
-      
-      console.log('[Setup] verifyAuth completed with result:', result);
+
+      addLog('[Setup] verifyAuth completed');
       addLog(`[Debug] verifyAuth 完了: ${JSON.stringify(result)}`);
 
       // hasProjectがtrueなら必ずセットアップ完了
       if (result.hasProject === true) {
-        console.log('[Setup] Project exists, setting up environment variable');
+  addLog('[Setup] Project exists, setting up environment variable');
         addLog("");
         addLog("========================================");
         addLog("✅ Google Cloud Projectが見つかりました");
@@ -227,21 +227,21 @@ const SetupModal: React.FC<SetupModalProps> = ({
             addLog("✅ セットアップが完了しました!");
             
             if (configAPI) {
-              console.log('[Setup] Saving geminiAuth and googleCloudProjectId to config.json');
+                addLog('[Setup] Saving geminiAuth and googleCloudProjectId to config.json');
               addLog("設定を保存しています...");
               const settings = await configAPI.loadConfig();
               if (settings) {
                 settings.geminiAuth = true;
                 settings.googleCloudProjectId = envSetupResult.projectId;
                 await configAPI.saveConfig(settings);
-                console.log('[Setup] geminiAuth and googleCloudProjectId saved');
+                addLog('[Setup] geminiAuth and googleCloudProjectId saved');
                 addLog("✓ 設定を保存しました");
                 addLog(`✓ プロジェクトID: ${envSetupResult.projectId}`);
                 addLog("今後、このセットアップは不要です");
               }
             }
             
-            console.log('[Setup] Moving to complete step');
+            addLog('[Setup] Moving to complete step');
             setCurrentStep("complete");
             setCanProceed(true);
           } else {
@@ -256,8 +256,8 @@ const SetupModal: React.FC<SetupModalProps> = ({
         }
       } else if (result.hasProject === false) {
         // プロジェクトが明示的にfalse（存在しない）の場合のみ自動セットアップを提案
-        console.log('[Setup] Cloud setup needed, hasProject:', result.hasProject);
-        console.log('[Setup] No project found, showing auto setup dialog');
+        addLog('[Setup] Cloud setup needed, hasProject: ' + String(result.hasProject));
+        addLog('[Setup] No project found, showing auto setup dialog');
           addLog("⚠️ Google Cloud Projectが見つかりません");
           addLog("");
 
@@ -265,16 +265,16 @@ const SetupModal: React.FC<SetupModalProps> = ({
           setIsProcessing(false);
 
           // ダイアログで自動セットアップを提案
-          console.log('[Setup] Showing auto setup confirmation dialog');
+          addLog('[Setup] Showing auto setup confirmation dialog');
           const shouldAutoSetup = await confirm(
             "Google Cloud Projectが見つかりませんでした。\n\n自動的にプロジェクトを作成してGemini APIをセットアップしますか?\n\n※ この操作には数秒かかります",
             { title: "自動セットアップ", kind: "info" }
           );
-          console.log(`[Setup] User choice for auto setup: ${shouldAutoSetup}`);
+          addLog(`[Setup] User choice for auto setup: ${shouldAutoSetup}`);
 
           if (shouldAutoSetup) {
             // 自動セットアップを実行
-            console.log('[Setup] Starting auto cloud setup process');
+            addLog('[Setup] Starting auto cloud setup process');
             addLog("");
             addLog("========================================");
             addLog("🚀 自動セットアップを開始します");
@@ -283,15 +283,15 @@ const SetupModal: React.FC<SetupModalProps> = ({
             setIsProcessing(true);
 
             try {
-              console.log('[Setup] Step 1: Loading OAuth credentials');
+              addLog('[Setup] Step 1: Loading OAuth credentials');
               addLog("📋 ステップ 1/5: OAuth認証情報を読み込んでいます...");
               
-              console.log('[Setup] Calling autoSetupCloudProject');
+              addLog('[Setup] Calling autoSetupCloudProject');
               const autoResult = await autoSetupCloudProject(addLog);
-              console.log('[Setup] autoSetupCloudProject result:', autoResult);
+              addLog('[Setup] autoSetupCloudProject result: ' + JSON.stringify(autoResult));
 
               if (autoResult.success && autoResult.projectId) {
-                console.log(`[Setup] Auto setup succeeded with project ID: ${autoResult.projectId}`);
+                addLog(`[Setup] Auto setup succeeded with project ID: ${autoResult.projectId}`);
                 addLog("");
                 addLog("========================================");
                 addLog("✅ 自動セットアップが完了しました!");
@@ -303,14 +303,14 @@ const SetupModal: React.FC<SetupModalProps> = ({
 
                 // config.jsonに保存
                 if (configAPI) {
-                  console.log('[Setup] Saving geminiAuth and googleCloudProjectId to config.json');
+                  addLog('[Setup] Saving geminiAuth and googleCloudProjectId to config.json');
                   addLog("💾 設定を保存しています...");
                   const settings = await configAPI.loadConfig();
                   if (settings) {
                     settings.geminiAuth = true;
                     settings.googleCloudProjectId = autoResult.projectId;
                     await configAPI.saveConfig(settings);
-                    console.log('[Setup] geminiAuth and googleCloudProjectId saved successfully');
+                    addLog('[Setup] geminiAuth and googleCloudProjectId saved successfully');
                     addLog("✓ 設定を保存しました");
                     addLog(`✓ プロジェクトID: ${autoResult.projectId}`);
                     addLog("✓ 今後、このセットアップは不要です");
@@ -322,11 +322,11 @@ const SetupModal: React.FC<SetupModalProps> = ({
 
                 addLog("🎉 すべてのセットアップが完了しました!");
                 addLog("");
-                console.log('[Setup] Moving to complete step');
+                addLog('[Setup] Moving to complete step');
                 setCurrentStep("complete");
                 setCanProceed(true);
               } else {
-                console.error('[Setup] Auto setup failed:', autoResult);
+                addLog('[Setup] Auto setup failed: ' + JSON.stringify(autoResult));
                 addLog("");
                 addLog("========================================");
                 addLog("⚠️ 自動セットアップが完了できませんでした");
@@ -352,12 +352,12 @@ const SetupModal: React.FC<SetupModalProps> = ({
               setCurrentStep("cloud-setup");
               setCanProceed(true);
             } finally {
-              console.log('[Setup] Auto setup process finished, setting isProcessing to false');
+                addLog('[Setup] Auto setup process finished');
               setIsProcessing(false);
             }
           } else {
             // キャンセルされた場合は手動セットアップへ
-            console.log('[Setup] User cancelled auto setup, moving to manual setup');
+            addLog('[Setup] User cancelled auto setup, moving to manual setup');
             addLog("手動セットアップモードに切り替えます");
             addLog("");
             setCurrentStep("cloud-setup");
@@ -366,7 +366,7 @@ const SetupModal: React.FC<SetupModalProps> = ({
           return; // early return
       } else {
         // hasProjectがfalseでもundefinedでもない場合、または認証未完了
-        console.log('[Setup] Auth not completed or project status unclear');
+  addLog('[Setup] Auth not completed or project status unclear');
         addLog("✗ 認証が完了していないか、セットアップが必要です");
         addLog(
           "PowerShell ウィンドウで認証を完了してから、再度確認してください"
@@ -374,12 +374,12 @@ const SetupModal: React.FC<SetupModalProps> = ({
         setCanProceed(true);
       }
     } catch (error) {
-      console.error('[Setup] handleAuthVerify error:', error);
-      console.error('[Setup] Error stack:', error instanceof Error ? error.stack : 'N/A');
+      addLog('[Setup] handleAuthVerify error: ' + String(error));
+      addLog('[Setup] Error stack: ' + (error instanceof Error ? error.stack : 'N/A'));
       addLog(`エラー: ${error}`);
       setCurrentStep("error");
     } finally {
-      console.log('[Setup] handleAuthVerify finished, setting isProcessing to false');
+      addLog('[Setup] handleAuthVerify finished');
       setIsProcessing(false);
     }
   };

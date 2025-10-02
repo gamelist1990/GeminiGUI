@@ -37,44 +37,46 @@ export default function WorkspaceSelection({
   // Check Gemini CLI on component mount (only once per app session)
   useEffect(() => {
     const checkGeminiSetup = async () => {
+      const logCallback = (msg: string) => console.log('[Setup Check]', msg);
+
       // 既にチェック済みの場合はスキップ
       if (setupCheckCompleted) {
-        console.log('[Setup Check] Already checked in this app session, skipping');
+        logCallback('Already checked in this app session, skipping');
         setIsCheckingSetup(false);
         return;
       }
 
       try {
-        console.log('[Setup Check] Starting setup verification');
-        console.log('[Setup Check] config.geminiAuth:', settings.geminiAuth);
-        
+        logCallback('Starting setup verification');
+        logCallback(`config.geminiAuth: ${settings.geminiAuth}`);
+
         // geminiAuthフラグがtrueでも、実際のプロジェクト存在を確認
-        const result = await geminiCheck((msg) => console.log('[Setup Check]', msg));
-        
-        console.log('[Setup Check] Result:', result);
-        
+        const result = await geminiCheck(logCallback);
+
+        logCallback(`Result: ${JSON.stringify(result)}`);
+
         // Show setup modal if Gemini CLI is not installed OR not authenticated OR no cloud project
         if (!result.geminiExists || !result.isAuthenticated) {
-          console.log('[Setup Check] セットアップが必要です (CLI未インストールまたは未認証)');
+          logCallback('セットアップが必要です (CLI未インストールまたは未認証)');
           setShowSetupModal(true);
         } else if (result.hasProject === false) {
-          console.log('[Setup Check] セットアップが必要です (Cloud Projectなし)');
+          logCallback('セットアップが必要です (Cloud Projectなし)');
           setShowSetupModal(true);
         } else if (result.hasProject === true) {
-          console.log('[Setup Check] ✓ セットアップは不要です (すべて完了)');
+          logCallback('✓ セットアップは不要です (すべて完了)');
           // プロジェクトが存在する場合のみセットアップ完了
           setShowSetupModal(false);
         } else {
           // hasProjectがundefinedの場合（チェック失敗）は念のためセットアップ表示
-          console.log('[Setup Check] プロジェクトチェック結果不明、セットアップを表示');
+          logCallback('プロジェクトチェック結果不明、セットアップを表示');
           setShowSetupModal(true);
         }
-        
+
         // チェック完了フラグを設定（アプリケーションレベルで保持）
         onSetupCheckCompleted();
-        console.log('[Setup Check] Setup check completed, flag set for app session');
+        logCallback('Setup check completed, flag set for app session');
       } catch (error) {
-        console.error('[Setup Check] Failed to check Gemini setup:', error);
+        logCallback(`Failed to check Gemini setup: ${error}`);
         // Show setup modal on error as well
         setShowSetupModal(true);
         onSetupCheckCompleted();
