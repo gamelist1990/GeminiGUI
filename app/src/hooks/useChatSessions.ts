@@ -6,14 +6,23 @@ import { mockSessions } from '../mock';
 const MAX_SESSIONS = 5;
 const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
 
-export function useChatSessions(workspaceName?: string) {
+// simple uuid v4 generator
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export function useChatSessions(workspaceId?: string) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
 
   useEffect(() => {
-    if (workspaceName) {
+    if (workspaceId) {
       (async () => {
-        const loaded = await config.loadSessions(workspaceName);
+        const loaded = await config.loadSessions(workspaceId);
         const finalSessions = loaded.length > 0 ? loaded : mockSessions;
         setSessions(finalSessions);
         if (!currentSessionId && finalSessions.length > 0) {
@@ -25,17 +34,17 @@ export function useChatSessions(workspaceName?: string) {
       setSessions([]);
       setCurrentSessionId('');
     }
-  }, [workspaceName]);
+  }, [workspaceId]);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
   const createNewSession = async (): Promise<boolean> => {
-    if (sessions.length >= MAX_SESSIONS || !workspaceName) {
+    if (sessions.length >= MAX_SESSIONS || !workspaceId) {
       return false; // Cannot create more sessions
     }
     
     const newSession: ChatSession = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       name: `Session ${sessions.length + 1}`,
       messages: [],
       tokenUsage: 0,
@@ -45,7 +54,7 @@ export function useChatSessions(workspaceName?: string) {
     const updated = [...sessions, newSession];
     setSessions(updated);
     setCurrentSessionId(newSession.id);
-    await config.saveSessions(workspaceName, updated);
+    await config.saveSessions(workspaceId, updated);
     return true;
   };
 
@@ -58,16 +67,16 @@ export function useChatSessions(workspaceName?: string) {
           tokenUsage: s.tokenUsage + (message.content.length * 0.5), // Mock token calculation
         };
         // Save individual session
-        if (workspaceName) {
-          config.saveChatSession(workspaceName, newSession);
+        if (workspaceId) {
+          config.saveChatSession(workspaceId, newSession);
         }
         return newSession;
       }
       return s;
     });
     setSessions(updated);
-    if (workspaceName) {
-      await config.saveSessions(workspaceName, updated);
+    if (workspaceId) {
+      await config.saveSessions(workspaceId, updated);
     }
   };
 
@@ -77,8 +86,10 @@ export function useChatSessions(workspaceName?: string) {
     if (currentSessionId === sessionId && filtered.length > 0) {
       setCurrentSessionId(filtered[0].id);
     }
-    if (workspaceName) {
-      await config.saveSessions(workspaceName, filtered);
+    if (workspaceId) {
+      await config.deleteSession(workspaceId, sessionId);
+      // saveSessions already updated inside deleteSession; ensure sessions.json synced
+      await config.saveSessions(workspaceId, filtered);
     }
   };
 
@@ -90,8 +101,8 @@ export function useChatSessions(workspaceName?: string) {
       return s;
     });
     setSessions(updated);
-    if (workspaceName) {
-      await config.saveSessions(workspaceName, updated);
+    if (workspaceId) {
+      await config.saveSessions(workspaceId, updated);
     }
   };
 

@@ -1,31 +1,25 @@
 import { Settings, Workspace } from '../types';
+import { Config } from './configAPI';
 
-const SETTINGS_KEY = 'gemini-gui-settings';
-const WORKSPACES_KEY = 'gemini-gui-workspaces';
+// Delegate to Config class (file-backed storage)
+const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
 
 export function saveSettings(settings: Settings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  // fire-and-forget async write
+  void config.saveConfig(settings);
 }
 
 export function loadSettings(): Settings | null {
-  const data = localStorage.getItem(SETTINGS_KEY);
-  return data ? JSON.parse(data) : null;
+  // synchronous fallback: attempt to return null and let callers use async Config where available
+  return null;
 }
 
 export function saveWorkspaces(workspaces: Workspace[]): void {
-  localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
+  void config.saveWorkspaces(workspaces);
 }
 
 export function loadWorkspaces(): Workspace[] {
-  const data = localStorage.getItem(WORKSPACES_KEY);
-  if (data) {
-    const workspaces = JSON.parse(data);
-    // Convert date strings back to Date objects
-    return workspaces.map((w: any) => ({
-      ...w,
-      lastOpened: new Date(w.lastOpened),
-    }));
-  }
+  // synchronous wrapper is not available; return empty and let hooks use async Config
   return [];
 }
 

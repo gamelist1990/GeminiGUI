@@ -35,7 +35,7 @@ function App() {
     deleteSession,
     renameSession,
     maxSessionsReached,
-  } = useChatSessions(currentWorkspace?.name);
+  } = useChatSessions(currentWorkspace?.id);
 
   // Apply theme
   useEffect(() => {

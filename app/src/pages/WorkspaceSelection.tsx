@@ -22,9 +22,13 @@ export default function WorkspaceSelection({
   const [isOpening, setIsOpening] = useState(false);
 
   // Filter out favorite workspaces from recent workspaces to avoid duplicates
-  const filteredRecentWorkspaces = recentWorkspaces.filter(
-    recent => !favoriteWorkspaces.some(fav => fav.id === recent.id)
-  );
+  // Dedupe by id: keep favorite order, then recent unique by id
+  const favoriteIds = new Set(favoriteWorkspaces.map(f => f.id));
+  const filteredRecentWorkspaces = recentWorkspaces.filter(r => !favoriteIds.has(r.id));
+
+  // Additionally guard against duplicate ids within same list (sometimes generated ids may collide)
+  const uniqueFavorites = Array.from(new Map(favoriteWorkspaces.map(f => [f.id, f])).values());
+  const uniqueRecents = Array.from(new Map(filteredRecentWorkspaces.map(r => [r.id, r])).values());
 
   const handleOpenWorkspace = async () => {
     setIsOpening(true);
@@ -90,11 +94,11 @@ export default function WorkspaceSelection({
         </div>
 
         <div className="workspace-sections">
-          {favoriteWorkspaces.length > 0 && (
+          {uniqueFavorites.length > 0 && (
             <section className="workspace-section">
               <h2>⭐ {t('workspace.favoriteWorkspaces')}</h2>
               <div className="workspace-list">
-                {favoriteWorkspaces.map((workspace) => (
+                {uniqueFavorites.map((workspace) => (
                   <WorkspaceCard
                     key={workspace.id + '-fav'}
                     workspace={workspace}
@@ -106,11 +110,11 @@ export default function WorkspaceSelection({
             </section>
           )}
 
-          {filteredRecentWorkspaces.length > 0 && (
+          {uniqueRecents.length > 0 && (
             <section className="workspace-section">
               <h2>🕐 {t('workspace.recentWorkspaces')}</h2>
               <div className="workspace-list">
-                {filteredRecentWorkspaces.map((workspace) => (
+                {uniqueRecents.map((workspace) => (
                   <WorkspaceCard
                     key={workspace.id + '-recent'}
                     workspace={workspace}

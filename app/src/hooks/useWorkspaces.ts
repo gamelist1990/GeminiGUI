@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Workspace } from '../types';
-import { loadWorkspaces, saveWorkspaces } from '../utils/storage';
+import { Config } from '../utils/configAPI';
 import { mockWorkspaces } from '../mock';
+
+const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');
 
 export function useWorkspaces() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 
   useEffect(() => {
-    const loaded = loadWorkspaces();
-    setWorkspaces(loaded.length > 0 ? loaded : mockWorkspaces);
+    (async () => {
+      const loaded = await config.loadWorkspaces();
+      setWorkspaces(loaded.length > 0 ? loaded : mockWorkspaces);
+    })();
   }, []);
 
-  const addWorkspace = (workspace: Workspace) => {
+  const addWorkspace = async (workspace: Workspace) => {
     // Check if workspace with same path already exists
     const exists = workspaces.some(w => w.path === workspace.path);
     if (exists) {
@@ -21,23 +25,23 @@ export function useWorkspaces() {
     }
     const updated = [...workspaces, workspace];
     setWorkspaces(updated);
-    saveWorkspaces(updated);
+    await config.saveWorkspaces(updated);
   };
 
-  const toggleFavorite = (id: string) => {
+  const toggleFavorite = async (id: string) => {
     const updated = workspaces.map(w =>
       w.id === id ? { ...w, isFavorite: !w.isFavorite } : w
     );
     setWorkspaces(updated);
-    saveWorkspaces(updated);
+    await config.saveWorkspaces(updated);
   };
 
-  const updateLastOpened = (id: string) => {
+  const updateLastOpened = async (id: string) => {
     const updated = workspaces.map(w =>
       w.id === id ? { ...w, lastOpened: new Date() } : w
     );
     setWorkspaces(updated);
-    saveWorkspaces(updated);
+    await config.saveWorkspaces(updated);
   };
 
   const recentWorkspaces = [...workspaces]
