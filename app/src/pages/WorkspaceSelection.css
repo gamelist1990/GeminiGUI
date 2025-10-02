@@ -1,0 +1,127 @@
+.workspace-selection {
+  min-height: 100vh;
+  background-color: var(--background);
+  padding: var(--spacing-xl);
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.logo-gradient svg {
+  filter: drop-shadow(0 4px 8px rgba(66, 133, 244, 0.3));
+}
+
+.logo-container h1 {
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.settings-button {
+  font-size: 14px;
+  padding: var(--spacing-sm) var(--spacing-lg);
+}
+
+.workspace-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.workspace-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.open-workspace-button {
+  font-size: 16px;
+  padding: var(--spacing-md) var(--spacing-xl);
+  min-width: 200px;
+}
+
+.workspace-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.workspace-section h2 {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.workspace-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.workspace-card {
+  cursor: pointer;
+  padding: var(--spacing-md);
+  transition: all 0.2s;
+}
+
+.workspace-card:hover {
+  transform: translateY(-2px);
+}
+
+.workspace-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+.workspace-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.workspace-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-info h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-info p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.favorite-button:hover {
+  opacity: 1;
+}

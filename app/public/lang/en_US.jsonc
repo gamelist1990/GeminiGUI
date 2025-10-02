@@ -1,0 +1,42 @@
+{
+  // English Language Pack
+  "workspace": {
+    "title": "Select Workspace",
+    "openWorkspace": "Open Workspace",
+    "recentWorkspaces": "Recent Workspaces",
+    "favoriteWorkspaces": "Favorite Workspaces",
+    "noRecent": "No recent workspaces",
+    "noFavorites": "No favorite workspaces",
+    "settings": "Settings"
+  },
+  "chat": {
+    "title": "Chat",
+    "newChat": "New Chat",
+    "sessionLimit": "Session limit reached (max 5)",
+    "tokenUsage": "Token Usage",
+    "currentSession": "Current Session",
+    "allSessions": "All Sessions",
+    "elapsedTime": "Elapsed Time",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "sessions": "Sessions",
+    "noMessages": "No messages"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "save": "Save",
+    "cancel": "Cancel",
+    "back": "Back"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "error": "Error",
+    "success": "Success"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  // Japanese Language Pack
+  "workspace": {
+    "title": "ワークスペースの選択",
+    "openWorkspace": "ワークスペースを開く",
+    "recentWorkspaces": "最近のワークスペース",
+    "favoriteWorkspaces": "お気に入りのワークスペース",
+    "noRecent": "最近のワークスペースはありません",
+    "noFavorites": "お気に入りのワークスペースはありません",
+    "settings": "設定"
+  },
+  "chat": {
+    "title": "チャット",
+    "newChat": "新しいチャット",
+    "sessionLimit": "セッション上限に達しました（最大5件）",
+    "tokenUsage": "トークン使用量",
+    "currentSession": "現在のセッション",
+    "allSessions": "全セッション",
+    "elapsedTime": "経過時間",
+    "placeholder": "メッセージを入力...",
+    "send": "送信",
+    "sessions": "セッション",
+    "noMessages": "メッセージがありません"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "言語",
+    "theme": "テーマ",
+    "light": "ライト",
+    "dark": "ダーク",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "back": "戻る"
+  },
+  "common": {
+    "confirm": "確認",
+    "cancel": "キャンセル",
+    "ok": "OK",
+    "error": "エラー",
+    "success": "成功"
+  }
+}
