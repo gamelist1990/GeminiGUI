@@ -53,6 +53,15 @@ export function useChatSessions() {
     }
   };
 
+  const renameSession = (sessionId: string, newName: string) => {
+    setSessions(sessions.map(s => {
+      if (s.id === sessionId) {
+        return { ...s, name: newName };
+      }
+      return s;
+    }));
+  };
+
   return {
     sessions,
     currentSession,
@@ -62,6 +71,7 @@ export function useChatSessions() {
     addMessage,
     getTotalTokens,
     deleteSession,
+    renameSession,
     maxSessionsReached: sessions.length >= MAX_SESSIONS,
   };
 }

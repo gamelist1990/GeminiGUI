@@ -17,10 +17,16 @@
     "currentSession": "現在のセッション",
     "allSessions": "全セッション",
     "elapsedTime": "経過時間",
-    "placeholder": "メッセージを入力...",
+    "placeholder": "メッセージを入力... (Ctrl+Enterで送信)",
     "send": "送信",
     "sessions": "セッション",
-    "noMessages": "メッセージがありません"
+    "noMessages": "メッセージがありません",
+    "renameSession": "セッション名を変更",
+    "sessionName": "セッション名",
+    "commands": {
+      "compact": "会話を要約",
+      "fixchat": "メッセージをAI向けに改善"
+    }
   },
   "settings": {
     "title": "設定",

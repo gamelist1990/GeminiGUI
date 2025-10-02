@@ -17,10 +17,16 @@
     "currentSession": "Current Session",
     "allSessions": "All Sessions",
     "elapsedTime": "Elapsed Time",
-    "placeholder": "Type a message...",
+    "placeholder": "Type a message... (Ctrl+Enter to send)",
     "send": "Send",
     "sessions": "Sessions",
-    "noMessages": "No messages"
+    "noMessages": "No messages",
+    "renameSession": "Rename Session",
+    "sessionName": "Session Name",
+    "commands": {
+      "compact": "Summarize conversation",
+      "fixchat": "Improve message for AI"
+    }
   },
   "settings": {
     "title": "Settings",
