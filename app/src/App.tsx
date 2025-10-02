@@ -1,50 +1,127 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useState, useEffect } from "react";
+import "./styles/theme.css";
 import "./App.css";
+import WorkspaceSelection from "./pages/WorkspaceSelection";
+import Chat from "./pages/Chat";
+import Settings from "./pages/Settings";
+import { useSettings } from "./hooks/useSettings";
+import { useWorkspaces } from "./hooks/useWorkspaces";
+import { useChatSessions } from "./hooks/useChatSessions";
+import { Workspace, ChatMessage } from "./types";
+
+type View = 'workspace' | 'chat' | 'settings';
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const { settings, updateSettings, isLoading } = useSettings();
+  const {
+    recentWorkspaces,
+    favoriteWorkspaces,
+    toggleFavorite,
+    updateLastOpened,
+    addWorkspace,
+  } = useWorkspaces();
+  
+  const {
+    sessions,
+    currentSession,
+    currentSessionId,
+    setCurrentSessionId,
+    createNewSession,
+    addMessage,
+    getTotalTokens,
+    deleteSession,
+    maxSessionsReached,
+  } = useChatSessions();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  const [currentView, setCurrentView] = useState<View>('workspace');
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+
+  // Apply theme
+  useEffect(() => {
+    if (!isLoading) {
+      document.documentElement.setAttribute('data-theme', settings.theme);
+    }
+  }, [settings.theme, isLoading]);
+
+  const handleSelectWorkspace = (workspace: Workspace) => {
+    setCurrentWorkspace(workspace);
+    updateLastOpened(workspace.id);
+    addWorkspace(workspace);
+    setCurrentView('chat');
+  };
+
+  const handleBackToWorkspace = () => {
+    setCurrentView('workspace');
+    setCurrentWorkspace(null);
+  };
+
+  const handleOpenSettings = () => {
+    setCurrentView('settings');
+  };
+
+  const handleCloseSettings = () => {
+    if (currentWorkspace) {
+      setCurrentView('chat');
+    } else {
+      setCurrentView('workspace');
+    }
+  };
+
+  const handleSendMessage = (sessionId: string, message: ChatMessage) => {
+    addMessage(sessionId, message);
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100vh',
+        backgroundColor: 'var(--background)',
+        color: 'var(--text-primary)'
+      }}>
+        Loading...
+      </div>
+    );
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+    <>
+      {currentView === 'workspace' && (
+        <WorkspaceSelection
+          recentWorkspaces={recentWorkspaces}
+          favoriteWorkspaces={favoriteWorkspaces}
+          onSelectWorkspace={handleSelectWorkspace}
+          onOpenSettings={handleOpenSettings}
+          onToggleFavorite={toggleFavorite}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      )}
+      
+      {currentView === 'chat' && currentWorkspace && (
+        <Chat
+          workspace={currentWorkspace}
+          sessions={sessions}
+          currentSession={currentSession}
+          currentSessionId={currentSessionId}
+          maxSessionsReached={maxSessionsReached}
+          totalTokens={getTotalTokens()}
+          onCreateNewSession={createNewSession}
+          onSwitchSession={setCurrentSessionId}
+          onSendMessage={handleSendMessage}
+          onDeleteSession={deleteSession}
+          onBack={handleBackToWorkspace}
+        />
+      )}
+
+      {currentView === 'settings' && (
+        <Settings
+          settings={settings}
+          onUpdateSettings={updateSettings}
+          onClose={handleCloseSettings}
+        />
+      )}
+    </>
   );
 }
 
