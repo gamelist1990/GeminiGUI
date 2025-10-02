@@ -6,7 +6,12 @@ const MAX_SESSIONS = 5;
 
 export function useChatSessions() {
   const [sessions, setSessions] = useState<ChatSession[]>(mockSessions);
-  const [currentSessionId, setCurrentSessionId] = useState<string>(sessions[0]?.id || '');
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
+
+  // Ensure currentSessionId is set to the first session id once sessions are available
+  if (!currentSessionId && sessions.length > 0) {
+    setCurrentSessionId(sessions[0].id);
+  }
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 

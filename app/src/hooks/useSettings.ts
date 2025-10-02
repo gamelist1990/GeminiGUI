@@ -13,14 +13,16 @@ export function useSettings() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadedSettings = loadSettings();
-    if (loadedSettings) {
-      setSettings(loadedSettings);
-      loadLanguage(loadedSettings.language as Language);
-    } else {
-      loadLanguage(defaultSettings.language as Language);
-    }
-    setIsLoading(false);
+    (async () => {
+      const loadedSettings = loadSettings();
+      if (loadedSettings) {
+        setSettings(loadedSettings);
+        await loadLanguage(loadedSettings.language as Language);
+      } else {
+        await loadLanguage(defaultSettings.language as Language);
+      }
+      setIsLoading(false);
+    })();
   }, []);
 
   const updateSettings = (newSettings: Partial<Settings>) => {
