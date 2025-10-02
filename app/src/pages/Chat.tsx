@@ -7,6 +7,7 @@ import { scanWorkspace, getSuggestions, parseIncludes, FileItem } from '../utils
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Command } from '@tauri-apps/plugin-shell';
 import './Chat.css';
 
 // Markdown components for syntax highlighting
@@ -51,15 +52,17 @@ interface ChatProps {
   currentSession: ChatSession | undefined;
   currentSessionId: string;
   maxSessionsReached: boolean;
-  aggregatedStats: any;
   approvalMode: 'default' | 'auto_edit' | 'yolo';
-  checkpointing: boolean;
+  totalTokens: number;
+  customApiKey?: string;
+  maxMessagesBeforeCompact: number;
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
+  onResendMessage: (sessionId: string, messageId: string, newMessage: ChatMessage) => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newName: string) => void;
-  onReplayFromMessage: (sessionId: string, messageId: string, editedContent: string) => Promise<void>;
+  onCompactSession: (sessionId: string) => Promise<void>;
   onBack: () => void;
 }
 
@@ -69,23 +72,23 @@ export default function Chat({
   currentSession,
   currentSessionId,
   maxSessionsReached,
-  aggregatedStats,
   approvalMode,
-  checkpointing,
+  totalTokens,
+  customApiKey,
+  maxMessagesBeforeCompact,
   onCreateNewSession,
   onSwitchSession,
   onSendMessage,
+  onResendMessage,
   onDeleteSession,
   onRenameSession,
-  onReplayFromMessage,
+  onCompactSession,
   onBack,
 }: ChatProps) {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState('');
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingMessageContent, setEditingMessageContent] = useState('');
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [showFileSuggestions, setShowFileSuggestions] = useState(false);
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
@@ -94,9 +97,18 @@ export default function Chat({
   const [workspaceItems, setWorkspaceItems] = useState<FileItem[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [elapsedTime, setElapsedTime] = useState('');
+  const [responseTime, setResponseTime] = useState<string | null>(null);
+  const [textareaHeight, setTextareaHeight] = useState('auto');
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState('');
+  const [processingElapsed, setProcessingElapsed] = useState(0);
+  const [showCompactWarning, setShowCompactWarning] = useState(false);
+  const [requestElapsedTime, setRequestElapsedTime] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const requestStartRef = useRef<number | null>(null);
+  const requestIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Scan workspace for files and folders
   useEffect(() => {
@@ -138,6 +150,17 @@ export default function Chat({
     return () => clearInterval(interval);
   }, [currentSession]);
 
+  // Check for compact warning based on message count
+  useEffect(() => {
+    if (!currentSession) {
+      setShowCompactWarning(false);
+      return;
+    }
+
+    const messageCount = currentSession.messages.filter(msg => msg.role !== 'system').length;
+    setShowCompactWarning(messageCount >= maxMessagesBeforeCompact);
+  }, [currentSession, maxMessagesBeforeCompact]);
+
   // Handle command and file suggestions
   useEffect(() => {
     const text = inputValue.substring(0, cursorPosition);
@@ -154,9 +177,13 @@ export default function Chat({
     }
     // File suggestions
     else if (lastWord.startsWith('#')) {
-      const query = lastWord.toLowerCase();
-      // Use dynamic workspace suggestions (already include # prefix)
-      const filtered = workspaceSuggestions.filter(file => file.toLowerCase().includes(query));
+      const query = lastWord.substring(1).toLowerCase(); // Remove # for matching
+      // Filter suggestions by matching the query against the suggestion text
+      // This allows #config to match #file:config.json or #folder:config
+      const filtered = workspaceSuggestions.filter(suggestion => {
+        const suggestionWithoutHash = suggestion.substring(1).toLowerCase(); // Remove # prefix
+        return suggestionWithoutHash.includes(query);
+      });
       setFileSuggestions(filtered);
       setShowFileSuggestions(filtered.length > 0);
       setShowCommandSuggestions(false);
@@ -169,6 +196,17 @@ export default function Chat({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(e.target.value);
     setCursorPosition(e.target.selectionStart || 0);
+
+    // Auto-resize textarea
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    const scrollHeight = textarea.scrollHeight;
+    const lineHeight = 20; // Approximate line height
+    const maxLines = 4;
+    const maxHeight = lineHeight * maxLines;
+    const newHeight = Math.min(scrollHeight, maxHeight);
+    textarea.style.height = `${newHeight}px`;
+    setTextareaHeight(`${newHeight}px`);
   };
 
   const insertSuggestion = (suggestion: string) => {
@@ -204,23 +242,224 @@ export default function Chat({
 
   const processCommand = async (command: string, args: string) => {
     if (command === 'compact') {
-      // Simulate compacting conversation
-      const summaryMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: '📝 会話履歴を要約しました。主なトピック:\n\n1. GeminiGUI プロジェクトについての質問\n2. AI Agentとの対話機能\n\n要約が完了しました。',
-        timestamp: new Date(),
-      };
-      onSendMessage(currentSessionId, summaryMessage);
+      if (!currentSession) return;
+      
+      setShowProcessingModal(true);
+      setProcessingMessage('会話履歴を要約しています...');
+      const startTime = Date.now();
+      
+      // Update elapsed time every second
+      const interval = setInterval(() => {
+        setProcessingElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+      
+      try {
+        // Build conversation history (exclude system messages)
+        const historyMessages = currentSession.messages.filter(msg => msg.role !== 'system');
+        
+        // Check if there's any conversation to summarize
+        if (historyMessages.length === 0) {
+          clearInterval(interval);
+          setShowProcessingModal(false);
+          
+          const errorMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: '❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。',
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, errorMessage);
+          return;
+        }
+        
+        const historyText = historyMessages
+          .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+          .join('\n\n');
+        
+        console.log('Compacting conversation, history length:', historyText.length);
+        
+        const summaryPrompt = `以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:\n\n${historyText}`;
+        
+        console.log('Calling Gemini for summary...');
+        const summaryResponse = await callGemini(summaryPrompt, workspace.path, {
+          approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
+          model: 'gemini-2.5-flash', // Use fast model for summary
+          customApiKey: customApiKey,
+        });
+        
+        console.log('Summary response received:', summaryResponse.response.substring(0, 100) + '...');
+        
+        clearInterval(interval);
+        setShowProcessingModal(false);
+        
+        // Validate response
+        if (!summaryResponse.response || summaryResponse.response.trim() === '') {
+          throw new Error('要約レスポンスが空です');
+        }
+        
+        // Clean up the response - remove any existing summary headers
+        let cleanedSummary = summaryResponse.response.trim();
+        
+        // Remove common summary headers that Gemini might add
+        cleanedSummary = cleanedSummary
+          .replace(/^📝\s*会話履歴の要約[::\s]*/i, '')
+          .replace(/^会話履歴の要約[::\s]*/i, '')
+          .replace(/^[\*\*]+会話履歴の要約[\*\*]+[::\s]*/i, '')
+          .replace(/^#+\s*会話履歴の要約[::\s]*/i, '')
+          .trim();
+        
+        // Step 1: Add summary message first (as system message)
+        const systemMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'system',
+          content: `📝 **会話履歴の要約**\n\n${cleanedSummary}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, systemMessage);
+        
+        // Step 2: Show confirmation message
+        const confirmationMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '✅ 会話履歴を要約しました。古いメッセージをクリアして整理します...',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, confirmationMessage);
+        
+        // Step 3: Wait a bit to ensure messages are saved
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Step 4: Compact the session (remove non-system messages)
+        await onCompactSession(currentSessionId);
+        
+        // Step 5: Add final confirmation
+        const finalMessage: ChatMessage = {
+          id: (Date.now() + 2).toString(),
+          role: 'assistant',
+          content: '✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, finalMessage);
+        
+      } catch (error) {
+        clearInterval(interval);
+        setShowProcessingModal(false);
+        console.error('Error compacting conversation:', error);
+        
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `❌ 会話の要約中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
+      
     } else if (command === 'fixchat') {
-      // Simulate improving the user's text
-      const improvedMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: `✨ メッセージを改善しました:\n\n改善後のテキスト: ${args}\n\n主要ポイントを保持し、AIが理解しやすい形式に最適化しました。`,
-        timestamp: new Date(),
-      };
-      onSendMessage(currentSessionId, improvedMessage);
+      if (!args.trim()) {
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: '❌ /fixchat コマンドには改善したいテキストを指定してください。\n\n使用例: /fixchat このコードを説明して',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+        return;
+      }
+      
+      setShowProcessingModal(true);
+      setProcessingMessage('AIがメッセージを改善しています...');
+      const startTime = Date.now();
+      
+      const interval = setInterval(() => {
+        setProcessingElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+      
+      try {
+        const improvementPrompt = `以下のユーザーメッセージを、AIが理解しやすく、より具体的で明確な表現に改善してください。改善後のメッセージのみを返してください。余計な説明や前置きは不要です:\n\n${args}`;
+        
+        const improvedResponse = await callGemini(improvementPrompt, workspace.path, {
+          approvalMode: approvalMode,
+          model: 'gemini-2.5-flash', // Use fast model
+          customApiKey: customApiKey,
+        });
+        
+        clearInterval(interval);
+        setShowProcessingModal(false);
+        
+        console.log('Gemini response received:', improvedResponse);
+        console.log('Response text:', improvedResponse.response);
+        
+        // Set the improved message directly to the input field
+        const improvedText = improvedResponse.response.trim();
+        console.log('Setting input value to:', improvedText);
+        console.log('Input value length:', improvedText.length);
+        
+        setInputValue(improvedText);
+        console.log('setInputValue called');
+        
+        // Focus the textarea and adjust its height
+        setTimeout(() => {
+          console.log('setTimeout callback executing');
+          if (textareaRef.current) {
+            console.log('textareaRef.current exists');
+            const textarea = textareaRef.current;
+            
+            // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype,
+              'value'
+            )?.set;
+            
+            if (nativeInputValueSetter) {
+              nativeInputValueSetter.call(textarea, improvedText);
+              const event = new Event('input', { bubbles: true });
+              textarea.dispatchEvent(event);
+              console.log('Dispatched input event');
+            }
+            console.log('Textarea value set to:', textarea.value);
+            
+            // Add a visual highlight effect
+            textarea.classList.add('improved-message');
+            console.log('Added improved-message class');
+            setTimeout(() => {
+              textarea.classList.remove('improved-message');
+            }, 2000);
+            
+            // Focus and adjust height
+            textarea.focus();
+            console.log('Textarea focused');
+            textarea.style.height = 'auto';
+            const scrollHeight = textarea.scrollHeight;
+            const lineHeight = 20;
+            const maxLines = 4;
+            const maxHeight = lineHeight * maxLines;
+            const newHeight = Math.min(scrollHeight, maxHeight);
+            textarea.style.height = `${newHeight}px`;
+            setTextareaHeight(`${newHeight}px`);
+            console.log('Textarea height adjusted to:', newHeight);
+            
+            // Place cursor at the end
+            textarea.setSelectionRange(improvedText.length, improvedText.length);
+            console.log('Cursor placed at end');
+          } else {
+            console.error('textareaRef.current is null!');
+          }
+        }, 100);
+        
+      } catch (error) {
+        clearInterval(interval);
+        setShowProcessingModal(false);
+        console.error('Error improving message:', error);
+        
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `❌ メッセージの改善中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
     }
   };
 
@@ -244,33 +483,92 @@ export default function Chat({
       role: 'user',
       content: inputValue,
       timestamp: new Date(),
+      tokenUsage: Math.ceil(inputValue.length / 4), // Estimate tokens for user message
     };
 
     onSendMessage(currentSessionId, userMessage);
     setInputValue('');
     setIsTyping(true);
+  // start timer for this request
+  requestStartRef.current = Date.now();
+  setResponseTime(null);
+  setRequestElapsedTime(0);
+
+  // Start elapsed time counter
+  requestIntervalRef.current = setInterval(() => {
+    if (requestStartRef.current) {
+      setRequestElapsedTime(Math.floor((Date.now() - requestStartRef.current) / 1000));
+    }
+  }, 1000);
 
     try {
       // Parse includes from input with workspace items for directory verification
       const { includes, directories } = parseIncludes(inputValue, workspaceItems);
       
+      // Build conversation history for context
+      // Exclude system messages (summaries) and only include recent user/assistant messages
+      const recentMessages = currentSession.messages
+        .filter(msg => msg.role !== 'system')
+        .slice(-10); // Keep last 10 messages for context (5 exchanges)
+      
+      const conversationHistory = recentMessages
+        .map(msg => {
+          const role = msg.role === 'user' ? 'User' : 'Assistant';
+          return `${role}: ${msg.content}`;
+        })
+        .join('\n\n');
+      
       const options: GeminiOptions = {
         approvalMode: approvalMode,
-        checkpointing: checkpointing,
         includes: includes.length > 0 ? includes : undefined,
         includeDirectories: directories.length > 0 ? directories : undefined,
+        conversationHistory: conversationHistory && recentMessages.length > 0 ? conversationHistory : undefined,
       };
 
+      console.log('Sending message with conversation history:', conversationHistory ? 'Yes' : 'No');
       const geminiResponse = await callGemini(inputValue, workspace.path, options);
+      
+      // Calculate total tokens from stats
+      let totalTokens = 0;
+      if (geminiResponse.stats && geminiResponse.stats.models) {
+        totalTokens = Object.values(geminiResponse.stats.models).reduce((sum, model) => {
+          return sum + (model.tokens?.total || 0);
+        }, 0);
+      }
+      
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: geminiResponse.response,
         timestamp: new Date(),
+        tokenUsage: totalTokens,
         stats: geminiResponse.stats,
       };
       onSendMessage(currentSessionId, aiMessage);
+      // compute response time
+      if (requestStartRef.current) {
+        const ms = Date.now() - requestStartRef.current;
+        setResponseTime(`${ms} ms`);
+        requestStartRef.current = null;
+      }
     } catch (error) {
+      // Detect FatalToolExecutionError and suggest approval mode changes
+      try {
+        const errObj = (error && typeof error === 'object') ? (error as any) : null;
+        const errType = errObj?.type || errObj?.error?.type || undefined;
+        const errMessage = errObj?.message || errObj?.error?.message || String(error);
+        if (errType === 'FatalToolExecutionError') {
+          const adviseMessage: ChatMessage = {
+            id: (Date.now() + 2).toString(),
+            role: 'assistant',
+            content: `⚠️ ツールの実行で権限エラーが発生しました: ${errMessage}\n\nこの操作にはツールの実行権限が必要です。設定から承認モードを「auto_edit」または「yolo」に変更して自動承認を許可しますか？\n- auto_edit: 編集ツールを自動承認\n- yolo: すべてのツールを自動承認\n\n現在の承認モード: ${approvalMode}\n設定を変更する場合はSettingsで更新してください。`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, adviseMessage);
+        }
+      } catch (parseErr) {
+        console.error('Error parsing error object for FatalToolExecutionError:', parseErr);
+      }
       console.error('Error calling Gemini:', error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -281,6 +579,12 @@ export default function Chat({
       onSendMessage(currentSessionId, errorMessage);
     } finally {
       setIsTyping(false);
+      // Clear the elapsed time counter
+      if (requestIntervalRef.current) {
+        clearInterval(requestIntervalRef.current);
+        requestIntervalRef.current = null;
+      }
+      setRequestElapsedTime(0);
     }
   };
 
@@ -309,59 +613,6 @@ export default function Chat({
     setEditingSessionName('');
   };
 
-  const handleEditMessage = (messageId: string, content: string) => {
-    setEditingMessageId(messageId);
-    setEditingMessageContent(content);
-  };
-
-  const handleSaveEdit = async (messageId: string) => {
-    if (editingMessageContent.trim()) {
-      // Replay from this message with edited content
-      await onReplayFromMessage(currentSessionId, messageId, editingMessageContent.trim());
-      setEditingMessageId(null);
-      setEditingMessageContent('');
-      
-      // Re-send the edited message to Gemini
-      setIsTyping(true);
-      try {
-        const { includes, directories } = parseIncludes(editingMessageContent, workspaceItems);
-        
-        const options: GeminiOptions = {
-          approvalMode: approvalMode,
-          checkpointing: checkpointing,
-          includes: includes.length > 0 ? includes : undefined,
-          includeDirectories: directories.length > 0 ? directories : undefined,
-        };
-
-        const geminiResponse = await callGemini(editingMessageContent, workspace.path, options);
-        const aiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: geminiResponse.response,
-          timestamp: new Date(),
-          stats: geminiResponse.stats,
-        };
-        onSendMessage(currentSessionId, aiMessage);
-      } catch (error) {
-        console.error('Error re-sending edited message:', error);
-        const errorMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          timestamp: new Date(),
-        };
-        onSendMessage(currentSessionId, errorMessage);
-      } finally {
-        setIsTyping(false);
-      }
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditingMessageContent('');
-  };
-
   return (
     <div className="chat-page">
       <div className="chat-header">
@@ -372,14 +623,14 @@ export default function Chat({
           <div className="stat">
             <span className="stat-label">{t('chat.tokenUsage')}:</span>
             <span className="stat-value">
-              {formatNumber(currentSession?.tokenUsage || 0)}
+              {formatNumber(currentSession?.tokenUsage || 0)} / {formatNumber(totalTokens)}
             </span>
           </div>
           {currentSession && (
             <div className="stat">
               <span className="stat-label">{t('chat.elapsedTime')}:</span>
               <span className="stat-value">
-                {elapsedTime}
+                {isTyping ? '' : (responseTime || elapsedTime)}
               </span>
             </div>
           )}
@@ -387,9 +638,8 @@ export default function Chat({
         <button
           className="stats-button secondary"
           onClick={() => setShowStatsModal(true)}
-          disabled={!aggregatedStats}
         >
-          📊 統計
+          {t('chat.stats.button')}
         </button>
         <button
           className="new-chat-button primary"
@@ -444,7 +694,14 @@ export default function Chat({
                       {session.name}
                     </span>
                   )}
-                  <span className="session-tokens">{formatNumber(session.tokenUsage)} tokens</span>
+                  {isTyping && session.id === currentSessionId ? (
+                    <div className="request-timer">
+                      <div className="timer-spinner"></div>
+                      <span className="timer-text">{requestElapsedTime}s</span>
+                    </div>
+                  ) : (
+                    <span className="session-tokens">{formatNumber(session.tokenUsage)} tokens</span>
+                  )}
                 </div>
                 {sessions.length > 1 && (
                   <button
@@ -485,12 +742,145 @@ export default function Chat({
                   <ChatMessageBubble 
                     key={message.id} 
                     message={message}
-                    isEditing={editingMessageId === message.id}
-                    editingContent={editingMessageContent}
-                    onEdit={handleEditMessage}
-                    onSaveEdit={handleSaveEdit}
-                    onCancelEdit={handleCancelEdit}
-                    onEditingContentChange={setEditingMessageContent}
+                    workspace={workspace}
+                    onResendMessage={async (newMessage) => {
+                      // Call resend to update the session history
+                      onResendMessage(currentSessionId, message.id, newMessage);
+                      
+                      // If it's a user message, call Gemini API with the new content
+                      if (newMessage.role === 'user') {
+                        setIsTyping(true);
+                        // Start timer for resend request
+                        requestStartRef.current = Date.now();
+                        setResponseTime(null);
+                        setRequestElapsedTime(0);
+
+                        // Start elapsed time counter
+                        requestIntervalRef.current = setInterval(() => {
+                          if (requestStartRef.current) {
+                            setRequestElapsedTime(Math.floor((Date.now() - requestStartRef.current) / 1000));
+                          }
+                        }, 1000);
+                        try {
+                          const { includes, directories } = parseIncludes(newMessage.content, workspaceItems);
+                          
+                          // Build conversation history up to this point
+                          const messageIndex = currentSession.messages.findIndex(m => m.id === message.id);
+                          const previousMessages = currentSession.messages
+                            .slice(0, messageIndex)
+                            .filter(msg => msg.role !== 'system')
+                            .slice(-10); // Keep last 10 messages for context
+                          
+                          const conversationHistory = previousMessages
+                            .map(msg => {
+                              const role = msg.role === 'user' ? 'User' : 'Assistant';
+                              return `${role}: ${msg.content}`;
+                            })
+                            .join('\n\n');
+                          
+                          const options: GeminiOptions = {
+                            approvalMode: approvalMode,
+                            includes: includes.length > 0 ? includes : undefined,
+                            includeDirectories: directories.length > 0 ? directories : undefined,
+                            conversationHistory: conversationHistory && previousMessages.length > 0 ? conversationHistory : undefined,
+                          };
+                          
+                          console.log('Resending message with conversation history:', conversationHistory ? 'Yes' : 'No');
+                          const geminiResponse = await callGemini(newMessage.content, workspace.path, options);
+                          
+                          // Check if the response contains a FatalToolExecutionError
+                          let responseContent = geminiResponse.response;
+                          let hasFatalError = false;
+                          let fatalErrorObj: any = null;
+                          
+                          try {
+                            // Try to parse the response as JSON to check for FatalToolExecutionError
+                            const parsedResponse = JSON.parse(responseContent);
+                            if (parsedResponse && typeof parsedResponse === 'object' && parsedResponse.error) {
+                              const errorObj = parsedResponse.error;
+                              if (errorObj.type === 'FatalToolExecutionError') {
+                                hasFatalError = true;
+                                fatalErrorObj = errorObj;
+                                console.log('FatalToolExecutionError found in response:', errorObj);
+                              }
+                            }
+                          } catch (parseError) {
+                            // Not JSON, treat as normal response
+                            console.log('Response is not JSON, treating as normal response');
+                          }
+                          
+                          if (hasFatalError) {
+                            // Handle FatalToolExecutionError from response
+                            const errType = fatalErrorObj.type;
+                            const errCode = fatalErrorObj.code;
+                            const errMessage = fatalErrorObj.message;
+                            
+                            console.log('Handling FatalToolExecutionError from response:', { errType, errCode, errMessage });
+                            
+                            const isToolNameError = errCode === 'tool_not_registered' || 
+                                                   errMessage.includes('not found in registry') || 
+                                                   errMessage.includes('Tool') && errMessage.includes('not found');
+                            
+                            if (isToolNameError) {
+                              // Tool name error - provide guidance about available tools
+                              const adviseMessage: ChatMessage = {
+                                id: (Date.now() + 1).toString(),
+                                role: 'assistant',
+                                content: `⚠️ **ツール名エラー**: ${errMessage}\n\n🔧 **解決方法**: AIが間違ったツール名を使用しようとしました。\n\n**利用可能なツール**:\n• \`read_file\` - ファイルの内容を読み取る\n• \`web_fetch\` - ウェブページの内容を取得\n• \`glob\` - ファイル検索\n\n**考えられる原因**:\n• AIの設定やプロンプトに問題がある可能性があります\n• 必要に応じて設定画面からモデルやAPIキーを確認してください\n\n別の方法でリクエストを試すか、設定を見直してください。`,
+                                timestamp: new Date(),
+                              };
+                              console.log('Sending tool name error guidance from response');
+                              onSendMessage(currentSessionId, adviseMessage);
+                            } else {
+                              // Approval mode error - suggest changing approval mode
+                              const adviseMessage: ChatMessage = {
+                                id: (Date.now() + 1).toString(),
+                                role: 'assistant',
+                                content: `⚠️ **ツール実行エラー**: ${errMessage}\n\n🔧 **解決方法**: 承認モードが「default」のため、ツールの実行が制限されています。\n\n**以下のいずれかのモードに変更してください：**\n• **auto_edit**: 編集ツールを自動承認\n• **yolo**: すべてのツールを自動承認\n\n設定画面から承認モードを変更してください。`,
+                                timestamp: new Date(),
+                              };
+                              console.log('Sending approval mode error guidance from response');
+                              onSendMessage(currentSessionId, adviseMessage);
+                            }
+                          } else {
+                            // Normal response - calculate total tokens from stats
+                            let totalTokens = 0;
+                            if (geminiResponse.stats && geminiResponse.stats.models) {
+                              totalTokens = Object.values(geminiResponse.stats.models).reduce((sum, model) => {
+                                return sum + (model.tokens?.total || 0);
+                              }, 0);
+                            }
+                            
+                            const aiMessage: ChatMessage = {
+                              id: (Date.now() + 1).toString(),
+                              role: 'assistant',
+                              content: responseContent,
+                              timestamp: new Date(),
+                              tokenUsage: totalTokens,
+                              stats: geminiResponse.stats,
+                            };
+                            onSendMessage(currentSessionId, aiMessage);
+                          }
+                        } catch (error) {
+                          console.error('Error calling Gemini:', error);
+                          const errorMessage: ChatMessage = {
+                            id: (Date.now() + 1).toString(),
+                            role: 'assistant',
+                            content: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                            timestamp: new Date(),
+                          };
+                          onSendMessage(currentSessionId, errorMessage);
+                        } finally {
+                          setIsTyping(false);
+                          // Clear the elapsed time counter
+                          if (requestIntervalRef.current) {
+                            clearInterval(requestIntervalRef.current);
+                            requestIntervalRef.current = null;
+                          }
+                          setRequestElapsedTime(0);
+                        }
+                      }
+                    }}
                   />
                 ))
               );
@@ -516,20 +906,32 @@ export default function Chat({
                   <div
                     key={cmd}
                     className="suggestion-item"
+                    data-type="command"
                     onClick={() => insertSuggestion(`/${cmd}`)}
                   >
                     /{cmd} - {t(`chat.commands.${cmd}`)}
                   </div>
                 ))}
-                {showFileSuggestions && fileSuggestions.map((file) => (
-                  <div
-                    key={file}
-                    className="suggestion-item"
-                    onClick={() => insertSuggestion(file)}
-                  >
-                    {file}
-                  </div>
-                ))}
+                {showFileSuggestions && fileSuggestions.map((file) => {
+                  // Determine the type based on the prefix
+                  let dataType = 'file';
+                  if (file === '#codebase') {
+                    dataType = 'codebase';
+                  } else if (file.startsWith('#folder:')) {
+                    dataType = 'folder';
+                  }
+                  
+                  return (
+                    <div
+                      key={file}
+                      className="suggestion-item"
+                      data-type={dataType}
+                      onClick={() => insertSuggestion(file)}
+                    >
+                      {file}
+                    </div>
+                  );
+                })}
               </div>
             )}
             <textarea
@@ -556,6 +958,7 @@ export default function Chat({
               }}
               placeholder={t('chat.placeholder')}
               rows={1}
+              style={{ height: textareaHeight }}
             />
             <button
               className="send-button primary"
@@ -568,77 +971,32 @@ export default function Chat({
         </div>
       </div>
 
-      {/* Stats Modal */}
-      {showStatsModal && aggregatedStats && (
-        <div className="modal-overlay" onClick={() => setShowStatsModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>セッション統計情報</h2>
-              <button className="modal-close" onClick={() => setShowStatsModal(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="stats-section">
-                <h3>使用モデル</h3>
-                {Object.entries(aggregatedStats.models).map(([modelName, modelData]: [string, any]) => (
-                  <div key={modelName} className="model-info">
-                    <div className="model-name">{modelName}</div>
-                    <div className="model-details">
-                      <div>リクエスト数: {modelData.api.totalRequests}</div>
-                      <div>エラー数: {modelData.api.totalErrors}</div>
-                      <div>レイテンシ: {modelData.api.totalLatencyMs}ms</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+      {showStatsModal && (
+        <StatsModal
+          sessions={sessions}
+          totalTokens={totalTokens}
+          onClose={() => setShowStatsModal(false)}
+        />
+      )}
 
-              <div className="stats-section">
-                <h3>トークン使用量</h3>
-                {Object.entries(aggregatedStats.models).map(([modelName, modelData]: [string, any]) => (
-                  <div key={modelName} className="token-info">
-                    <div>プロンプト: {modelData.tokens.prompt}</div>
-                    <div>応答: {modelData.tokens.candidates}</div>
-                    <div>合計: {modelData.tokens.total}</div>
-                    <div>キャッシュ: {modelData.tokens.cached}</div>
-                    <div>思考: {modelData.tokens.thoughts}</div>
-                    <div>ツール: {modelData.tokens.tool}</div>
-                  </div>
-                ))}
-              </div>
+      {showProcessingModal && (
+        <ProcessingModal
+          message={processingMessage}
+          elapsedSeconds={processingElapsed}
+        />
+      )}
 
-              <div className="stats-section">
-                <h3>ツール使用状況</h3>
-                <div className="tools-summary">
-                  <div>総呼び出し数: {aggregatedStats.tools.totalCalls}</div>
-                  <div>成功: {aggregatedStats.tools.totalSuccess}</div>
-                  <div>失敗: {aggregatedStats.tools.totalFail}</div>
-                  <div>総実行時間: {aggregatedStats.tools.totalDurationMs}ms</div>
-                </div>
-                {Object.keys(aggregatedStats.tools.byName).length > 0 && (
-                  <div className="tools-details">
-                    <h4>使用ツール詳細</h4>
-                    {Object.entries(aggregatedStats.tools.byName).map(([toolName, toolData]: [string, any]) => (
-                      <div key={toolName} className="tool-detail">
-                        <div className="tool-name">{toolName}</div>
-                        <div className="tool-stats">
-                          <div>使用回数: {toolData.count}</div>
-                          <div>実行時間: {toolData.durationMs}ms</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="stats-section">
-                <h3>ファイル変更</h3>
-                <div className="file-changes">
-                  <div>追加行数: {aggregatedStats.files.totalLinesAdded}</div>
-                  <div>削除行数: {aggregatedStats.files.totalLinesRemoved}</div>
-                </div>
-              </div>
-            </div>
+      {showCompactWarning && (
+        <div className="compact-warning">
+          <div className="warning-content">
+            <span className="warning-icon">⚠️</span>
+            <span className="warning-text">
+              メッセージ数が{maxMessagesBeforeCompact}件を超えました。
+              <strong>/compact</strong>で会話を整理するか、新しいセッションを作成することをお勧めします。
+            </span>
+            <button className="warning-close" onClick={() => setShowCompactWarning(false)}>
+              ✕
+            </button>
           </div>
         </div>
       )}
@@ -646,26 +1004,438 @@ export default function Chat({
   );
 }
 
+interface ProcessingModalProps {
+  message: string;
+  elapsedSeconds: number;
+}
+
+function ProcessingModal({ message, elapsedSeconds }: ProcessingModalProps) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content processing-modal">
+        <div className="processing-content">
+          <div className="processing-spinner">
+            <div className="spinner"></div>
+          </div>
+          <h3>{message}</h3>
+          <div className="processing-dots">
+            <span className="dot"></span>
+            <span className="dot"></span>
+            <span className="dot"></span>
+          </div>
+          <div className="processing-elapsed">
+            経過時間: {elapsedSeconds}秒
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface StatsModalProps {
+  sessions: ChatSession[];
+  totalTokens: number;
+  onClose: () => void;
+}
+
+function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
+  // Calculate aggregate statistics from all sessions
+  const aggregateStats = sessions.reduce((acc, session) => {
+    session.messages.forEach((message) => {
+      if (message.stats) {
+        // Aggregate model stats
+        Object.entries(message.stats.models).forEach(([modelName, modelData]) => {
+          if (!acc.models[modelName]) {
+            acc.models[modelName] = {
+              api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+              tokens: { prompt: 0, candidates: 0, total: 0, cached: 0, thoughts: 0, tool: 0 },
+            };
+          }
+          acc.models[modelName].api.totalRequests += modelData.api.totalRequests;
+          acc.models[modelName].api.totalErrors += modelData.api.totalErrors;
+          acc.models[modelName].api.totalLatencyMs += modelData.api.totalLatencyMs;
+          acc.models[modelName].tokens.prompt += modelData.tokens.prompt;
+          acc.models[modelName].tokens.candidates += modelData.tokens.candidates;
+          acc.models[modelName].tokens.total += modelData.tokens.total;
+          acc.models[modelName].tokens.cached += modelData.tokens.cached;
+          acc.models[modelName].tokens.thoughts += modelData.tokens.thoughts;
+          acc.models[modelName].tokens.tool += modelData.tokens.tool;
+        });
+
+        // Aggregate tool stats
+        acc.tools.totalCalls += message.stats.tools.totalCalls;
+        acc.tools.totalSuccess += message.stats.tools.totalSuccess;
+        acc.tools.totalFail += message.stats.tools.totalFail;
+        acc.tools.totalDurationMs += message.stats.tools.totalDurationMs;
+
+        Object.entries(message.stats.tools.byName).forEach(([toolName, toolData]) => {
+          if (!acc.tools.byName[toolName]) {
+            acc.tools.byName[toolName] = { count: 0, durationMs: 0 };
+          }
+          acc.tools.byName[toolName].count += toolData.count;
+          acc.tools.byName[toolName].durationMs += toolData.durationMs;
+        });
+
+        // Aggregate file stats
+        acc.files.totalLinesAdded += message.stats.files.totalLinesAdded;
+        acc.files.totalLinesRemoved += message.stats.files.totalLinesRemoved;
+      }
+    });
+    return acc;
+  }, {
+    models: {} as Record<string, any>,
+    tools: { totalCalls: 0, totalSuccess: 0, totalFail: 0, totalDurationMs: 0, byName: {} as Record<string, any> },
+    files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+  });
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content stats-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📊 {t('chat.stats.title')}</h2>
+          <button className="modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          {/* Overview Section */}
+          <div className="stats-section overview-section">
+            <h3>📈 概要</h3>
+            <div className="overview-grid">
+              <div className="overview-card">
+                <div className="overview-icon">💬</div>
+                <div className="overview-content">
+                  <div className="overview-label">セッション数</div>
+                  <div className="overview-value">{sessions.length}</div>
+                </div>
+              </div>
+              <div className="overview-card">
+                <div className="overview-icon">🎯</div>
+                <div className="overview-content">
+                  <div className="overview-label">合計トークン</div>
+                  <div className="overview-value">{formatNumber(totalTokens)}</div>
+                </div>
+              </div>
+              <div className="overview-card">
+                <div className="overview-icon">💬</div>
+                <div className="overview-content">
+                  <div className="overview-label">総メッセージ数</div>
+                  <div className="overview-value">
+                    {sessions.reduce((sum, s) => sum + s.messages.length, 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Model Usage Section */}
+          {Object.keys(aggregateStats.models).length > 0 && (
+            <div className="stats-section">
+              <h3>🤖 {t('chat.stats.modelUsage')}</h3>
+              {Object.entries(aggregateStats.models).map(([modelName, modelData]: [string, any]) => (
+                <div key={modelName} className="model-card">
+                  <div className="model-header">
+                    <span className="model-name">{modelName}</span>
+                  </div>
+                  
+                  <div className="stats-grid">
+                    <div className="stat-group">
+                      <h4>API 統計</h4>
+                      <div className="stat-row">
+                        <span className="stat-icon">📤</span>
+                        <span className="stat-label">リクエスト数:</span>
+                        <span className="stat-value">{modelData.api.totalRequests}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">❌</span>
+                        <span className="stat-label">エラー数:</span>
+                        <span className="stat-value">{modelData.api.totalErrors}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">⏱️</span>
+                        <span className="stat-label">レイテンシ:</span>
+                        <span className="stat-value">{modelData.api.totalLatencyMs}ms</span>
+                      </div>
+                    </div>
+
+                    <div className="stat-group">
+                      <h4>トークン使用量</h4>
+                      <div className="stat-row">
+                        <span className="stat-icon">📝</span>
+                        <span className="stat-label">プロンプト:</span>
+                        <span className="stat-value highlight-primary">{formatNumber(modelData.tokens.prompt)}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">💬</span>
+                        <span className="stat-label">応答:</span>
+                        <span className="stat-value highlight-success">{formatNumber(modelData.tokens.candidates)}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">🎯</span>
+                        <span className="stat-label">合計:</span>
+                        <span className="stat-value highlight-total">{formatNumber(modelData.tokens.total)}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">💾</span>
+                        <span className="stat-label">キャッシュ:</span>
+                        <span className="stat-value">{formatNumber(modelData.tokens.cached)}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">💭</span>
+                        <span className="stat-label">思考:</span>
+                        <span className="stat-value">{formatNumber(modelData.tokens.thoughts)}</span>
+                      </div>
+                      <div className="stat-row">
+                        <span className="stat-icon">🔧</span>
+                        <span className="stat-label">ツール:</span>
+                        <span className="stat-value">{formatNumber(modelData.tokens.tool)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Tool Usage Section */}
+          <div className="stats-section">
+            <h3>🔧 {t('chat.stats.toolUsage')}</h3>
+            <div className="tool-summary-card">
+              <div className="stat-row">
+                <span className="stat-icon">📞</span>
+                <span className="stat-label">総呼び出し数:</span>
+                <span className="stat-value">{aggregateStats.tools.totalCalls}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">✅</span>
+                <span className="stat-label">成功:</span>
+                <span className="stat-value highlight-success">{aggregateStats.tools.totalSuccess}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">⚠️</span>
+                <span className="stat-label">失敗:</span>
+                <span className="stat-value highlight-error">{aggregateStats.tools.totalFail}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">⏱️</span>
+                <span className="stat-label">総実行時間:</span>
+                <span className="stat-value">{aggregateStats.tools.totalDurationMs}ms</span>
+              </div>
+            </div>
+            
+            {Object.keys(aggregateStats.tools.byName).length > 0 && (
+              <div className="tools-details">
+                <h4>ツール詳細</h4>
+                <div className="tools-grid">
+                  {Object.entries(aggregateStats.tools.byName).map(([toolName, toolData]: [string, any]) => (
+                    <div key={toolName} className="tool-detail-card">
+                      <div className="tool-name">🔨 {toolName}</div>
+                      <div className="tool-stats">
+                        <div className="stat-row">
+                          <span className="stat-label">使用回数:</span>
+                          <span className="stat-value">{toolData.count}</span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-label">実行時間:</span>
+                          <span className="stat-value">{toolData.durationMs}ms</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* File Changes Section */}
+          <div className="stats-section">
+            <h3>📁 {t('chat.stats.fileChanges')}</h3>
+            <div className="file-changes-card">
+              <div className="stat-row">
+                <span className="stat-icon">➕</span>
+                <span className="stat-label">追加行数:</span>
+                <span className="stat-value highlight-success">{aggregateStats.files.totalLinesAdded}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">➖</span>
+                <span className="stat-label">削除行数:</span>
+                <span className="stat-value highlight-error">{aggregateStats.files.totalLinesRemoved}</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">📊</span>
+                <span className="stat-label">差分:</span>
+                <span className="stat-value">
+                  {aggregateStats.files.totalLinesAdded - aggregateStats.files.totalLinesRemoved > 0 ? '+' : ''}
+                  {aggregateStats.files.totalLinesAdded - aggregateStats.files.totalLinesRemoved}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ChatMessageBubbleProps {
   message: ChatMessage;
-  isEditing: boolean;
-  editingContent: string;
-  onEdit: (messageId: string, content: string) => void;
-  onSaveEdit: (messageId: string) => void;
-  onCancelEdit: () => void;
-  onEditingContentChange: (content: string) => void;
+  workspace: Workspace;
+  onResendMessage?: (newMessage: ChatMessage) => void;
+}
+
+/**
+ * Render user message with highlighted tags
+ */
+function renderUserMessage(content: string, workspacePath: string): React.ReactElement {
+  // Split content by tags (#file:, #folder:, #codebase, /commands)
+  const tagRegex = /(#file:[^\s]+|#folder:[^\s]+|#codebase|\/\w+)/g;
+  const parts: React.ReactElement[] = [];
+  let lastIndex = 0;
+  let match;
+
+  const handleTagClick = async (tag: string) => {
+    try {
+      let targetPath = '';
+
+      if (tag.startsWith('#file:')) {
+        // Open the file directly
+        const filePath = tag.substring(6); // Remove '#file:'
+        // Convert relative path to absolute path if needed
+        targetPath = filePath.startsWith('/') || filePath.includes(':') 
+          ? filePath 
+          : `${workspacePath}/${filePath}`.replace(/\\/g, '/');
+      } else if (tag.startsWith('#folder:')) {
+        // Open the folder
+        const folderPath = tag.substring(8); // Remove '#folder:'
+        targetPath = folderPath.startsWith('/') || folderPath.includes(':') 
+          ? folderPath 
+          : `${workspacePath}/${folderPath}`.replace(/\\/g, '/');
+      } else if (tag === '#codebase') {
+        // Open the workspace root directory
+        targetPath = workspacePath;
+      }
+
+      if (targetPath) {
+        // Use PowerShell to open the file or directory
+        const command = Command.create('powershell.exe', ['-Command', `start "${targetPath}"`]);
+        await command.execute();
+      }
+    } catch (error) {
+      console.error('Failed to open target:', error);
+    }
+  };
+
+  while ((match = tagRegex.exec(content)) !== null) {
+    // Add text before the tag
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`text-${lastIndex}`}>
+          {content.substring(lastIndex, match.index)}
+        </span>
+      );
+    }
+
+    // Add the tag with appropriate styling
+    const tag = match[0];
+    let tagType = 'tag-default';
+    let icon = '🏷️';
+    let isClickable = false;
+
+    if (tag.startsWith('#file:')) {
+      tagType = 'tag-file';
+      icon = '📄';
+      isClickable = true;
+    } else if (tag.startsWith('#folder:')) {
+      tagType = 'tag-folder';
+      icon = '📁';
+      isClickable = true;
+    } else if (tag === '#codebase') {
+      tagType = 'tag-codebase';
+      icon = '📦';
+      isClickable = true;
+    } else if (tag.startsWith('/')) {
+      tagType = 'tag-command';
+      icon = '⚡';
+    }
+
+    parts.push(
+      <span
+        key={`tag-${match.index}`}
+        className={`message-tag ${tagType} ${isClickable ? 'clickable' : ''}`}
+        onClick={isClickable ? () => handleTagClick(tag) : undefined}
+        style={isClickable ? { cursor: 'pointer' } : undefined}
+        title={isClickable ? 'クリックしてディレクトリを開く' : undefined}
+      >
+        <span className="tag-icon">{icon}</span>
+        {tag}
+      </span>
+    );
+
+    lastIndex = match.index + tag.length;
+  }
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push(
+      <span key={`text-${lastIndex}`}>
+        {content.substring(lastIndex)}
+      </span>
+    );
+  }
+
+  return <p>{parts}</p>;
 }
 
 function ChatMessageBubble({ 
-  message, 
-  isEditing, 
-  editingContent, 
-  onEdit, 
-  onSaveEdit, 
-  onCancelEdit, 
-  onEditingContentChange 
+  message,
+  workspace,
+  onResendMessage
 }: ChatMessageBubbleProps) {
   const [showStats, setShowStats] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+  const [editTextareaHeight, setEditTextareaHeight] = useState('auto');
+
+  const handleDoubleClick = () => {
+    if (message.role === 'user' && onResendMessage) {
+      setIsEditing(true);
+      setEditContent(message.content);
+    }
+  };
+
+  const handleEditChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditContent(e.target.value);
+
+    // Auto-resize edit textarea
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    const scrollHeight = textarea.scrollHeight;
+    const lineHeight = 20; // Approximate line height
+    const maxLines = 6; // Allow more lines for editing
+    const maxHeight = lineHeight * maxLines;
+    const newHeight = Math.min(scrollHeight, maxHeight);
+    textarea.style.height = `${newHeight}px`;
+    setEditTextareaHeight(`${newHeight}px`);
+  };
+
+  const handleSaveEdit = () => {
+    console.log('handleSaveEdit called', { onResendMessage: !!onResendMessage, editContent: editContent.trim(), originalContent: message.content, isDifferent: editContent.trim() !== message.content });
+    if (onResendMessage) {
+      const newMessage: ChatMessage = {
+        ...message,
+        content: editContent.trim(),
+        timestamp: new Date(),
+        tokenUsage: Math.ceil(editContent.trim().length / 4), // Estimate tokens for edited message
+      };
+      onResendMessage(newMessage);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditContent(message.content);
+  };
 
   return (
     <div className={`message ${message.role}`}>
@@ -673,46 +1443,37 @@ function ChatMessageBubble({
         {message.role === 'user' ? '👤' : '🤖'}
       </div>
       <div className="message-bubble">
-        {isEditing && message.role === 'user' ? (
-          <div className="message-edit-container">
+        {isEditing ? (
+          <div className="edit-mode">
             <textarea
-              className="message-edit-textarea"
-              value={editingContent}
-              onChange={(e) => onEditingContentChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.ctrlKey) {
-                  e.preventDefault();
-                  onSaveEdit(message.id);
-                } else if (e.key === 'Escape') {
-                  onCancelEdit();
-                }
-              }}
+              value={editContent}
+              onChange={handleEditChange}
+              className="edit-textarea"
+              rows={1}
+              style={{ height: editTextareaHeight }}
               autoFocus
             />
-            <div className="message-edit-actions">
-              <button className="secondary" onClick={onCancelEdit}>
-                キャンセル
+            <div className="edit-buttons">
+              <button className="edit-save primary" onClick={handleSaveEdit}>
+                再送信
               </button>
-              <button className="primary" onClick={() => onSaveEdit(message.id)}>
-                再送信 (Ctrl+Enter)
+              <button className="edit-cancel secondary" onClick={handleCancelEdit}>
+                キャンセル
               </button>
             </div>
           </div>
         ) : (
-          <div 
-            onDoubleClick={() => message.role === 'user' && onEdit(message.id, message.content)}
-            style={{ cursor: message.role === 'user' ? 'pointer' : 'default' }}
-          >
-            {message.role === 'assistant' ? (
+          <div onDoubleClick={handleDoubleClick}>
+            {message.role === 'assistant' || message.role === 'system' ? (
               <ReactMarkdown components={markdownComponents}>
                 {message.content}
               </ReactMarkdown>
             ) : (
-              <p>{message.content}</p>
+              renderUserMessage(message.content, workspace.path)
             )}
           </div>
         )}
-        {message.stats && (
+        {message.stats && !isEditing && (
           <div className="message-stats-toggle">
             <button 
               className="stats-toggle-button"

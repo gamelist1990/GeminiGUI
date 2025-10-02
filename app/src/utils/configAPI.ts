@@ -48,7 +48,7 @@ export class Config {
       const existsConfig = await exists(this.configFile);
       if (!existsConfig) {
         // If config file doesn't exist, create default config
-        const defaultSettings: Settings = { language: 'en_US', theme: 'light', approvalMode: 'default', checkpointing: true };
+        const defaultSettings: Settings = { language: 'en_US', theme: 'light', approvalMode: 'default', model: 'default', maxMessagesBeforeCompact: 25 };
         await this.saveConfig(defaultSettings);
         return defaultSettings;
       }
@@ -60,7 +60,7 @@ export class Config {
       // Try to ensure base dir and create default config, if possible
       try {
         await this.ensureDir(this.baseDir);
-        const defaultSettings: Settings = { language: 'en_US', theme: 'light', approvalMode: 'default', checkpointing: true };
+        const defaultSettings: Settings = { language: 'en_US', theme: 'light', approvalMode: 'default', model: 'default', maxMessagesBeforeCompact: 25 };
         try {
           await writeTextFile(this.configFile, JSON.stringify(defaultSettings, null, 2));
         } catch (err) {
@@ -183,10 +183,15 @@ export class Config {
     try {
       // Delete individual session file first
       await this.deleteChatSession(workspaceId, sessionId);
+
       // Update sessions.json
       const sessions = await this.loadSessions(workspaceId);
       const filtered = sessions.filter(s => s.id !== sessionId);
       await this.saveSessions(workspaceId, filtered);
+
+      // Clean up empty directories
+      await this.cleanupEmptyDirectories(workspaceId);
+
       return true;
     } catch (error) {
       console.error('Failed to delete session:', error);
@@ -204,6 +209,48 @@ export class Config {
       }
     } catch (error) {
       console.error('Failed to delete chat session file:', error);
+    }
+  }
+
+  // Clean up empty directories after session deletion
+  private async cleanupEmptyDirectories(workspaceId: string): Promise<void> {
+    try {
+      const sessionsDir = `${this.chatlistDir}\\${workspaceId}\\sessions`;
+      const workspaceDir = `${this.chatlistDir}\\${workspaceId}`;
+
+      // Check if sessions directory is empty
+      const sessionsDirExists = await exists(sessionsDir);
+      if (sessionsDirExists) {
+        // Note: Tauri FS plugin doesn't have readdir, so we can't check if directory is empty
+        // We'll try to remove it and ignore errors if it's not empty
+        try {
+          await remove(sessionsDir);
+          console.log('Cleaned up empty sessions directory:', sessionsDir);
+        } catch (error) {
+          // Directory is not empty or removal failed, which is fine
+          console.log('Sessions directory not empty or removal failed, keeping it');
+        }
+      }
+
+      // Check if workspace directory is empty (only contains sessions.json if any)
+      const workspaceDirExists = await exists(workspaceDir);
+      if (workspaceDirExists) {
+        const sessionsJsonFile = `${workspaceDir}\\sessions.json`;
+        const sessionsJsonExists = await exists(sessionsJsonFile);
+
+        // If sessions.json doesn't exist or is empty, try to remove workspace directory
+        if (!sessionsJsonExists) {
+          try {
+            await remove(workspaceDir);
+            console.log('Cleaned up empty workspace directory:', workspaceDir);
+          } catch (error) {
+            // Directory is not empty or removal failed
+            console.log('Workspace directory not empty or removal failed, keeping it');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to cleanup directories:', error);
     }
   }
 }

@@ -30,11 +30,12 @@ function App() {
     currentSessionId,
     setCurrentSessionId,
     createNewSession,
-    addMessage,
-    getAggregatedStats,
+    addMessage: sendMessage,
+    resendMessage,
+    compactSession,
+    getTotalTokens,
     deleteSession,
     renameSession,
-    replayFromMessage,
     maxSessionsReached,
   } = useChatSessions(currentWorkspace?.id);
 
@@ -76,7 +77,16 @@ function App() {
   };
 
   const handleSendMessage = (sessionId: string, message: ChatMessage) => {
-    addMessage(sessionId, message);
+    sendMessage(sessionId, message);
+  };
+
+  const handleResendMessage = (sessionId: string, messageId: string, newMessage: ChatMessage) => {
+    resendMessage(sessionId, messageId, newMessage);
+  };
+
+  const handleCompactSession = async (sessionId: string) => {
+    // Compact the session by keeping only system messages
+    await compactSession(sessionId);
   };
 
   if (isLoading) {
@@ -113,15 +123,17 @@ function App() {
           currentSession={currentSession}
           currentSessionId={currentSessionId}
           maxSessionsReached={maxSessionsReached}
-          aggregatedStats={getAggregatedStats()}
           approvalMode={settings.approvalMode}
-          checkpointing={settings.checkpointing}
+          totalTokens={getTotalTokens()}
+          customApiKey={settings.customApiKey}
+          maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
           onCreateNewSession={createNewSession}
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}
+          onResendMessage={handleResendMessage}
           onDeleteSession={deleteSession}
           onRenameSession={renameSession}
-          onReplayFromMessage={replayFromMessage}
+          onCompactSession={handleCompactSession}
           onBack={handleBackToWorkspace}
         />
       )}

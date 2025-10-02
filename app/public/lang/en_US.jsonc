@@ -26,6 +26,34 @@
     "commands": {
       "compact": "Summarize conversation",
       "fixchat": "Improve message for AI"
+    },
+    "stats": {
+      "button": "📊 Stats",
+      "title": "Session Statistics",
+      "modelUsage": "Model Usage",
+      "requests": "Requests:",
+      "errors": "Errors:",
+      "latency": "Latency:",
+      "tokenUsage": "Token Usage",
+      "promptTokens": "Prompt:",
+      "responseTokens": "Response:",
+      "totalTokens": "Total:",
+      "cachedTokens": "Cached:",
+      "thoughtsTokens": "Thoughts:",
+      "toolTokens": "Tool:",
+      "toolUsage": "Tool Usage",
+      "totalCalls": "Total Calls:",
+      "success": "Success:",
+      "fail": "Fail:",
+      "totalDuration": "Total Duration:",
+      "toolDetails": "Tool Details",
+      "usageCount": "Usage Count:",
+      "executionTime": "Execution Time:",
+      "fileChanges": "File Changes",
+      "linesAdded": "Lines Added:",
+      "linesRemoved": "Lines Removed:",
+      "cancel": "Cancel",
+      "resend": "Resend (Ctrl+Enter)"
     }
   },
   "settings": {
@@ -36,7 +64,17 @@
     "dark": "Dark",
     "save": "Save",
     "cancel": "Cancel",
-    "back": "Back"
+    "back": "Back",
+    "approvalMode": "Approval Mode",
+    "defaultApproval": "Default (Prompt for approval)",
+    "autoEditApproval": "Auto Edit (Auto-approve edit tools)",
+    "yoloApproval": "YOLO (Auto-approve all tools)",
+    "approvalDescription": "Controls how Gemini handles tool approvals. Default requires manual approval, Auto Edit automatically approves edits, and YOLO approves all actions.",
+    "backupWarning": "⚠️ Backup Recommended",
+    "backupText": "This application does not have checkpointing functionality. It is strongly recommended to take appropriate backups using Git or other version control systems before making code changes with AI.",
+    "backupTip1": "✓ Commit to Git before starting changes",
+    "backupTip2": "✓ Create separate backups of important files",
+    "backupTip3": "✓ Create branches before major changes"
   },
   "common": {
     "confirm": "Confirm",

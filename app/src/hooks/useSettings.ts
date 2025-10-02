@@ -7,7 +7,9 @@ const defaultSettings: Settings = {
   language: 'en_US',
   theme: 'light',
   approvalMode: 'default',
-  checkpointing: true,
+  model: 'default',
+  customApiKey: undefined,
+  maxMessagesBeforeCompact: 25,
 };
 
 const config = new Config('C:\\Users\\issei\\Documents\\PEXData\\GeminiGUI');

@@ -64,9 +64,10 @@ export interface GeminiStats {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  tokenUsage?: number; // Token count for this message
   stats?: GeminiStats;
 }
 
@@ -74,7 +75,9 @@ export interface Settings {
   language: string;
   theme: 'light' | 'dark';
   approvalMode: 'default' | 'auto_edit' | 'yolo';
-  checkpointing: boolean;
+  model: 'default' | 'gemini-2.5-flash';
+  customApiKey?: string;
+  maxMessagesBeforeCompact: number;
 }
 
 export type Theme = 'light' | 'dark';

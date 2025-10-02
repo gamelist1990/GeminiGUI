@@ -26,6 +26,34 @@
     "commands": {
       "compact": "会話を要約",
       "fixchat": "メッセージをAI向けに改善"
+    },
+    "stats": {
+      "button": "📊 統計",
+      "title": "セッション統計情報",
+      "modelUsage": "使用モデル",
+      "requests": "リクエスト数:",
+      "errors": "エラー数:",
+      "latency": "レイテンシ:",
+      "tokenUsage": "トークン使用量",
+      "promptTokens": "プロンプト:",
+      "responseTokens": "応答:",
+      "totalTokens": "合計:",
+      "cachedTokens": "キャッシュ:",
+      "thoughtsTokens": "思考:",
+      "toolTokens": "ツール:",
+      "toolUsage": "ツール使用状況",
+      "totalCalls": "総呼び出し数:",
+      "success": "成功:",
+      "fail": "失敗:",
+      "totalDuration": "総実行時間:",
+      "toolDetails": "使用ツール詳細",
+      "usageCount": "使用回数:",
+      "executionTime": "実行時間:",
+      "fileChanges": "ファイル変更",
+      "linesAdded": "追加行数:",
+      "linesRemoved": "削除行数:",
+      "cancel": "キャンセル",
+      "resend": "再送信 (Ctrl+Enter)"
     }
   },
   "settings": {
@@ -36,7 +64,17 @@
     "dark": "ダーク",
     "save": "保存",
     "cancel": "キャンセル",
-    "back": "戻る"
+    "back": "戻る",
+    "approvalMode": "承認モード",
+    "defaultApproval": "デフォルト (承認を求める)",
+    "autoEditApproval": "自動編集 (編集ツールを自動承認)",
+    "yoloApproval": "YOLO (すべてのツールを自動承認)",
+    "approvalDescription": "Gemini がツール承認をどのように処理するかを制御します。デフォルトでは手動承認が必要です。自動編集では編集ツールを自動承認し、YOLO ではすべてのアクションを自動承認します。",
+    "backupWarning": "⚠️ バックアップの推奨",
+    "backupText": "このアプリケーションにはチェックポイント機能がありません。AIによるコード変更を行う前に、必ずGitやその他のバージョン管理システムで適切なバックアップを取ることを強くお勧めします。",
+    "backupTip1": "✓ Gitでコミットしてから変更を開始する",
+    "backupTip2": "✓ 重要なファイルは別途バックアップを作成する",
+    "backupTip3": "✓ 大きな変更の前にブランチを作成する"
   },
   "common": {
     "confirm": "確認",

@@ -21,8 +21,11 @@ export function useChatSessions(workspaceId?: string) {
   useEffect(() => {
     if (workspaceId) {
       (async () => {
+        console.log('useChatSessions: loading sessions for workspaceId:', workspaceId);
         const loaded = await config.loadSessions(workspaceId);
+        console.log('useChatSessions: loaded sessions:', loaded.length, 'currentSessionId:', currentSessionId);
         const finalSessions = loaded.length > 0 ? loaded : [];
+        console.log('useChatSessions: finalSessions:', finalSessions.map((s: ChatSession) => ({ id: s.id, messagesCount: s.messages.length })));
         setSessions(finalSessions);
         if (!currentSessionId && finalSessions.length > 0) {
           setCurrentSessionId(finalSessions[0].id);
@@ -30,6 +33,7 @@ export function useChatSessions(workspaceId?: string) {
       })();
     } else {
       // No workspace selected, use empty sessions
+      console.log('useChatSessions: no workspaceId, setting empty sessions');
       setSessions([]);
       setCurrentSessionId('');
     }
@@ -53,39 +57,112 @@ export function useChatSessions(workspaceId?: string) {
     const updated = [...sessions, newSession];
     setSessions(updated);
     setCurrentSessionId(newSession.id);
-    if (workspaceId) {
-      await config.saveChatSession(workspaceId, newSession);
-      await config.saveSessions(workspaceId, updated);
-    }
+    await config.saveSessions(workspaceId, updated);
     return true;
   };
 
   const addMessage = useCallback(async (sessionId: string, message: ChatMessage) => {
-    setSessions(currentSessions => {
-      const updated = currentSessions.map(s => {
-        if (s.id === sessionId) {
-          const newMessages = [...s.messages, message];
-          const newSession = {
-            ...s,
-            messages: newMessages,
-            tokenUsage: s.tokenUsage + (message.stats ? Object.values(message.stats.models)[0]?.tokens.total || 0 : 0),
-          };
-          // Save individual session with messages
-          if (workspaceId) {
-            config.saveChatSession(workspaceId, newSession);
+    console.log('addMessage called:', { sessionId, message: { id: message.id, role: message.role, content: message.content.substring(0, 50) + '...' }, currentSessions: sessions.length });
+    
+    // Use a functional update to get the latest sessions state
+    const updatedSessions = await new Promise<ChatSession[]>((resolve) => {
+      setSessions(currentSessions => {
+        const updated = currentSessions.map(s => {
+          if (s.id === sessionId) {
+            const newMessages = [...s.messages, message];
+            console.log('addMessage: adding message to session', sessionId, 'old messages count:', s.messages.length, 'new messages count:', newMessages.length);
+            
+            // Calculate token usage: use API response if available, otherwise estimate from content
+            const messageTokens = message.tokenUsage || Math.ceil(message.content.length / 4);
+            
+            const newSession = {
+              ...s,
+              messages: newMessages,
+              tokenUsage: s.tokenUsage + messageTokens,
+            };
+            
+            return newSession;
           }
-          return newSession;
-        }
-        return s;
+          return s;
+        });
+        console.log('addMessage updated sessions:', updated.map(s => ({ id: s.id, messagesCount: s.messages.length, lastMessage: s.messages[s.messages.length - 1]?.content?.substring(0, 30) + '...' })));
+        
+        resolve(updated);
+        return updated;
       });
-      
-      // Save sessions metadata
-      if (workspaceId) {
-        config.saveSessions(workspaceId, updated);
-      }
-      
-      return updated;
     });
+    
+    // Save both the individual session file and sessions.json after state update
+    if (workspaceId) {
+      const sessionToSave = updatedSessions.find(s => s.id === sessionId);
+      if (sessionToSave) {
+        try {
+          await config.saveChatSession(workspaceId, sessionToSave);
+          await config.saveSessions(workspaceId, updatedSessions);
+        } catch (err) {
+          console.error('Failed to save session:', err);
+        }
+      }
+    }
+  }, [workspaceId]);
+
+  const resendMessage = useCallback(async (sessionId: string, messageId: string, newMessage: ChatMessage) => {
+    console.log('resendMessage called:', { sessionId, messageId, newMessage: { id: newMessage.id, role: newMessage.role, content: newMessage.content.substring(0, 50) + '...' } });
+    
+    // Use a functional update to get the latest sessions state
+    const updatedSessions = await new Promise<ChatSession[]>((resolve) => {
+      setSessions(currentSessions => {
+        const updated = currentSessions.map(s => {
+          if (s.id === sessionId) {
+            // Find the index of the message to resend
+            const messageIndex = s.messages.findIndex(m => m.id === messageId);
+            if (messageIndex === -1) return s;
+
+            // When resending an earlier message, truncate any messages after that point
+            // and replace the target message with the new one. This prevents duplicate
+            // message entries and ensures the conversation continues from the edited message.
+            const keptMessages = s.messages.slice(0, messageIndex);
+
+            // Recalculate token usage for kept messages
+            const keptTokens = keptMessages.reduce((sum, msg) => {
+              return sum + (msg.tokenUsage || Math.ceil(msg.content.length / 4));
+            }, 0);
+
+            const newMessages = [...keptMessages, newMessage];
+
+            console.log('resendMessage: resending from message', messageId, 'old messages count:', s.messages.length, 'new messages count:', newMessages.length);
+
+            // Calculate token usage for the new message
+            const messageTokens = newMessage.tokenUsage || Math.ceil(newMessage.content.length / 4);
+
+            const newSession = {
+              ...s,
+              messages: newMessages,
+              tokenUsage: keptTokens + messageTokens,
+            };
+            
+            return newSession;
+          }
+          return s;
+        });
+        
+        resolve(updated);
+        return updated;
+      });
+    });
+    
+    // Save both the individual session file and sessions.json after state update
+    if (workspaceId) {
+      const sessionToSave = updatedSessions.find(s => s.id === sessionId);
+      if (sessionToSave) {
+        try {
+          await config.saveChatSession(workspaceId, sessionToSave);
+          await config.saveSessions(workspaceId, updatedSessions);
+        } catch (err) {
+          console.error('Failed to save session:', err);
+        }
+      }
+    }
   }, [workspaceId]);
 
   const deleteSession = async (sessionId: string) => {
@@ -96,18 +173,14 @@ export function useChatSessions(workspaceId?: string) {
     }
     if (workspaceId) {
       await config.deleteSession(workspaceId, sessionId);
+      // Note: saveSessions is already called inside config.deleteSession, no need to call again
     }
   };
 
   const renameSession = async (sessionId: string, newName: string) => {
     const updated = sessions.map(s => {
       if (s.id === sessionId) {
-        const renamedSession = { ...s, name: newName };
-        // Save individual session with updated name
-        if (workspaceId) {
-          config.saveChatSession(workspaceId, renamedSession);
-        }
-        return renamedSession;
+        return { ...s, name: newName };
       }
       return s;
     });
@@ -117,123 +190,57 @@ export function useChatSessions(workspaceId?: string) {
     }
   };
 
-  const replayFromMessage = async (sessionId: string, messageId: string, editedContent: string): Promise<void> => {
-    // Find the session
-    const session = sessions.find(s => s.id === sessionId);
-    if (!session) return;
-
-    // Find the message index
-    const messageIndex = session.messages.findIndex(m => m.id === messageId);
-    if (messageIndex === -1) return;
-
-    // Calculate tokens to subtract from deleted messages
-    const deletedMessages = session.messages.slice(messageIndex + 1);
-    const tokensToSubtract = deletedMessages.reduce((sum, msg) => {
-      if (msg.stats && msg.role === 'assistant') {
-        return sum + (Object.values(msg.stats.models)[0]?.tokens.total || 0);
-      }
-      return sum;
-    }, 0);
-
-    // Remove all messages after this one (including the AI response)
-    const newMessages = session.messages.slice(0, messageIndex);
+  const compactSession = useCallback(async (sessionId: string) => {
+    console.log('compactSession called:', { sessionId });
     
-    // Update the message with edited content
-    const editedMessage: ChatMessage = {
-      ...session.messages[messageIndex],
-      content: editedContent,
-    };
+    // Keep only system messages (which include the summary)
+    const updatedSessions = await new Promise<ChatSession[]>((resolve) => {
+      setSessions(currentSessions => {
+        const updated = currentSessions.map(s => {
+          if (s.id === sessionId) {
+            // Filter to keep only system messages
+            const systemMessages = s.messages.filter(msg => msg.role === 'system');
+            
+            console.log('compactSession: keeping system messages', systemMessages.length, 'out of', s.messages.length);
+            
+            // Recalculate token usage for system messages only
+            const systemTokens = systemMessages.reduce((sum, msg) => {
+              return sum + (msg.tokenUsage || Math.ceil(msg.content.length / 4));
+            }, 0);
+            
+            const newSession = {
+              ...s,
+              messages: systemMessages,
+              tokenUsage: systemTokens,
+            };
+            
+            return newSession;
+          }
+          return s;
+        });
+        
+        resolve(updated);
+        return updated;
+      });
+    });
     
-    newMessages.push(editedMessage);
-
-    // Update session with truncated messages and adjusted tokenUsage
-    const updatedSession = {
-      ...session,
-      messages: newMessages,
-      tokenUsage: session.tokenUsage - tokensToSubtract,
-    };
-
-    const updatedSessions = sessions.map(s => s.id === sessionId ? updatedSession : s);
-    setSessions(updatedSessions);
-
-    // Save to disk
+    // Save the compacted session
     if (workspaceId) {
-      await config.saveChatSession(workspaceId, updatedSession);
-      await config.saveSessions(workspaceId, updatedSessions);
+      const sessionToSave = updatedSessions.find(s => s.id === sessionId);
+      if (sessionToSave) {
+        try {
+          await config.saveChatSession(workspaceId, sessionToSave);
+          await config.saveSessions(workspaceId, updatedSessions);
+          console.log('compactSession: saved compacted session');
+        } catch (err) {
+          console.error('Failed to save compacted session:', err);
+        }
+      }
     }
-  };
+  }, [workspaceId]);
 
   const getTotalTokens = () => {
     return sessions.reduce((sum, s) => sum + s.tokenUsage, 0);
-  };
-
-  const getAggregatedStats = () => {
-    if (!currentSession) return null;
-
-    const stats = {
-      models: {} as any,
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        byName: {} as any,
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
-    };
-
-    currentSession.messages.forEach(msg => {
-      if (msg.stats) {
-        // Aggregate model stats
-        Object.entries(msg.stats.models).forEach(([modelName, modelData]) => {
-          if (!stats.models[modelName]) {
-            stats.models[modelName] = {
-              api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
-              tokens: { prompt: 0, candidates: 0, total: 0, cached: 0, thoughts: 0, tool: 0 },
-            };
-          }
-          stats.models[modelName].api.totalRequests += modelData.api.totalRequests;
-          stats.models[modelName].api.totalErrors += modelData.api.totalErrors;
-          stats.models[modelName].api.totalLatencyMs += modelData.api.totalLatencyMs;
-          stats.models[modelName].tokens.prompt += modelData.tokens.prompt;
-          stats.models[modelName].tokens.candidates += modelData.tokens.candidates;
-          stats.models[modelName].tokens.total += modelData.tokens.total;
-          stats.models[modelName].tokens.cached += modelData.tokens.cached;
-          stats.models[modelName].tokens.thoughts += modelData.tokens.thoughts;
-          stats.models[modelName].tokens.tool += modelData.tokens.tool;
-        });
-
-        // Aggregate tool stats
-        stats.tools.totalCalls += msg.stats.tools.totalCalls;
-        stats.tools.totalSuccess += msg.stats.tools.totalSuccess;
-        stats.tools.totalFail += msg.stats.tools.totalFail;
-        stats.tools.totalDurationMs += msg.stats.tools.totalDurationMs;
-
-        Object.entries(msg.stats.tools.byName).forEach(([toolName, toolData]) => {
-          if (!stats.tools.byName[toolName]) {
-            stats.tools.byName[toolName] = {
-              count: 0,
-              success: 0,
-              fail: 0,
-              durationMs: 0,
-            };
-          }
-          stats.tools.byName[toolName].count += toolData.count;
-          stats.tools.byName[toolName].success += toolData.success;
-          stats.tools.byName[toolName].fail += toolData.fail;
-          stats.tools.byName[toolName].durationMs += toolData.durationMs;
-        });
-
-        // Aggregate file stats
-        stats.files.totalLinesAdded += msg.stats.files.totalLinesAdded;
-        stats.files.totalLinesRemoved += msg.stats.files.totalLinesRemoved;
-      }
-    });
-
-    return stats;
   };
 
   return {
@@ -243,11 +250,11 @@ export function useChatSessions(workspaceId?: string) {
     setCurrentSessionId,
     createNewSession,
     addMessage,
+    resendMessage,
+    compactSession,
     getTotalTokens,
-    getAggregatedStats,
     deleteSession,
     renameSession,
-    replayFromMessage,
     maxSessionsReached: sessions.length >= MAX_SESSIONS,
   };
 }

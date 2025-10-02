@@ -71,22 +71,18 @@ export async function scanWorkspace(
 export function getSuggestions(items: FileItem[]): string[] {
   const suggestions: string[] = ['#codebase']; // Always include 'codebase'
 
-  // Add files with #file: prefix
+  // Add files with #file: prefix - include full path
   items.forEach((item) => {
     if (!item.isDirectory) {
       suggestions.push(`#file:${item.path}`);
     }
   });
 
-  // Add directories with #folder: prefix (unique names only)
-  const dirNames = new Set<string>();
+  // Add directories with #folder: prefix - include full path
   items.forEach((item) => {
     if (item.isDirectory) {
-      dirNames.add(item.name);
+      suggestions.push(`#folder:${item.path}`);
     }
-  });
-  dirNames.forEach((dirName) => {
-    suggestions.push(`#folder:${dirName}`);
   });
 
   return suggestions;
@@ -126,18 +122,23 @@ export function parseIncludes(
         includes.push('codebase');
       } else if (item.startsWith('file:')) {
         // #file:path/to/file.txt -> file:path/to/file.txt
-        includes.push(item);
+        // Extract the path after 'file:'
+        const filePath = item.substring(5); // Remove 'file:'
+        includes.push(`file:${filePath}`);
       } else if (item.startsWith('folder:')) {
-        // #folder:dirname -> dirname (goes to --include-directories)
-        const folderName = item.substring(7); // Remove 'folder:'
-        directories.push(folderName);
+        // #folder:path/to/dirname -> path/to/dirname (goes to --include-directories)
+        const folderPath = item.substring(7); // Remove 'folder:'
+        directories.push(folderPath);
       } else {
         // Legacy support: Check if it's a directory in workspace
         const workspaceItem = itemMap.get(item);
         if (workspaceItem && workspaceItem.isDirectory) {
-          directories.push(item);
+          directories.push(workspaceItem.path);
+        } else if (workspaceItem && !workspaceItem.isDirectory) {
+          // If it's a file, add as file:path
+          includes.push(`file:${workspaceItem.path}`);
         } else {
-          // If not found in workspace or not a directory, treat as include
+          // If not found in workspace, treat as generic include
           includes.push(item);
         }
       }
