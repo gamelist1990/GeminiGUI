@@ -8,6 +8,7 @@ export interface CheckResult {
   geminiExists: boolean;
   nodeExists: boolean;
   isAuthenticated: boolean;
+  hasProject?: boolean; // Google Cloud Projectが存在するか
 }
 
 export interface VerifyAuthResult {
@@ -66,6 +67,23 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
         if (testResult === 'True') {
           result.isAuthenticated = true;
           log(t('setup.logs.authConfirmed'));
+          
+          // 認証済みの場合、Google Cloud Projectの存在もチェック
+          log('Google Cloud Projectの存在を確認しています...');
+          try {
+            const { hasCloudProject } = await import('./cloudSetup');
+            const hasProject = await hasCloudProject(log);
+            result.hasProject = hasProject;
+            
+            if (hasProject) {
+              log('✓ Google Cloud Projectが見つかりました');
+            } else {
+              log('⚠️ Google Cloud Projectが見つかりません');
+            }
+          } catch (error) {
+            log(`⚠️ プロジェクトチェックエラー: ${error}`);
+            result.hasProject = false;
+          }
         } else {
           log(t('setup.logs.authRequired'));
         }

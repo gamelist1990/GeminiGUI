@@ -42,12 +42,19 @@ export default function WorkspaceSelection({
         
         console.log('[Setup Check] Result:', result);
         
-        // Show setup modal if Gemini CLI is not installed OR not authenticated
+        // Show setup modal if Gemini CLI is not installed OR not authenticated OR no cloud project
         if (!result.geminiExists || !result.isAuthenticated) {
-          console.log('[Setup Check] セットアップが必要です');
+          console.log('[Setup Check] セットアップが必要です (CLI未インストールまたは未認証)');
           setShowSetupModal(true);
+        } else if (result.hasProject === false) {
+          console.log('[Setup Check] セットアップが必要です (Cloud Projectなし)');
+          setShowSetupModal(true);
+        } else if (result.hasProject === true) {
+          console.log('[Setup Check] セットアップは不要です (すべて完了)');
         } else {
-          console.log('[Setup Check] セットアップは不要です');
+          // hasProjectがundefinedの場合（チェック失敗）は念のためセットアップ表示
+          console.log('[Setup Check] プロジェクトチェック結果不明、セットアップを表示');
+          setShowSetupModal(true);
         }
       } catch (error) {
         console.error('Failed to check Gemini setup:', error);
