@@ -114,6 +114,7 @@ export default function Chat({
 
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
   const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] = useState(false);
+  const [geminiPathError, setGeminiPathError] = useState<string>('');
 
   // Load geminiPath from config on workspace change
   useEffect(() => {
@@ -122,10 +123,18 @@ export default function Chat({
         const { Config } = await import('../utils/configAPI');
         const workspaceConfig = new Config(`${workspace.id}\\.geminiconfig`);
         const config = await workspaceConfig.loadConfig();
-        setGeminiPath(config?.geminiPath);
+        const loadedGeminiPath = config?.geminiPath;
+        setGeminiPath(loadedGeminiPath);
+
+        if (!loadedGeminiPath) {
+          setGeminiPathError('geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。');
+        } else {
+          setGeminiPathError('');
+        }
       } catch (error) {
         console.error('Failed to load geminiPath from config:', error);
         setGeminiPath(undefined);
+        setGeminiPathError('設定ファイルの読み込みに失敗しました。');
       }
     };
 
@@ -948,6 +957,20 @@ export default function Chat({
         </div>
 
         <div className="chat-main">
+          {geminiPathError && (
+            <div className="error-banner">
+              <div className="error-message">
+                <span className="error-icon">⚠️</span>
+                <span>{geminiPathError}</span>
+                <button
+                  className="error-dismiss"
+                  onClick={() => setGeminiPathError('')}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
           <div className="messages-container">
             {(() => {
               return currentSession?.messages.length === 0 ? (

@@ -197,14 +197,13 @@ export async function callGemini(
     internalLog(`Workspace path: ${workspacePath}`, log);
     //internalLog(`Options: ${JSON.stringify(options)}`, log);
     internalLog(`Google Cloud Project ID: ${googleCloudProjectId}`, log);
-    
 
-    // gemini is a PowerShell script located at the npm global installation path
+
+    // gemini is a PowerShell script located at the configured path
     let geminiPathFinal = geminiPath;
     if (!geminiPathFinal) {
-      // Fallback to hardcoded path if not provided
-      geminiPathFinal = `C:\\nvm4w\\nodejs\\gemini.ps1`;
-      internalLog(`No geminiPath provided, using fallback path: ${geminiPathFinal}`, log);
+      // Require geminiPath to be configured - no unsafe fallback to hardcoded paths
+      throw new Error('geminiPath is required but not configured. Please run setup to configure the gemini.ps1 path.');
     }
 
   internalLog(`Using gemini path: ${geminiPathFinal}`, log);
