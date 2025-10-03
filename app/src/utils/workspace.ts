@@ -1,4 +1,5 @@
 import { readDir } from '@tauri-apps/plugin-fs';
+import { listDirectory } from './localFileSystem';
 
 export interface FileItem {
   name: string;
@@ -32,30 +33,42 @@ export async function scanWorkspace(
   async function scan(path: string, currentDepth: number) {
     if (currentDepth > maxDepth) return;
 
+    let entries: Array<{ name: string; isDirectory: boolean }> = [];
+
     try {
-      const entries = await readDir(path);
-
-      for (const entry of entries) {
-        const fullPath = `${path}/${entry.name}`;
-        
-        // Skip ignored directories
-        if (entry.isDirectory && ignoreDirs.includes(entry.name)) {
-          continue;
-        }
-
-        items.push({
-          name: entry.name,
-          path: fullPath.replace(workspacePath, '').replace(/^\//, ''),
-          isDirectory: entry.isDirectory,
-        });
-
-        // Recursively scan subdirectories
-        if (entry.isDirectory) {
-          await scan(fullPath, currentDepth + 1);
-        }
-      }
+      entries = await readDir(path);
     } catch (error) {
-      console.error(`Failed to scan directory: ${path}`, error);
+      console.error(`Failed to scan directory via Tauri fs: ${path}`, error);
+      try {
+        const fallbackEntries = await listDirectory(path);
+        entries = fallbackEntries.map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory,
+        }));
+      } catch (fallbackError) {
+        console.error(`Fallback PowerShell scan failed: ${path}`, fallbackError);
+        return;
+      }
+    }
+
+    for (const entry of entries) {
+      const fullPath = `${path}/${entry.name}`;
+
+      // Skip ignored directories
+      if (entry.isDirectory && ignoreDirs.includes(entry.name)) {
+        continue;
+      }
+
+      items.push({
+        name: entry.name,
+        path: fullPath.replace(workspacePath, '').replace(/^\//, ''),
+        isDirectory: entry.isDirectory,
+      });
+
+      // Recursively scan subdirectories
+      if (entry.isDirectory) {
+        await scan(fullPath, currentDepth + 1);
+      }
     }
   }
 

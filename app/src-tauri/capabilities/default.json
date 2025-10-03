@@ -20,7 +20,11 @@
       "allow": [
         { "path": "$HOME/.gemini" },
         { "path": "$HOME/.gemini/*" },
-        { "path": "$HOME/.gemini/**" }
+        { "path": "$HOME/.gemini/**" },
+        { "path": "$DOWNLOAD/*" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/*" },
+        { "path": "$DESKTOP/**" }
       ]
     },
     "notification:default",

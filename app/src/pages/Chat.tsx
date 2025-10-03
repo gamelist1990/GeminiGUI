@@ -511,6 +511,11 @@ export default function Chat({
         .filter(msg => msg.role !== 'system')
         .slice(-10); // Keep last 10 messages for context (5 exchanges)
       
+      const conversationHistoryJson = recentMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
       const conversationHistory = recentMessages
         .map(msg => {
           const role = msg.role === 'user' ? 'User' : 'Assistant';
@@ -523,6 +528,7 @@ export default function Chat({
         includes: includes.length > 0 ? includes : undefined,
         includeDirectories: directories.length > 0 ? directories : undefined,
         conversationHistory: conversationHistory && recentMessages.length > 0 ? conversationHistory : undefined,
+        conversationHistoryJson: conversationHistoryJson.length > 0 ? conversationHistoryJson : undefined,
         workspaceId: workspace.id,
         sessionId: currentSessionId,
       };
@@ -771,6 +777,11 @@ export default function Chat({
                             .filter(msg => msg.role !== 'system')
                             .slice(-10); // Keep last 10 messages for context
                           
+                          const conversationHistoryJson = previousMessages.map(msg => ({
+                            role: msg.role,
+                            content: msg.content,
+                          }));
+
                           const conversationHistory = previousMessages
                             .map(msg => {
                               const role = msg.role === 'user' ? 'User' : 'Assistant';
@@ -783,6 +794,7 @@ export default function Chat({
                             includes: includes.length > 0 ? includes : undefined,
                             includeDirectories: directories.length > 0 ? directories : undefined,
                             conversationHistory: conversationHistory && previousMessages.length > 0 ? conversationHistory : undefined,
+                            conversationHistoryJson: conversationHistoryJson.length > 0 ? conversationHistoryJson : undefined,
                             workspaceId: workspace.id,
                             sessionId: currentSessionId,
                           };
@@ -819,11 +831,22 @@ export default function Chat({
                             
                             console.log('Handling FatalToolExecutionError from response:', { errType, errCode, errMessage });
                             
+                            const isInvalidParamsError = errCode === 'invalid_tool_params' ||
+                              errMessage.includes('must be within one of the workspace directories');
                             const isToolNameError = errCode === 'tool_not_registered' || 
                                                    errMessage.includes('not found in registry') || 
                                                    errMessage.includes('Tool') && errMessage.includes('not found');
                             
-                            if (isToolNameError) {
+                            if (isInvalidParamsError) {
+                              const adviseMessage: ChatMessage = {
+                                id: (Date.now() + 1).toString(),
+                                role: 'assistant',
+                                content: `⚠️ **ファイルアクセスエラー**: ${errMessage}\n\n🔧 **解決方法**:\n• 操作できるファイル/フォルダは現在のワークスペース配下のみです（現在のワークスペース: \`${workspace.path}\`）。\n• 対象ファイルをワークスペースフォルダの中へ移動するか、\`#file:...\` や \`#folder:...\` プレフィックスを使って明示的に指定してください。\n• 一時ファイルを扱う場合は \`Documents/PEXData/GeminiGUI/Chatrequest/${workspace.id}\` 配下を利用してください。`,
+                                timestamp: new Date(),
+                              };
+                              console.log('Sending invalid tool params guidance from response');
+                              onSendMessage(currentSessionId, adviseMessage);
+                            } else if (isToolNameError) {
                               // Tool name error - provide guidance about available tools
                               const adviseMessage: ChatMessage = {
                                 id: (Date.now() + 1).toString(),
