@@ -261,7 +261,7 @@ export const setupGemini = {
           
           const geminiTestCommand = await Command.create('powershell.exe', [
             '-Command',
-            'gemini "test" 2>&1',
+            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; gemini "test" 2>&1',
           ]).execute();
 
           const output = geminiTestCommand.stdout + geminiTestCommand.stderr;
