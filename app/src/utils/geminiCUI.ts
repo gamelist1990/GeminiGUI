@@ -187,6 +187,7 @@ export async function callGemini(
   workspacePath?: string,
   options?: GeminiOptions,
   googleCloudProjectId?: string,
+  geminiPath?: string,
   log?: LogFunction
 ): Promise<GeminiResponse> {
   let conversationFilePath: string | null = null;
@@ -198,10 +199,15 @@ export async function callGemini(
     internalLog(`Google Cloud Project ID: ${googleCloudProjectId}`, log);
     
 
-    // gemini is a PowerShell script located at "C:\nvm4w\nodejs\gemini.ps1"
-    const geminiPath = `C:\\nvm4w\\nodejs\\gemini.ps1`;
+    // gemini is a PowerShell script located at the npm global installation path
+    let geminiPathFinal = geminiPath;
+    if (!geminiPathFinal) {
+      // Fallback to hardcoded path if not provided
+      geminiPathFinal = `C:\\nvm4w\\nodejs\\gemini.ps1`;
+      internalLog(`No geminiPath provided, using fallback path: ${geminiPathFinal}`, log);
+    }
 
-  internalLog(`Using gemini path: ${geminiPath}`, log);
+  internalLog(`Using gemini path: ${geminiPathFinal}`, log);
     
     // Build gemini command arguments as array
     const geminiArgs: string[] = [];
@@ -297,7 +303,7 @@ export async function callGemini(
     
     psCommand += `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ` +
       `Set-Location '${workspacePath || process.cwd()}'; ` +
-      `& '${geminiPath}' ${geminiArgs.map(arg => {
+      `& '${geminiPathFinal}' ${geminiArgs.map(arg => {
         // Escape quotes in arguments
         const escaped = arg.replace(/'/g, "''");
         return `'${escaped}'`;

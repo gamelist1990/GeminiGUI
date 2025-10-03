@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./Setup.css";
-import { geminiCheck, setupGemini } from "../utils/setupAPI";
+import { geminiCheck, setupGemini, detectGlobalNpmPath } from "../utils/setupAPI";
 import { autoSetupCloudProject } from "../utils/cloudSetup";
 import { Config } from "../utils/configAPI";
 import { t } from "../utils/i18n";
@@ -66,6 +66,25 @@ const SetupModal: React.FC<SetupModalProps> = ({
     addLog(t("setup.logs.checkingStart"));
 
     try {
+      // 初期セットアップ時にgemini.ps1のパスを検知してconfigに保存
+      if (configAPI) {
+        const detectedPaths = await detectGlobalNpmPath(addLog);
+        if (detectedPaths.npmPath && detectedPaths.hasGeminiCLI) {
+          const geminiPath = `${detectedPaths.npmPath}\\gemini.ps1`;
+          addLog(`📍 gemini.ps1 パスを設定: ${geminiPath}`);
+
+          // config.jsonに保存
+          const currentSettings = await configAPI.loadConfig();
+          if (currentSettings) {
+            currentSettings.geminiPath = geminiPath;
+            await configAPI.saveConfig(currentSettings);
+            addLog('✓ gemini.ps1 パスを config.json に保存しました');
+          }
+        } else {
+          addLog('⚠️ gemini.ps1 パスの自動検知に失敗しました。デフォルトパスを使用します');
+        }
+      }
+
       const result = await geminiCheck(addLog);
 
       if (result.geminiExists && result.isAuthenticated && result.hasProject === true) {

@@ -111,6 +111,27 @@ export default function Chat({
   const requestStartRef = useRef<number | null>(null);
   const requestIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [geminiPath, setGeminiPath] = useState<string | undefined>();
+
+  // Load geminiPath from config on workspace change
+  useEffect(() => {
+    const loadGeminiPath = async () => {
+      try {
+        const { Config } = await import('../utils/configAPI');
+        const workspaceConfig = new Config(`${workspace.id}\\.geminiconfig`);
+        const config = await workspaceConfig.loadConfig();
+        setGeminiPath(config?.geminiPath);
+      } catch (error) {
+        console.error('Failed to load geminiPath from config:', error);
+        setGeminiPath(undefined);
+      }
+    };
+
+    if (workspace?.id) {
+      loadGeminiPath();
+    }
+  }, [workspace?.id]);
+
   // Scan workspace for files and folders
   useEffect(() => {
     if (workspace?.path) {
@@ -286,7 +307,7 @@ export default function Chat({
           approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
           model: 'gemini-2.5-flash', // Use fast model for summary
           customApiKey: customApiKey,
-        }, googleCloudProjectId);
+        }, googleCloudProjectId, geminiPath);
         
         console.log('Summary response received:', summaryResponse.response.substring(0, 100) + '...');
         
@@ -383,7 +404,7 @@ export default function Chat({
           approvalMode: approvalMode,
           model: 'gemini-2.5-flash', // Use fast model
           customApiKey: customApiKey,
-        }, googleCloudProjectId);
+        }, googleCloudProjectId, geminiPath);
         
         clearInterval(interval);
         setShowProcessingModal(false);
@@ -534,7 +555,7 @@ export default function Chat({
       };
 
       console.log('Sending message with conversation history:', conversationHistory ? 'Yes' : 'No');
-      const geminiResponse = await callGemini(inputValue, workspace.path, options, googleCloudProjectId);
+      const geminiResponse = await callGemini(inputValue, workspace.path, options, googleCloudProjectId, geminiPath);
       
       // Calculate total tokens from stats
       let totalTokens = 0;
@@ -800,7 +821,7 @@ export default function Chat({
                           };
                           
                           console.log('Resending message with conversation history:', conversationHistory ? 'Yes' : 'No');
-                          const geminiResponse = await callGemini(newMessage.content, workspace.path, options, googleCloudProjectId);
+                          const geminiResponse = await callGemini(newMessage.content, workspace.path, options, googleCloudProjectId, geminiPath);
                           
                           // Check if the response contains a FatalToolExecutionError
                           let responseContent = geminiResponse.response;
