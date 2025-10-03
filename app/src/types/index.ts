@@ -80,6 +80,7 @@ export interface Settings {
   maxMessagesBeforeCompact: number;
   geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
   googleCloudProjectId?: string; // Google Cloud Project ID
+  geminiPath?: string; // Path to gemini.ps1 script detected from npm -g
 }
 
 export type Theme = 'light' | 'dark';

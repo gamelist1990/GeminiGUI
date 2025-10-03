@@ -364,7 +364,7 @@ export const setupGemini = {
   async setCloudProjectEnv(projectId: string, log: LogFunction): Promise<void> {
     try {
       log(`環境変数 GOOGLE_CLOUD_PROJECT を "${projectId}" に設定しています...`);
-      
+
       // PowerShellでシステム環境変数を設定（管理者権限が必要な場合があります）
       const setEnvCommand = await Command.create('powershell.exe', [
         '-Command',
@@ -385,3 +385,63 @@ export const setupGemini = {
     }
   },
 };
+
+/**
+ * npm -g list を実行してグローバルインストールパスとGemini CLIの存在を確認
+ */
+export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?: string; hasGeminiCLI: boolean }> {
+  try {
+    if (log) {
+      log('npm -g list を実行してグローバルインストールパスを検知しています...');
+    }
+
+    // npm -g list を実行してグローバルnpmパスを取得
+    const npmListCommand = await Command.create('powershell.exe', [
+      '-Command',
+      'npm config get prefix',
+    ]).execute();
+
+    if (npmListCommand.code !== 0) {
+      const errorMsg = npmListCommand.stderr || 'npm config get prefixの実行に失敗しました';
+      if (log) {
+        log(`✗ npmグローバルパス検知エラー: ${errorMsg}`);
+      }
+      return { hasGeminiCLI: false };
+    }
+
+    const npmPrefix = npmListCommand.stdout.trim();
+    if (log && npmPrefix) {
+      log(`✓ npmグローバルインストールパスを検知: ${npmPrefix}`);
+    }
+
+    // npm -g listを実行して@google/gemini-cliの存在を確認
+    const geminiCheckCommand = await Command.create('powershell.exe', [
+      '-Command',
+      'npm list -g @google/gemini-cli',
+    ]).execute();
+
+    const hasGeminiCLI = geminiCheckCommand.code === 0 && !geminiCheckCommand.stderr.includes('empty');
+
+    if (log) {
+      if (hasGeminiCLI) {
+        log('✓ @google/gemini-cli がインストールされていることを確認しました');
+      } else {
+        log('✗ @google/gemini-cli がインストールされていません');
+      }
+    }
+
+    const npmPath = npmPrefix ? npmPrefix : undefined;
+
+    if (log && npmPath && hasGeminiCLI) {
+      const expectedGeminiPath = `${npmPath}\\gemini.ps1`;
+      log(`📍 gemini.ps1 の期待パス: ${expectedGeminiPath}`);
+    }
+
+    return { npmPath, hasGeminiCLI };
+  } catch (error) {
+    if (log) {
+      log(`npmパスの検知中にエラーが発生しました: ${error}`);
+    }
+    return { hasGeminiCLI: false };
+  }
+}
