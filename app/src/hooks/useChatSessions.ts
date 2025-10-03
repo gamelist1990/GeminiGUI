@@ -214,17 +214,36 @@ export function useChatSessions(workspaceId?: string) {
           if (s.id === sessionId) {
             // Filter to keep only system messages
             const systemMessages = s.messages.filter(msg => msg.role === 'system');
+
+            const summaryPrefix = '📝 **会話履歴の要約**';
+            const lastHiddenSummaryIndex = systemMessages.reduce((acc, msg, idx) => (
+              msg.hidden ? idx : acc
+            ), -1);
+            const lastVisibleSummaryIndex = systemMessages.reduce((acc, msg, idx) => (
+              !msg.hidden && msg.content.trim().startsWith(summaryPrefix) ? idx : acc
+            ), -1);
+
+            const dedupedSystemMessages = systemMessages.filter((msg, idx) => {
+              if (msg.hidden) {
+                return idx === lastHiddenSummaryIndex;
+              }
+              if (msg.content.trim().startsWith(summaryPrefix)) {
+                // Keep only the latest non-hidden summary for backward compatibility
+                return idx === lastVisibleSummaryIndex || lastHiddenSummaryIndex === -1;
+              }
+              return true;
+            });
             
-            console.log('compactSession: keeping system messages', systemMessages.length, 'out of', s.messages.length);
+            console.log('compactSession: keeping system messages', dedupedSystemMessages.length, 'out of', s.messages.length);
             
             // Recalculate token usage for system messages only
-            const systemTokens = systemMessages.reduce((sum, msg) => {
+            const systemTokens = dedupedSystemMessages.reduce((sum, msg) => {
               return sum + (msg.tokenUsage || Math.ceil(msg.content.length / 4));
             }, 0);
             
             const newSession = {
               ...s,
-              messages: systemMessages,
+              messages: dedupedSystemMessages,
               tokenUsage: systemTokens,
             };
             

@@ -148,6 +148,7 @@ function App() {
           customApiKey={settings.customApiKey}
           googleCloudProjectId={settings.googleCloudProjectId}
           maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
+          globalConfig={globalConfig}
           onCreateNewSession={createNewSession}
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}

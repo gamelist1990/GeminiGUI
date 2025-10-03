@@ -69,6 +69,7 @@ export interface ChatMessage {
   timestamp: Date;
   tokenUsage?: number; // Token count for this message
   stats?: GeminiStats;
+  hidden?: boolean;
 }
 
 export interface Settings {

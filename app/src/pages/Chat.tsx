@@ -8,7 +8,6 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Command } from '@tauri-apps/plugin-shell';
-import { writeTextFile } from '@tauri-apps/plugin-fs';
 import './Chat.css';
 
 // Markdown components for syntax highlighting
@@ -58,6 +57,7 @@ interface ChatProps {
   customApiKey?: string;
   googleCloudProjectId?: string;
   maxMessagesBeforeCompact: number;
+  globalConfig: any; // Config instance from configAPI
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
@@ -79,6 +79,7 @@ export default function Chat({
   customApiKey,
   googleCloudProjectId,
   maxMessagesBeforeCompact,
+  globalConfig,
   onCreateNewSession,
   onSwitchSession,
   onSendMessage,
@@ -116,14 +117,14 @@ export default function Chat({
   const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] = useState(false);
   const [geminiPathError, setGeminiPathError] = useState<string>('');
 
-  // Load geminiPath from config on workspace change
+  // Load geminiPath from global config on workspace change
   useEffect(() => {
     const loadGeminiPath = async () => {
       try {
-        const { Config } = await import('../utils/configAPI');
-        const workspaceConfig = new Config(`${workspace.id}\\.geminiconfig`);
-        const config = await workspaceConfig.loadConfig();
+        // Load from global config only
+        const config = await globalConfig.loadConfig();
         const loadedGeminiPath = config?.geminiPath;
+
         setGeminiPath(loadedGeminiPath);
 
         if (!loadedGeminiPath) {
@@ -132,16 +133,16 @@ export default function Chat({
           setGeminiPathError('');
         }
       } catch (error) {
-        console.error('Failed to load geminiPath from config:', error);
+        console.error('Failed to load geminiPath from global config:', error);
         setGeminiPath(undefined);
         setGeminiPathError('設定ファイルの読み込みに失敗しました。');
       }
     };
 
-    if (workspace?.id) {
+    if (globalConfig) {
       loadGeminiPath();
     }
-  }, [workspace?.id]);
+  }, [globalConfig]);
 
   // Scan workspace for files and folders
   useEffect(() => {
@@ -273,11 +274,14 @@ export default function Chat({
       setRecentlyCompletedSuggestion(false);
     }, 100);
 
-    // Set cursor position after the inserted text
+    // Set cursor position after the inserted text and ensure suggestions are closed
     setTimeout(() => {
       const newPos = wordStart + suggestion.length + 1;
       textarea.setSelectionRange(newPos, newPos);
       textarea.focus();
+      // Ensure suggestions are closed after input change
+      setShowCommandSuggestions(false);
+      setShowFileSuggestions(false);
     }, 0);
   };
 
@@ -355,27 +359,19 @@ export default function Chat({
           role: 'system',
           content: `📝 **会話履歴の要約**\n\n${cleanedSummary}`,
           timestamp: new Date(),
+          hidden: true,
         };
         onSendMessage(currentSessionId, systemMessage);
 
-        // Step 2: Show confirmation message
-        const confirmationMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: '✅ 会話履歴を要約しました。古いメッセージをクリアして整理します...',
-          timestamp: new Date(),
-        };
-        onSendMessage(currentSessionId, confirmationMessage);
-
-        // Step 3: Wait a bit to ensure messages are saved
+        // Wait a bit to ensure messages are saved
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Step 4: Compact the session (remove non-system messages)
+        // Compact the session (remove non-system messages)
         await onCompactSession(currentSessionId);
 
-        // Step 5: Add final confirmation
+        // Add final confirmation (single message)
         const finalMessage: ChatMessage = {
-          id: (Date.now() + 2).toString(),
+          id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: '✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。',
           timestamp: new Date(),
@@ -406,56 +402,121 @@ export default function Chat({
       }, 1000);
 
       try {
-        // Create the comprehensive project analysis prompt
-        const initPrompt = `あなたはプロジェクトアナライザーとして、このワークスペースの詳細な分析を行い、Gemini.mdファイルを作成してください。
+        const fs = await import('@tauri-apps/plugin-fs');
+        const geminiFilePath = `${workspace.path}/Gemini.md`;
+        const hadExistingGemini = await fs.exists(geminiFilePath);
 
-## 分析対象
-- OS及び実行環境情報
-- プロジェクト構造と主要コンポーネント
-- ビルド構造、設定ファイル、パッケージ構成
-- このプロジェクトの目的と目標
-- 実装済み機能の一覧
-- 使用可能な機能とAPI
-- 設定や構成パターン
-- 依存関係と外部ライブラリ
-- 開発ワークフローとプロセス
+        let existingGeminiContent = '';
+        if (hadExistingGemini) {
+          try {
+            existingGeminiContent = await fs.readTextFile(geminiFilePath);
+          } catch (readError) {
+            console.warn('Failed to read existing Gemini.md:', readError);
+          }
+        }
 
-## 出力制限
-- 必ず詳細な情報を含むMarkdown形式で記述
-- 使用可能な機能を網羅的に記載
-- 他のAIや開発者がこのプロジェクトを完全に理解できる程の詳細度
-- 技術仕様、設定、ファイル構造などを具体的に記述
+        const basePrompt = `You are a project analyzer. Analyze this workspace comprehensively and deliver a detailed Gemini.md file.
 
-#codebase の内容を分析し、上記の情報をGemini.mdとして出力してください。`;
+## Workspace Exploration
+- Use the available tools (for example, glob and read_file) to inspect directories and gather the information you need.
+- Verify important files and configuration by actually reading them.
+
+## Documentation Requirements
+Provide a complete analysis covering:
+
+### Project Overview
+- Project name and purpose
+- Technology stack and frameworks used
+- Target platform and environment
+
+### Architecture & Structure
+- Overall architecture and design patterns
+- Key components and their responsibilities
+- File organization and directory structure
+- Configuration files and their purposes
+
+### Features & Functionality
+- Complete list of implemented features
+- Available APIs and their usage
+- User interface components and workflows
+- Data models and storage solutions
+
+### Technical Details
+- Build system and deployment process
+- Dependencies and external libraries
+- Development tools and scripts
+- Security considerations and authentication
+
+### Code Quality & Standards
+- Coding conventions and style guidelines
+- Testing approach and coverage
+- Documentation standards
+- Performance considerations and optimisations
+
+### Development Workflow
+- Setup and installation instructions
+- Development environment requirements
+- Build and run commands
+- Contribution guidelines
+
+## Output Expectations
+- Return the full Gemini.md content in Markdown.
+- Ensure the result can replace the Gemini.md file entirely.
+- Highlight anything the next developer or AI assistant must know to work effectively.`;
+
+        const normalizedExistingContent = existingGeminiContent.replace(/\uFEFF/g, '').trim();
+        let initPrompt = '';
+
+        if (hadExistingGemini) {
+          initPrompt = `${basePrompt}
+
+An existing Gemini.md file is already present. Review the current content enclosed between <current_gemini_md> markers, then update it to reflect the latest project state. Preserve useful insights, expand missing sections, and correct any outdated information. Produce a full replacement for Gemini.md.
+
+<current_gemini_md>
+${normalizedExistingContent || '(The file is currently empty.)'}
+</current_gemini_md>`;
+        } else {
+          initPrompt = `${basePrompt}
+
+No Gemini.md file exists yet. Explore the workspace with the available tools and create a comprehensive Gemini.md from scratch.`;
+        }
 
         const initResponse = await callGemini(initPrompt, workspace.path, {
           approvalMode: 'yolo', // Force yolo mode for init command as requested
           model: 'gemini-2.5-flash',
           customApiKey: customApiKey,
-          includes: ['#codebase'] // Include entire codebase for analysis
+          includeDirectories: ['.'], // Allow the model to inspect the workspace structure via tools
         }, googleCloudProjectId, geminiPath);
 
         clearInterval(interval);
         setShowProcessingModal(false);
 
-        // Validate response
-        if (!initResponse.response || initResponse.response.trim() === '') {
-          throw new Error('Gemini.md作成レスポンスが空です');
+        // Check if AI actually created or updated the file using tools
+        const fileExists = await fs.exists(geminiFilePath);
+        const fileStats = initResponse.stats?.files;
+        const hasFileChanges = fileStats ? (fileStats.totalLinesAdded > 0 || fileStats.totalLinesRemoved > 0) : false;
+
+        if (fileExists && hasFileChanges) {
+          // AI successfully created or updated the file using tools
+          const successMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'system',
+            content: hadExistingGemini
+              ? `✅ Gemini.mdを更新しました。#file:Gemini.md`
+              : `✅ Gemini.mdが正常に作成されました。#file:Gemini.md`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, successMessage);
+        } else {
+          // AI didn't create the file or file creation failed
+          const errorMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `❌ Gemini.mdの作成に失敗しました。AIがファイルを作成できなかったか、ツールの実行に問題が発生しました。`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, errorMessage);
         }
-
-        // Save the Gemini.md file
-        const filePath = `${workspace.path}/Gemini.md`;
-        await writeTextFile(filePath, initResponse.response.trim());
-
-        // Show success message with proper file reference
-        const successMessage: ChatMessage = {
-          id: Date.now().toString(),
-          role: 'system',
-          content: `Gemini.mdを作成しました。#file:Gemini.md`,
-          timestamp: new Date(),
-        };
-        onSendMessage(currentSessionId, successMessage);
-
       } catch (error) {
         clearInterval(interval);
         setShowProcessingModal(false);
@@ -542,27 +603,19 @@ export default function Chat({
           role: 'system',
           content: `📝 **会話履歴の要約**\n\n${cleanedSummary}`,
           timestamp: new Date(),
+          hidden: true,
         };
         onSendMessage(currentSessionId, systemMessage);
-        
-        // Step 2: Show confirmation message
-        const confirmationMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: '✅ 会話履歴を要約しました。古いメッセージをクリアして整理します...',
-          timestamp: new Date(),
-        };
-        onSendMessage(currentSessionId, confirmationMessage);
-        
-        // Step 3: Wait a bit to ensure messages are saved
+
+        // Wait a bit to ensure messages are saved
         await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Step 4: Compact the session (remove non-system messages)
+
+        // Compact the session (remove non-system messages)
         await onCompactSession(currentSessionId);
-        
-        // Step 5: Add final confirmation
+
+        // Add final confirmation (single message)
         const finalMessage: ChatMessage = {
-          id: (Date.now() + 2).toString(),
+          id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: '✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。',
           timestamp: new Date(),
@@ -989,7 +1042,9 @@ export default function Chat({
                   <p>{t('chat.noMessages')}</p>
                 </div>
               ) : (
-                currentSession?.messages.map((message) => (
+                currentSession?.messages
+                  .filter((message) => !message.hidden)
+                  .map((message) => (
                   <ChatMessageBubble 
                     key={message.id} 
                     message={message}
@@ -1554,9 +1609,9 @@ interface ChatMessageBubbleProps {
 }
 
 /**
- * Render user message with highlighted tags
+ * Render message with clickable tags (#file:, #folder:, #codebase, /commands)
  */
-function renderUserMessage(content: string, workspacePath: string): React.ReactElement {
+function renderMessageWithTags(content: string, workspacePath: string): React.ReactElement {
   // Split content by tags (#file:, #folder:, #codebase, /commands)
   const tagRegex = /(#file:[^\s]+|#folder:[^\s]+|#codebase|\/\w+)/g;
   const parts: React.ReactElement[] = [];
@@ -1571,14 +1626,14 @@ function renderUserMessage(content: string, workspacePath: string): React.ReactE
         // Open the file directly
         const filePath = tag.substring(6); // Remove '#file:'
         // Convert relative path to absolute path if needed
-        targetPath = filePath.startsWith('/') || filePath.includes(':') 
-          ? filePath 
+        targetPath = filePath.startsWith('/') || filePath.includes(':')
+          ? filePath
           : `${workspacePath}/${filePath}`.replace(/\\/g, '/');
       } else if (tag.startsWith('#folder:')) {
         // Open the folder
         const folderPath = tag.substring(8); // Remove '#folder:'
-        targetPath = folderPath.startsWith('/') || folderPath.includes(':') 
-          ? folderPath 
+        targetPath = folderPath.startsWith('/') || folderPath.includes(':')
+          ? folderPath
           : `${workspacePath}/${folderPath}`.replace(/\\/g, '/');
       } else if (tag === '#codebase') {
         // Open the workspace root directory
@@ -1586,16 +1641,23 @@ function renderUserMessage(content: string, workspacePath: string): React.ReactE
       }
 
       if (targetPath) {
+        // Check if file exists before trying to open
+        const { exists } = await import('@tauri-apps/plugin-fs');
+        const fileExists = await exists(targetPath);
+        if (!fileExists) {
+          alert(`ファイルが見つかりません: ${targetPath}\n\nファイルが削除されたか、移動された可能性があります。`);
+          return;
+        }
+
         // Use PowerShell to open the file or directory
-        const command = Command.create('powershell.exe', ['-Command', `start "${targetPath}"`]);
+        const command = Command.create('powershell.exe', ['-Command', `start "${targetPath.replace(/"/g, '""')}"`]);
         await command.execute();
       }
     } catch (error) {
       console.error('Failed to open target:', error);
+      alert(`ファイルを開けませんでした: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
-
-  while ((match = tagRegex.exec(content)) !== null) {
+  };  while ((match = tagRegex.exec(content)) !== null) {
     // Add text before the tag
     if (match.index > lastIndex) {
       parts.push(
@@ -1734,12 +1796,14 @@ function ChatMessageBubble({
           </div>
         ) : (
           <div onDoubleClick={handleDoubleClick}>
-            {message.role === 'assistant' || message.role === 'system' ? (
+            {message.role === 'assistant' ? (
               <ReactMarkdown components={markdownComponents}>
                 {message.content}
               </ReactMarkdown>
+            ) : message.role === 'system' ? (
+              renderMessageWithTags(message.content, workspace.path)
             ) : (
-              renderUserMessage(message.content, workspace.path)
+              renderMessageWithTags(message.content, workspace.path)
             )}
           </div>
         )}
