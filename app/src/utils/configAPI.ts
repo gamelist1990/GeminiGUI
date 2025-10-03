@@ -62,6 +62,7 @@ export class Config {
       model: 'default',
       maxMessagesBeforeCompact: 25,
       geminiAuth: false,
+      googleCloudProjectId: undefined, // Google Cloud Project IDのデフォルト値
     };
   }
 
@@ -96,7 +97,11 @@ export class Config {
         return defaultSettings;
       }
       const json = await readTextFile(this.configFile);
-      return JSON.parse(json);
+      const parsedSettings = JSON.parse(json);
+      // デフォルト設定と読み込んだ設定をmerge (既存フィールドは上書き保持)
+      const defaultSettings = await this.buildDefaultSettings();
+      const finalSettings = { ...defaultSettings, ...parsedSettings };
+      return finalSettings;
     } catch (error: any) {
       console.error('Failed to load config:', error);
       // No local fallback available; try to ensure base dir and create default config file
