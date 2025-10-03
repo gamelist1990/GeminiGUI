@@ -97,7 +97,8 @@
     "sessionName": "Session Name",
     "commands": {
       "compact": "Summarize conversation",
-      "fixchat": "Improve message for AI"
+      "fixchat": "Improve message for AI",
+      "init": "Generate Gemini.md"
     },
     "stats": {
       "button": "📊 Stats",

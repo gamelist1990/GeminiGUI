@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Command } from '@tauri-apps/plugin-shell';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import './Chat.css';
 
 // Markdown components for syntax highlighting
@@ -112,6 +113,7 @@ export default function Chat({
   const requestIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
+  const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] = useState(false);
 
   // Load geminiPath from config on workspace change
   useEffect(() => {
@@ -191,7 +193,7 @@ export default function Chat({
     // Command suggestions
     if (lastWord.startsWith('/')) {
       const query = lastWord.substring(1).toLowerCase();
-      const commands = ['compact', 'fixchat'];
+      const commands = ['compact', 'fixchat', 'init'];
       const filtered = commands.filter(cmd => cmd.startsWith(query));
       setCommandSuggestions(filtered);
       setShowCommandSuggestions(filtered.length > 0);
@@ -237,7 +239,7 @@ export default function Chat({
 
     const text = inputValue;
     const cursorPos = cursorPosition;
-    
+
     // Find the start of the current word (command or file)
     let wordStart = cursorPos - 1;
     while (wordStart >= 0 && text[wordStart] !== ' ' && text[wordStart] !== '\n') {
@@ -249,11 +251,19 @@ export default function Chat({
     const after = text.substring(cursorPos);
     // Suggestion already includes the prefix (# or /)
     const newText = before + suggestion + ' ' + after;
-    
+
     setInputValue(newText);
     setShowCommandSuggestions(false);
     setShowFileSuggestions(false);
-    
+
+    // Set flag to prevent immediate Enter key from sending
+    setRecentlyCompletedSuggestion(true);
+
+    // Reset the flag after a short delay
+    setTimeout(() => {
+      setRecentlyCompletedSuggestion(false);
+    }, 100);
+
     // Set cursor position after the inserted text
     setTimeout(() => {
       const newPos = wordStart + suggestion.length + 1;
@@ -265,9 +275,196 @@ export default function Chat({
   const processCommand = async (command: string, args: string) => {
     if (command === 'compact') {
       if (!currentSession) return;
-      
+
       setShowProcessingModal(true);
       setProcessingMessage(t('chat.stats.processing.compacting'));
+      const startTime = Date.now();
+
+      // Update elapsed time every second
+      const interval = setInterval(() => {
+        setProcessingElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+
+      try {
+        // Build conversation history (exclude system messages)
+        const historyMessages = currentSession.messages.filter(msg => msg.role !== 'system');
+
+        // Check if there's any conversation to summarize
+        if (historyMessages.length === 0) {
+          clearInterval(interval);
+          setShowProcessingModal(false);
+
+          const errorMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: t('chat.stats.processing.compactError'),
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, errorMessage);
+          return;
+        }
+
+        const historyText = historyMessages
+          .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+          .join('\n\n');
+
+        console.log('Compacting conversation, history length:', historyText.length);
+
+        const summaryPrompt = `${t('chat.stats.processing.compactPrompt')}\n\n${historyText}`;
+
+        console.log('Calling Gemini for summary...');
+        const summaryResponse = await callGemini(summaryPrompt, workspace.path, {
+          approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
+          model: 'gemini-2.5-flash', // Use fast model for summary
+          customApiKey: customApiKey,
+        }, googleCloudProjectId, geminiPath);
+
+        console.log('Summary response received:', summaryResponse.response.substring(0, 100) + '...');
+
+        clearInterval(interval);
+        setShowProcessingModal(false);
+
+        // Validate response
+        if (!summaryResponse.response || summaryResponse.response.trim() === '') {
+          throw new Error('要約レスポンスが空です');
+        }
+
+        // Clean up the response - remove any existing summary headers
+        let cleanedSummary = summaryResponse.response.trim();
+
+        // Remove common summary headers that Gemini might add
+        cleanedSummary = cleanedSummary
+          .replace(/^📝\s*会話履歴の要約[::\s]*/i, '')
+          .replace(/^会話履歴の要約[::\s]*/i, '')
+          .replace(/^[\*\*]+会話履歴の要約[\*\*]+[::\s]*/i, '')
+          .replace(/^#+\s*会話履歴の要約[::\s]*/i, '')
+          .trim();
+
+        // Step 1: Add summary message first (as system message)
+        const systemMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'system',
+          content: `📝 **会話履歴の要約**\n\n${cleanedSummary}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, systemMessage);
+
+        // Step 2: Show confirmation message
+        const confirmationMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '✅ 会話履歴を要約しました。古いメッセージをクリアして整理します...',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, confirmationMessage);
+
+        // Step 3: Wait a bit to ensure messages are saved
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Step 4: Compact the session (remove non-system messages)
+        await onCompactSession(currentSessionId);
+
+        // Step 5: Add final confirmation
+        const finalMessage: ChatMessage = {
+          id: (Date.now() + 2).toString(),
+          role: 'assistant',
+          content: '✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, finalMessage);
+
+      } catch (error) {
+        clearInterval(interval);
+        setShowProcessingModal(false);
+        console.error('Error compacting conversation:', error);
+
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `❌ 会話の要約中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
+
+    } else if (command === 'init') {
+      setShowProcessingModal(true);
+      setProcessingMessage('Gemini.mdを生成しています...');
+      const startTime = Date.now();
+
+      const interval = setInterval(() => {
+        setProcessingElapsed(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
+
+      try {
+        // Create the comprehensive project analysis prompt
+        const initPrompt = `あなたはプロジェクトアナライザーとして、このワークスペースの詳細な分析を行い、Gemini.mdファイルを作成してください。
+
+## 分析対象
+- OS及び実行環境情報
+- プロジェクト構造と主要コンポーネント
+- ビルド構造、設定ファイル、パッケージ構成
+- このプロジェクトの目的と目標
+- 実装済み機能の一覧
+- 使用可能な機能とAPI
+- 設定や構成パターン
+- 依存関係と外部ライブラリ
+- 開発ワークフローとプロセス
+
+## 出力制限
+- 必ず詳細な情報を含むMarkdown形式で記述
+- 使用可能な機能を網羅的に記載
+- 他のAIや開発者がこのプロジェクトを完全に理解できる程の詳細度
+- 技術仕様、設定、ファイル構造などを具体的に記述
+
+#codebase の内容を分析し、上記の情報をGemini.mdとして出力してください。`;
+
+        const initResponse = await callGemini(initPrompt, workspace.path, {
+          approvalMode: 'yolo', // Force yolo mode for init command as requested
+          model: 'gemini-2.5-flash',
+          customApiKey: customApiKey,
+          includes: ['#codebase'] // Include entire codebase for analysis
+        }, googleCloudProjectId, geminiPath);
+
+        clearInterval(interval);
+        setShowProcessingModal(false);
+
+        // Validate response
+        if (!initResponse.response || initResponse.response.trim() === '') {
+          throw new Error('Gemini.md作成レスポンスが空です');
+        }
+
+        // Save the Gemini.md file
+        const filePath = `${workspace.path}/Gemini.md`;
+        await writeTextFile(filePath, initResponse.response.trim());
+
+        // Show success message with proper file reference
+        const successMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'system',
+          content: `Gemini.mdを作成しました。#file:Gemini.md`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, successMessage);
+
+      } catch (error) {
+        clearInterval(interval);
+        setShowProcessingModal(false);
+        console.error('Error creating Gemini.md:', error);
+
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `❌ Gemini.mdの作成中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
+    } else if (command === 'fixchat') {
+      if (!currentSession) return;
+
+      setShowProcessingModal(true);
+      setProcessingMessage('AIがメッセージを改善しています...');
       const startTime = Date.now();
       
       // Update elapsed time every second
@@ -487,6 +684,9 @@ export default function Chat({
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !currentSession) return;
+
+    // Reset the recentlyCompletedSuggestion flag to ensure future messages can be sent
+    setRecentlyCompletedSuggestion(false);
 
     // Check if it's a command
     const trimmedInput = inputValue.trim();
@@ -988,9 +1188,10 @@ export default function Chat({
                 if (e.key === 'Enter' && e.ctrlKey) {
                   e.preventDefault();
                   handleSendMessage();
-                } else if (e.key === 'Enter' && !e.shiftKey && !showCommandSuggestions && !showFileSuggestions) {
+                } else if (e.key === 'Enter' && !e.shiftKey && !showCommandSuggestions && !showFileSuggestions && !recentlyCompletedSuggestion) {
                   // Allow Enter for new line, but only Ctrl+Enter sends
-                  // This prevents accidental sends
+                  // This prevents accidental sends and multiple suggestions
+                  e.preventDefault();
                 }
                 // Handle suggestion selection with Enter/Tab
                 if ((e.key === 'Enter' || e.key === 'Tab') && (showCommandSuggestions || showFileSuggestions)) {
