@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChatSession } from "../../types";
+import { ChatMessage, ChatSession } from "../../types";
 import { t } from "../../utils/i18n";
 import { formatNumber } from "../../utils/storage";
 import { formatElapsedTime } from "../../utils/storage";
@@ -143,6 +143,40 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
     try {
       setIsExporting(true);
 
+      // Safety check: limit number of messages for PDF export
+      const MAX_MESSAGES_FOR_PDF = 100; // Reasonable limit to prevent string length errors
+      const visibleMessages = selectedSession.messages.filter(message => !message.hidden);
+
+      if (visibleMessages.length > MAX_MESSAGES_FOR_PDF) {
+        alert(`PDF export is limited to ${MAX_MESSAGES_FOR_PDF} messages for performance reasons.\n\nYour session has ${visibleMessages.length} messages. Please consider:\n• Export as text file instead (no limits)\n• Compact long conversations first\n• Export smaller sessions individually\n\nWould you like to continue with the first ${MAX_MESSAGES_FOR_PDF} messages?`);
+      }
+
+      // Generate HTML content with size limits
+      let htmlContent: string = "";
+      let messagesToExport = visibleMessages;
+
+      try {
+        // Limit messages if too many
+        if (visibleMessages.length > MAX_MESSAGES_FOR_PDF) {
+          messagesToExport = visibleMessages.slice(0, MAX_MESSAGES_FOR_PDF);
+        }
+
+        // Generate HTML for limited messages
+        htmlContent = generateConversationHtml(selectedSession, messagesToExport);
+
+        // Additional safety check: estimate final HTML size
+        if (htmlContent.length > 5000000) { // ~5MB limit (reasonable for HTML2Canvas)
+          throw new Error('HTML_TOO_LARGE');
+        }
+      } catch (htmlError) {
+        if (htmlError === 'HTML_TOO_LARGE' || (htmlError as Error).message?.includes('Invalid string length')) {
+          alert(`PDF export cancelled: Content is too large for PDF generation.\n\nPlease try:\n• Export as text file instead (no size limits)\n• Reduce message content\n• Split large conversations\n\nEstimated content size: ${htmlContent.length / 1024 / 1024}MB`);
+          setIsExporting(false);
+          return;
+        }
+        throw htmlError;
+      }
+
       // Create a temporary div with conversation content
       const tempDiv = document.createElement("div");
       tempDiv.style.width = "1200px"; // Increased width for better quality
@@ -151,9 +185,19 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
       tempDiv.style.fontFamily = "Arial, sans-serif";
       tempDiv.style.backgroundColor = "white";
       tempDiv.style.color = "black";
-      tempDiv.style.fontSize = "16px"; // Larger font size for better readability
-      tempDiv.style.lineHeight = "1.6";
-      tempDiv.innerHTML = generateConversationHtml(selectedSession);
+      tempDiv.style.fontSize = "14px"; // Reduced font size for more content
+      tempDiv.style.lineHeight = "1.4"; // Tighter line height
+
+      // Set the limited content
+      if (messagesToExport.length < visibleMessages.length) {
+        // Add warning about truncated content
+        tempDiv.innerHTML = htmlContent.replace(
+          '<h1 style="font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #333;">',
+          '<div style="background: #fef3c7; padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #f59e0b;">⚠️ <strong>Warning:</strong> This PDF contains only the first ' + MAX_MESSAGES_FOR_PDF + ' messages due to size limits. Export as text for complete conversation.</div><h1 style="font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #333;">'
+        );
+      } else {
+        tempDiv.innerHTML = htmlContent;
+      }
 
       // Position temporarily
       tempDiv.style.position = "absolute";
@@ -163,22 +207,23 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
 
       try {
         const canvas = await html2canvas(tempDiv, {
-          scale: 4, // Increased scale for higher quality
+          scale: 2, // Reduced scale for better performance
           useCORS: true,
           allowTaint: true,
           backgroundColor: "#ffffff",
           width: 1200,
-          height: tempDiv.offsetHeight,
+          height: Math.min(tempDiv.offsetHeight, 10000), // Limit max height
           windowWidth: 1200,
-          windowHeight: tempDiv.offsetHeight,
+          windowHeight: Math.min(tempDiv.offsetHeight, 10000),
+          logging: false, // Disable html2canvas logging
         });
 
-        const imgData = canvas.toDataURL("image/png", 1.0); // Maximum quality
+        const imgData = canvas.toDataURL("image/png", 0.9); // Slightly compressed quality
         const pdf = new jsPDF({
           orientation: "portrait",
           unit: "px",
           format: "a4",
-          compress: false, // Better quality
+          compress: true, // Enable compression for better performance
         });
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -210,7 +255,19 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
       }
     } catch (error) {
       console.error("PDF export failed:", error);
-      alert(t("chat.stats.export.error"));
+
+      // Provide more helpful error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid string length') || error.message === 'HTML_TOO_LARGE') {
+          alert(`PDF export failed: Content too large.\n\n${t("chat.stats.export.error")}\n\nTry:\n• Export as text file (.txt) instead\n• Reduce message content\n• Split large conversations`);
+        } else if (error.message.includes('HTML2Canvas')) {
+          alert(`PDF export failed: Rendering issue.\n\n${t("chat.stats.export.error")}\n\nTry refreshing the page and exporting again.`);
+        } else {
+          alert(`${t("chat.stats.export.error")}\n\nDetails: ${error.message}`);
+        }
+      } else {
+        alert(t("chat.stats.export.error"));
+      }
     } finally {
       setIsExporting(false);
     }
@@ -254,7 +311,7 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
     return content;
   };
 
-  const generateConversationHtml = (session: ChatSession): string => {
+  const generateConversationHtml = (session: ChatSession, messagesToUse?: ChatMessage[]): string => {
     let content = `
       <h1 style="font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #333;">
         ${t("chat.stats.export.title")} - ${session.name}
@@ -267,8 +324,11 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
       </div>
     `;
 
-    session.messages.forEach((message, index) => {
-      if (message.hidden) return;
+    const messages = messagesToUse || session.messages.filter(msg => !msg.hidden);
+
+    messages.forEach((message, index) => {
+      // Skip hidden messages (system summaries) only if not explicitly passed
+      if (message.hidden && !messagesToUse) return;
 
       const roleLabel = message.role === "user" ? "User" : "Assistant";
       const timestamp = message.timestamp
@@ -323,317 +383,319 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
           </button>
         </div>
 
-        {/* Export Section */}
-        {sessions.length > 0 && (
-          <div className="export-section">
-            <div className="export-session-selector">
-              <label htmlFor="session-select">
-                {t("chat.stats.export.selectSession")}:
-              </label>
-              <select
-                id="session-select"
-                value={selectedSessionId}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
-              >
-                <option value="all" disabled>
-                  {t("chat.stats.export.noSessionAvailable")}
-                </option>
-                {sessions.map((session) => (
-                  <option key={session.id} value={session.id}>
-                    {session.name} ({formatNumber(session.messages.length)}{" "}
-                    メッセージ)
+        <div className="modal-body">
+          {/* Export Section */}
+          {sessions.length > 0 && (
+            <div className="export-section">
+              <div className="export-session-selector">
+                <label htmlFor="session-select">
+                  {t("chat.stats.export.selectSession")}:
+                </label>
+                <select
+                  id="session-select"
+                  value={selectedSessionId}
+                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                >
+                  <option value="all" disabled>
+                    {t("chat.stats.export.noSessionAvailable")}
                   </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="export-buttons">
-              <button
-                onClick={exportAsText}
-                disabled={isExporting || selectedSessionId === "all"}
-              >
-                {isExporting
-                  ? t("chat.stats.export.exporting")
-                  : `${t("chat.stats.export.button")} TXT`}
-              </button>
-
-              <button
-                onClick={exportAsPdf}
-                disabled={isExporting || selectedSessionId === "all"}
-              >
-                {isExporting
-                  ? t("chat.stats.export.exporting")
-                  : `${t("chat.stats.export.button")} PDF`}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Export Success Notification */}
-        {exportSuccessMessage && (
-          <div
-            className="export-success-notification"
-            style={{
-              padding: "12px var(--spacing-lg)",
-              backgroundColor: "#d4edda",
-              border: "1px solid #c3e6cb",
-              borderRadius: "var(--radius-md)",
-              margin: "var(--spacing-sm) var(--spacing-lg)",
-              color: "#155724",
-              fontSize: "14px",
-              fontWeight: "500",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <span style={{ fontSize: "16px" }}>✅</span>
-            <span>{exportSuccessMessage}</span>
-          </div>
-        )}
-        {/* Overview Section */}
-        <div className="stats-section overview-section">
-          <h3>📈 {t("chat.stats.overview")}</h3>
-          <div className="overview-grid">
-            <div className="overview-card">
-              <div className="overview-icon">💬</div>
-              <div className="overview-content">
-                <div className="overview-label">
-                  {t("chat.stats.sessionCount")}
-                </div>
-                <div className="overview-value">{sessions.length}</div>
+                  {sessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.name} ({formatNumber(session.messages.length)}{" "}
+                      メッセージ)
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
-            <div className="overview-card">
-              <div className="overview-icon">🎯</div>
-              <div className="overview-content">
-                <div className="overview-label">
-                  {t("chat.stats.totalTokensSummary")}
-                </div>
-                <div className="overview-value">
-                  {formatNumber(totalTokens)}
-                </div>
-              </div>
-            </div>
-            <div className="overview-card">
-              <div className="overview-icon">💬</div>
-              <div className="overview-content">
-                <div className="overview-label">
-                  {t("chat.stats.totalMessages")}
-                </div>
-                <div className="overview-value">
-                  {sessions.reduce((sum, s) => sum + s.messages.length, 0)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Model Usage Section */}
-        {Object.keys(aggregateStats.models).length > 0 && (
-          <div className="stats-section">
-            <h3>🤖 {t("chat.stats.modelUsage")}</h3>
-            {Object.entries(aggregateStats.models).map(
-              ([modelName, modelData]: [string, any]) => (
-                <div key={modelName} className="model-card">
-                  <div className="model-header">
-                    <span className="model-name">{modelName}</span>
-                  </div>
+              <div className="export-buttons">
+                <button
+                  onClick={exportAsText}
+                  disabled={isExporting || selectedSessionId === "all"}
+                >
+                  {isExporting
+                    ? t("chat.stats.export.exporting")
+                    : `${t("chat.stats.export.button")} TXT`}
+                </button>
 
-                  <div className="stats-grid">
-                    <div className="stat-group">
-                      <h4>{t("chat.stats.apiStats")}</h4>
-                      <div className="stat-row">
-                        <span className="stat-icon">📤</span>
-                        <span className="stat-label">
-                          {t("chat.stats.requests")}
-                        </span>
-                        <span className="stat-value">
-                          {modelData.api.totalRequests}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">❌</span>
-                        <span className="stat-label">
-                          {t("chat.stats.errors")}
-                        </span>
-                        <span className="stat-value">
-                          {modelData.api.totalErrors}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">⏱️</span>
-                        <span className="stat-label">
-                          {t("chat.stats.latency")}
-                        </span>
-                        <span className="stat-value">
-                          {modelData.api.totalLatencyMs}ms
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="stat-group">
-                      <h4>{t("chat.stats.tokenUsage")}</h4>
-                      <div className="stat-row">
-                        <span className="stat-icon">📝</span>
-                        <span className="stat-label">
-                          {t("chat.stats.promptTokens")}
-                        </span>
-                        <span className="stat-value highlight-primary">
-                          {formatNumber(modelData.tokens.prompt)}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">💬</span>
-                        <span className="stat-label">
-                          {t("chat.stats.responseTokens")}
-                        </span>
-                        <span className="stat-value highlight-success">
-                          {formatNumber(modelData.tokens.candidates)}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">🎯</span>
-                        <span className="stat-label">
-                          {t("chat.stats.totalTokens")}
-                        </span>
-                        <span className="stat-value highlight-total">
-                          {formatNumber(modelData.tokens.total)}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">💾</span>
-                        <span className="stat-label">
-                          {t("chat.stats.cachedTokens")}
-                        </span>
-                        <span className="stat-value">
-                          {formatNumber(modelData.tokens.cached)}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">💭</span>
-                        <span className="stat-label">
-                          {t("chat.stats.thoughtsTokens")}
-                        </span>
-                        <span className="stat-value">
-                          {formatNumber(modelData.tokens.thoughts)}
-                        </span>
-                      </div>
-                      <div className="stat-row">
-                        <span className="stat-icon">🔧</span>
-                        <span className="stat-label">
-                          {t("chat.stats.toolTokens")}
-                        </span>
-                        <span className="stat-value">
-                          {formatNumber(modelData.tokens.tool)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        )}
-
-        {/* Tool Usage Section */}
-        <div className="stats-section">
-          <h3>🔧 {t("chat.stats.toolUsage")}</h3>
-          <div className="tool-summary-card">
-            <div className="stat-row">
-              <span className="stat-icon">📞</span>
-              <span className="stat-label">{t("chat.stats.totalCalls")}</span>
-              <span className="stat-value">
-                {aggregateStats.tools.totalCalls}
-              </span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-icon">✅</span>
-              <span className="stat-label">{t("chat.stats.success")}</span>
-              <span className="stat-value highlight-success">
-                {aggregateStats.tools.totalSuccess}
-              </span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-icon">⚠️</span>
-              <span className="stat-label">{t("chat.stats.fail")}</span>
-              <span className="stat-value highlight-error">
-                {aggregateStats.tools.totalFail}
-              </span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-icon">⏱️</span>
-              <span className="stat-label">
-                {t("chat.stats.totalDuration")}
-              </span>
-              <span className="stat-value">
-                {aggregateStats.tools.totalDurationMs}ms
-              </span>
-            </div>
-          </div>
-
-          {Object.keys(aggregateStats.tools.byName).length > 0 && (
-            <div className="tools-details">
-              <h4>{t("chat.stats.toolDetails")}</h4>
-              <div className="tools-grid">
-                {Object.entries(aggregateStats.tools.byName).map(
-                  ([toolName, toolData]: [string, any]) => (
-                    <div key={toolName} className="tool-detail-card">
-                      <div className="tool-name">🔨 {toolName}</div>
-                      <div className="tool-stats">
-                        <div className="stat-row">
-                          <span className="stat-label">
-                            {t("chat.stats.usageCount")}
-                          </span>
-                          <span className="stat-value">{toolData.count}</span>
-                        </div>
-                        <div className="stat-row">
-                          <span className="stat-label">
-                            {t("chat.stats.executionTime")}
-                          </span>
-                          <span className="stat-value">
-                            {toolData.durationMs}ms
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                )}
+                <button
+                  onClick={exportAsPdf}
+                  disabled={isExporting || selectedSessionId === "all"}
+                >
+                  {isExporting
+                    ? t("chat.stats.export.exporting")
+                    : `${t("chat.stats.export.button")} PDF`}
+                </button>
               </div>
             </div>
           )}
-        </div>
 
-        {/* File Changes Section */}
-        <div className="stats-section">
-          <h3>📁 {t("chat.stats.fileChanges")}</h3>
-          <div className="file-changes-card">
-            <div className="stat-row">
-              <span className="stat-icon">➕</span>
-              <span className="stat-label">{t("chat.stats.linesAdded")}</span>
-              <span className="stat-value highlight-success">
-                {aggregateStats.files.totalLinesAdded}
-              </span>
+          {/* Export Success Notification */}
+          {exportSuccessMessage && (
+            <div
+              className="export-success-notification"
+              style={{
+                padding: "12px var(--spacing-lg)",
+                backgroundColor: "#d4edda",
+                border: "1px solid #c3e6cb",
+                borderRadius: "var(--radius-md)",
+                margin: "var(--spacing-sm) var(--spacing-lg)",
+                color: "#155724",
+                fontSize: "14px",
+                fontWeight: "500",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <span style={{ fontSize: "16px" }}>✅</span>
+              <span>{exportSuccessMessage}</span>
             </div>
-            <div className="stat-row">
-              <span className="stat-icon">➖</span>
-              <span className="stat-label">{t("chat.stats.linesRemoved")}</span>
-              <span className="stat-value highlight-error">
-                {aggregateStats.files.totalLinesRemoved}
-              </span>
+          )}
+          {/* Overview Section */}
+          <div className="stats-section overview-section">
+            <h3>📈 {t("chat.stats.overview")}</h3>
+            <div className="overview-grid">
+              <div className="overview-card">
+                <div className="overview-icon">💬</div>
+                <div className="overview-content">
+                  <div className="overview-label">
+                    {t("chat.stats.sessionCount")}
+                  </div>
+                  <div className="overview-value">{sessions.length}</div>
+                </div>
+              </div>
+              <div className="overview-card">
+                <div className="overview-icon">🎯</div>
+                <div className="overview-content">
+                  <div className="overview-label">
+                    {t("chat.stats.totalTokensSummary")}
+                  </div>
+                  <div className="overview-value">
+                    {formatNumber(totalTokens)}
+                  </div>
+                </div>
+              </div>
+              <div className="overview-card">
+                <div className="overview-icon">💬</div>
+                <div className="overview-content">
+                  <div className="overview-label">
+                    {t("chat.stats.totalMessages")}
+                  </div>
+                  <div className="overview-value">
+                    {sessions.reduce((sum, s) => sum + s.messages.length, 0)}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="stat-row">
-              <span className="stat-icon">📊</span>
-              <span className="stat-label">{t("chat.stats.diff")}</span>
-              <span className="stat-value">
-                {aggregateStats.files.totalLinesAdded -
-                  aggregateStats.files.totalLinesRemoved >
-                0
-                  ? "+"
-                  : ""}
-                {aggregateStats.files.totalLinesAdded -
-                  aggregateStats.files.totalLinesRemoved}
-              </span>
+          </div>
+
+          {/* Model Usage Section */}
+          {Object.keys(aggregateStats.models).length > 0 && (
+            <div className="stats-section">
+              <h3>🤖 {t("chat.stats.modelUsage")}</h3>
+              {Object.entries(aggregateStats.models).map(
+                ([modelName, modelData]: [string, any]) => (
+                  <div key={modelName} className="model-card">
+                    <div className="model-header">
+                      <span className="model-name">{modelName}</span>
+                    </div>
+
+                    <div className="stats-grid">
+                      <div className="stat-group">
+                        <h4>{t("chat.stats.apiStats")}</h4>
+                        <div className="stat-row">
+                          <span className="stat-icon">📤</span>
+                          <span className="stat-label">
+                            {t("chat.stats.requests")}
+                          </span>
+                          <span className="stat-value">
+                            {modelData.api.totalRequests}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">❌</span>
+                          <span className="stat-label">
+                            {t("chat.stats.errors")}
+                          </span>
+                          <span className="stat-value">
+                            {modelData.api.totalErrors}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">⏱️</span>
+                          <span className="stat-label">
+                            {t("chat.stats.latency")}
+                          </span>
+                          <span className="stat-value">
+                            {modelData.api.totalLatencyMs}ms
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="stat-group">
+                        <h4>{t("chat.stats.tokenUsage")}</h4>
+                        <div className="stat-row">
+                          <span className="stat-icon">📝</span>
+                          <span className="stat-label">
+                            {t("chat.stats.promptTokens")}
+                          </span>
+                          <span className="stat-value highlight-primary">
+                            {formatNumber(modelData.tokens.prompt)}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">💬</span>
+                          <span className="stat-label">
+                            {t("chat.stats.responseTokens")}
+                          </span>
+                          <span className="stat-value highlight-success">
+                            {formatNumber(modelData.tokens.candidates)}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">🎯</span>
+                          <span className="stat-label">
+                            {t("chat.stats.totalTokens")}
+                          </span>
+                          <span className="stat-value highlight-total">
+                            {formatNumber(modelData.tokens.total)}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">💾</span>
+                          <span className="stat-label">
+                            {t("chat.stats.cachedTokens")}
+                          </span>
+                          <span className="stat-value">
+                            {formatNumber(modelData.tokens.cached)}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">💭</span>
+                          <span className="stat-label">
+                            {t("chat.stats.thoughtsTokens")}
+                          </span>
+                          <span className="stat-value">
+                            {formatNumber(modelData.tokens.thoughts)}
+                          </span>
+                        </div>
+                        <div className="stat-row">
+                          <span className="stat-icon">🔧</span>
+                          <span className="stat-label">
+                            {t("chat.stats.toolTokens")}
+                          </span>
+                          <span className="stat-value">
+                            {formatNumber(modelData.tokens.tool)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Tool Usage Section */}
+          <div className="stats-section">
+            <h3>🔧 {t("chat.stats.toolUsage")}</h3>
+            <div className="tool-summary-card">
+              <div className="stat-row">
+                <span className="stat-icon">📞</span>
+                <span className="stat-label">{t("chat.stats.totalCalls")}</span>
+                <span className="stat-value">
+                  {aggregateStats.tools.totalCalls}
+                </span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">✅</span>
+                <span className="stat-label">{t("chat.stats.success")}</span>
+                <span className="stat-value highlight-success">
+                  {aggregateStats.tools.totalSuccess}
+                </span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">⚠️</span>
+                <span className="stat-label">{t("chat.stats.fail")}</span>
+                <span className="stat-value highlight-error">
+                  {aggregateStats.tools.totalFail}
+                </span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">⏱️</span>
+                <span className="stat-label">
+                  {t("chat.stats.totalDuration")}
+                </span>
+                <span className="stat-value">
+                  {aggregateStats.tools.totalDurationMs}ms
+                </span>
+              </div>
+            </div>
+
+            {Object.keys(aggregateStats.tools.byName).length > 0 && (
+              <div className="tools-details">
+                <h4>{t("chat.stats.toolDetails")}</h4>
+                <div className="tools-grid">
+                  {Object.entries(aggregateStats.tools.byName).map(
+                    ([toolName, toolData]: [string, any]) => (
+                      <div key={toolName} className="tool-detail-card">
+                        <div className="tool-name">🔨 {toolName}</div>
+                        <div className="tool-stats">
+                          <div className="stat-row">
+                            <span className="stat-label">
+                              {t("chat.stats.usageCount")}
+                            </span>
+                            <span className="stat-value">{toolData.count}</span>
+                          </div>
+                          <div className="stat-row">
+                            <span className="stat-label">
+                              {t("chat.stats.executionTime")}
+                            </span>
+                            <span className="stat-value">
+                              {toolData.durationMs}ms
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* File Changes Section */}
+          <div className="stats-section">
+            <h3>📁 {t("chat.stats.fileChanges")}</h3>
+            <div className="file-changes-card">
+              <div className="stat-row">
+                <span className="stat-icon">➕</span>
+                <span className="stat-label">{t("chat.stats.linesAdded")}</span>
+                <span className="stat-value highlight-success">
+                  {aggregateStats.files.totalLinesAdded}
+                </span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">➖</span>
+                <span className="stat-label">{t("chat.stats.linesRemoved")}</span>
+                <span className="stat-value highlight-error">
+                  {aggregateStats.files.totalLinesRemoved}
+                </span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-icon">📊</span>
+                <span className="stat-label">{t("chat.stats.diff")}</span>
+                <span className="stat-value">
+                  {aggregateStats.files.totalLinesAdded -
+                    aggregateStats.files.totalLinesRemoved >
+                  0
+                    ? "+"
+                    : ""}
+                  {aggregateStats.files.totalLinesAdded -
+                    aggregateStats.files.totalLinesRemoved}
+                </span>
+              </div>
             </div>
           </div>
         </div>

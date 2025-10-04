@@ -28,6 +28,69 @@ This is a desktop application built with Tauri v2, React 19, TypeScript, and Vit
   └── vite.config.ts      # Vite configuration
 ```
 
+## Common Commands
+
+### Development
+- `cd app && bun install` - Install dependencies (recommended approach with Bun)
+- `cd app && npm install` - Alternative dependency installation with npm
+- `cd app && bun run dev` - Run frontend only in development mode (Vite dev server)
+- `cd app && bun run tauri dev` - Run full application with Tauri (includes Rust backend)
+
+### Building
+- `cd app && bun run build` - Build frontend assets (TypeScript compilation + Vite build)
+- `cd app && bun run tauri build` - Build complete application bundle for distribution
+
+### Other
+- `cd app && bun run preview` - Preview built frontend assets locally
+
+## Code Architecture
+
+### High-Level Structure
+The application follows a workspace-based chat interface architecture:
+
+1. **App.tsx** - Central routing component managing three main views:
+   - Workspace selection (default view)
+   - Chat interface (when workspace is selected)
+   - Settings (configuration panel)
+
+2. **View-Based Navigation** - Uses a simple state-based routing system with lazy-loaded components and Suspense fallbacks
+
+3. **Data Flow**:
+   - **Settings**: Global configuration stored in filesystem (Google Cloud credentials, UI preferences, API keys)
+   - **Workspaces**: Project-based organization with recent/favorite tracking
+   - **Chat Sessions**: Conversation threads per workspace with message history and token usage tracking
+
+### Key Components
+
+#### Frontend (app/src/)
+- **pages/**: Main view components (`Chat.tsx`, `Settings.tsx`, `WorkspaceSelection.tsx`)
+- **hooks/**: React hooks encapsulating business logic:
+  - `useSettings()`: Configuration management
+  - `useWorkspaces()`: Workspace CRUD operations and favorite/recent lists
+  - `useChatSessions()`: Session management, message sending, token calculations
+- **utils/**: Utility functions:
+  - `configAPI.ts`: Filesystem-based configuration persistence using Tauri FS plugin
+  - `i18n.ts`: Internationalization with JSONC support
+  - `geminiCUI.ts`: AI interaction logic
+- **types/**: Core data structures (Workspace, ChatSession, Settings, etc.)
+
+#### Backend (app/src-tauri/)
+- **lib.rs**: Tauri command handlers and invoke bindings
+- **main.rs**: Application entry point and plugin initialization
+- Rust commands exposed to frontend via `invoke()` calls
+
+#### Data Storage
+- Global config: `~/PEXData/GeminiGUI/` (OS document directory)
+- Workspace data: Persisted per-workspace within config directory
+- Settings: Single JSON file with user preferences and cloud credentials
+
+### Key Patterns
+- **Hook-based Logic**: Business logic abstracted into reusable React hooks
+- **Taury Command Pattern**: Native operations via Rust commands called from JavaScript
+- **Filesystem Persistence**: All persistent data stored using Tauri's FS plugin
+- **Lazy Loading**: Route components loaded on-demand for better startup performance
+- **Internationalization**: JSONC-based translation files with fallback to key strings
+
 ## Supported Tauri Plugins
 The project uses the following official Tauri plugins:
 - `tauri-plugin-os` - OS information

@@ -1,4 +1,5 @@
 import { ProcessingModalProps } from "./types";
+import { t } from "../../utils/i18n";
 
 function ProcessingModal({ message, elapsedSeconds }: ProcessingModalProps) {
   return (
@@ -14,7 +15,7 @@ function ProcessingModal({ message, elapsedSeconds }: ProcessingModalProps) {
             <span className="dot"></span>
             <span className="dot"></span>
           </div>
-          <div className="processing-elapsed">経過時間: {elapsedSeconds}秒</div>
+          <div className="processing-elapsed">{t("chat.processing.elapsedTime").replace("{elapsedSeconds}", elapsedSeconds.toString())}</div>
         </div>
       </div>
     </div>

@@ -177,7 +177,8 @@
     "processing": {
       "compacting": "Summarizing conversation history...",
       "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
-      "compactPrompt": "Please summarize the following conversation history concisely. Clearly state important points, discussed topics, and decisions. Structure and organize it so that AI can easily reference it in future conversations:"
+      "compactPrompt": "Please summarize the following conversation history concisely. Clearly state important points, discussed topics, and decisions. Structure and organize it so that AI can easily reference it in future conversations:",
+      "elapsedTime": "Elapsed time: {elapsedSeconds} seconds"
     },
     "compactWarning": {
       "messageCountExceeded": "The message count has exceeded {maxMessagesBeforeCompact} messages.",

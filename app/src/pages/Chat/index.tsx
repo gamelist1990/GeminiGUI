@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import "../Chat.css";
 import { ChatMessage } from "../../types";
 import { t } from "../../utils/i18n";
 import { formatElapsedTime, formatNumber } from "../../utils/storage";
