@@ -43,42 +43,52 @@ The project uses the following official Tauri plugins:
 ### Code Style
 - Use TypeScript for all React components
 - Follow React 19 best practices with functional components and hooks
-- Use async/await for Tauri commands
-- Follow Rust conventions for backend code
+## Copilot / AI エージェント向け素早く使える要点
 
-### Commands and Scripts
-- `npm run dev` / `bun run dev` - Start Vite dev server (port 1420)
-- `npm run build` / `bun run build` - TypeScript compilation + Vite build
-- `npm run tauri dev` - Start Tauri development mode
-- `npm run tauri build` - Build production application
+このリポジトリは Tauri(v2) + React(19) + TypeScript + Vite で作られたデスクトップ GUI（GeminiAPI クライアント）です。ここでは、AI エージェントがこのコードベースで即戦力になるための最小限の知識を示します。
 
-### Tauri Commands
-- Use `invoke` from `@tauri-apps/api/core` to call Rust functions
-- Rust commands are defined with `#[tauri::command]` attribute
-- Register commands in `lib.rs` using `invoke_handler!` macro
+## 重要なファイルとアーキテクチャ（要点）
+- UI (React): `app/src/` — 主要ページは `pages/`（`Chat.tsx`, `Settings.tsx`, `WorkspaceSelection.tsx`, `Setup.tsx`）。
+- アプリ入口: `app/src/App.tsx`（グローバル設定、ワークスペース選択、hook の組合せで画面遷移を制御）。
+- ビジネスロジック / 再利用: `app/src/hooks/`（例: `useChatSessions.ts`, `useSettings.ts`, `useWorkspaces.ts`）に副作用や永続化のパターンが集約。
+- ユーティリティ: `app/src/utils/`（`configAPI.ts`, `geminiCUI.ts`, `i18n.ts`, `powershellExecutor.ts`, `localFileSystem.ts`）— 外部連携や設定周りを担当。
+- 翻訳: `app/public/lang/{en_US.jsonc,ja_JP.jsonc}` と `app/src/utils/i18n.ts`（JSONC をパースして `t(key)` を提供）。
+- ネイティブ側 (Tauri/Rust): `app/src-tauri/src/lib.rs`（`#[tauri::command]` と `invoke_handler!` でコマンド登録）。
+- パッケージ設定: `app/package.json`（スクリプト: `dev`, `build`, `tauri`）。Bundler は Bun を想定（`bun.lock` が存在）だが npm/Yarn でも動く。
 
-### Port Configuration
-- Vite dev server: port 1420 (strict)
-- HMR (Hot Module Reload): port 1421
+## 開発・ビルドの短い手順（確実に動かすためのコマンド）
+- 依存インストール（推奨）: `cd app` → `bun install`（あるいは `npm install`）
+- 開発（Tauri + Vite）: `bun run tauri dev`（`package.json` の `tauri` スクリプトに引数 `dev` を渡す）
+- フロントだけ: `bun run dev`（Vite）
+- ビルド: `bun run tauri build`
+- ポート: Vite デフォルトの dev ポートは 1420、HMR は 1421（プロジェクト内で明記あり）。
 
-### Important Notes
-- Do not modify `src-tauri` directory unless adding/modifying Rust commands
-- Vite is configured to ignore watching `src-tauri` directory
-- The app uses React StrictMode for development
+## 主要パターンと注意点（コード例を参照）
+- Tauri コマンド追加: `src-tauri/src/lib.rs` に `#[tauri::command] fn foo(...) {}` を書き、`tauri::generate_handler![foo, ...]` に登録する。
+  例: `lib.rs` に `greet` が登録されている。
+- フロント→ネイティブ呼び出し: `invoke('command_name', { ... })`（`@tauri-apps/api` を使用）。
+- i18n: `t('category.key')` を使う。欠落時はキー文字列が返るため、キーで挙動を推測可能（参照: `app/src/utils/i18n.ts`）。
+- 設定/ワークスペース管理: `Config` クラス（`utils/configAPI.ts`）を通じてドキュメントディレクトリ下に永続化。`App.tsx` の `globalConfig` 初期化を参照。
+- Chat セッション: `useChatSessions` がセッション作成・送信・再送・圧縮等の操作を提供。ページロジックは `app/src/pages/Chat.tsx`。
 
-### Adding New Tauri Commands
-1. Define the command in `src-tauri/src/lib.rs` with `#[tauri::command]`
-2. Register it in the `invoke_handler!` macro
-3. Call it from React using `invoke("command_name", { args })`
+## プロジェクト固有の慣習（重要）
+- Bun を主に想定するが `package.json` のスクリプトは標準的（`vite`, `tauri`）。CI/開発環境で Bun がない場合は npm で代替可能。
+- `src-tauri` はネイティブコマンドのソースなので破壊的変更は慎重に。Tauri プラグインは Rust 側と JS 側で両方を更新する必要あり（`Cargo.toml` と `package.json`）。
+- 翻訳は JSONC（コメント付き JSON）。`i18n.ts` はコメント削除ロジックを含むため、翻訳追加時は JSONC 構文を守る。
 
-### Adding New Tauri Plugins
-1. Add the plugin to `Cargo.toml` in `src-tauri`
-2. Add the corresponding npm package to `package.json`
-3. Initialize the plugin in `lib.rs` using `.plugin()` in the Builder
-4. Update TauriPlugin.md documentation
+## デバッグのヒント
+- フロントの高速確認は `bun run dev`（Vite）で行い、ネイティブ連携を確認するには `bun run tauri dev`。
+- Rust 側のログは Tauri 実行コンソールに出力される。Visual Studio Code では `src-tauri` 配下を Rust 拡張で開いてデバッグ可能。
 
-## Common Patterns
-- State management: Use React `useState` hook
-- Async operations: Use `async/await` with Tauri `invoke`
-- Styling: CSS with support for light/dark mode (prefers-color-scheme)
-- Type safety: Ensure TypeScript types are properly defined for Tauri commands
+## 参考ファイル（すぐ参照すべき）
+- `app/src/App.tsx` — アプリ全体の起動・ビュー遷移
+- `app/src/hooks/useChatSessions.ts` — 会話ロジックの中心
+- `app/src/utils/i18n.ts` と `app/public/lang/*.jsonc` — 国際化フロー
+- `app/src-tauri/src/lib.rs` — Tauri コマンド登録例（`greet`）
+- `app/package.json` — 開発 / ビルド用スクリプト
+
+## 追加の注意と確認依頼
+- このファイルはコードベースから検出可能な実装パターンに限定しています。もしローカルの開発フロー（環境変数、gcloud の前提、CI 設定など）で追記が必要な点があれば教えてください。
+
+---
+更新案の内容はここまでです。修正や補足して欲しい箇所（例：CI 設定、テスト手順、秘密情報の扱い方）があれば指示ください。
