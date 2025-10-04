@@ -179,6 +179,10 @@
       "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
       "compactPrompt": "Please summarize the following conversation history concisely. Clearly state important points, discussed topics, and decisions. Structure and organize it so that AI can easily reference it in future conversations:"
     },
+    "compactWarning": {
+      "messageCountExceeded": "The message count has exceeded {maxMessagesBeforeCompact} messages.",
+      "recommendCompactOrNew": "It is recommended to organize the conversation with <strong>/compact</strong> or create a new session."
+    },
     "overview": "Overview",
     "errors": {
       "geminiPathMissing": "geminiPath is not configured. Run setup to configure the gemini.ps1 path.",

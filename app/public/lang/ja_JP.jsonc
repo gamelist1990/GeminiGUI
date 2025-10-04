@@ -179,6 +179,10 @@
       "compactError": "❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。",
       "compactPrompt": "以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:"
     },
+    "compactWarning": {
+      "messageCountExceeded": "メッセージ数が{maxMessagesBeforeCompact}件を超えました。",
+      "recommendCompactOrNew": "<strong>/compact</strong> で会話を整理するか、新しいセッションを作成することをお勧めします。"
+    },
     "overview": "概要",
     "errors": {
       "geminiPathMissing": "geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。",
