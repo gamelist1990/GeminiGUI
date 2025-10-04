@@ -62,6 +62,15 @@ export interface GeminiStats {
   };
 }
 
+export interface ToolUsageStats {
+  toolName: string;
+  executionTime: number; // milliseconds
+  success: boolean;
+  timestamp: Date;
+  parameters?: Record<string, any>;
+  result?: any;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -69,6 +78,7 @@ export interface ChatMessage {
   timestamp: Date;
   tokenUsage?: number; // Token count for this message
   stats?: GeminiStats;
+  toolUsage?: ToolUsageStats[]; // OpenAI tool usage statistics
   hidden?: boolean;
 }
 

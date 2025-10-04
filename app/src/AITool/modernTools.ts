@@ -177,12 +177,97 @@ export const SEARCH_TOOLS: ModernToolDefinition[] = [
 ];
 
 /**
+ * Command Execution Tools
+ */
+export const COMMAND_TOOLS: ModernToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description: 'Execute a PowerShell command in the workspace. Output is always UTF-8 encoded. Use for running scripts, checking system info, or executing CLI tools.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description: 'PowerShell command to execute. Must be "powershell" or "powershell.exe".'
+          },
+          args: {
+            type: 'array',
+            description: 'Command arguments as an array. First element is typically the PowerShell script or command.',
+            items: { type: 'string' }
+          },
+          working_dir: {
+            type: 'string',
+            description: 'Working directory for command execution (default: workspace root)'
+          }
+        },
+        required: ['command', 'args']
+      }
+    }
+  }
+];
+
+/**
+ * File Checking Tools
+ */
+export const FILE_CHECK_TOOLS: ModernToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'file_check',
+      description: 'Check a file for syntax errors, linting issues, and code quality problems. Supports TypeScript, JavaScript, JSON, TOML, Rust, and more. Returns validation results with errors and warnings.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Path to the file to check. Can be relative or absolute.'
+          }
+        },
+        required: ['path']
+      }
+    }
+  }
+];
+
+/**
+ * Diff Application Tools
+ */
+export const DIFF_TOOLS: ModernToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'apply_diff',
+      description: 'Apply a unified diff patch to a file. Useful for making precise changes to code. The diff should be in standard unified diff format with @@ headers.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Path to the file to apply the diff to'
+          },
+          diff_content: {
+            type: 'string',
+            description: 'Unified diff content with proper formatting (lines starting with +, -, or space, and @@ headers)'
+          }
+        },
+        required: ['path', 'diff_content']
+      }
+    }
+  }
+];
+
+/**
  * All available modern tools
  */
 export const MODERN_TOOLS: ModernToolDefinition[] = [
   ...FILE_OPERATION_TOOLS,
   ...DIRECTORY_OPERATION_TOOLS,
-  ...SEARCH_TOOLS
+  ...SEARCH_TOOLS,
+  ...COMMAND_TOOLS,
+  ...FILE_CHECK_TOOLS,
+  ...DIFF_TOOLS
 ];
 
 /**
@@ -191,7 +276,10 @@ export const MODERN_TOOLS: ModernToolDefinition[] = [
 export const TOOL_CATEGORIES = {
   FILE_OPERATIONS: 'File Operations',
   DIRECTORY_OPERATIONS: 'Directory Operations',
-  SEARCH: 'Search & Discovery'
+  SEARCH: 'Search & Discovery',
+  COMMAND: 'Command Execution',
+  FILE_CHECK: 'File Validation',
+  DIFF: 'Diff & Patches'
 } as const;
 
 /**
@@ -205,6 +293,12 @@ export function getToolsByCategory(category: keyof typeof TOOL_CATEGORIES): Mode
       return DIRECTORY_OPERATION_TOOLS;
     case 'SEARCH':
       return SEARCH_TOOLS;
+    case 'COMMAND':
+      return COMMAND_TOOLS;
+    case 'FILE_CHECK':
+      return FILE_CHECK_TOOLS;
+    case 'DIFF':
+      return DIFF_TOOLS;
     default:
       return [];
   }

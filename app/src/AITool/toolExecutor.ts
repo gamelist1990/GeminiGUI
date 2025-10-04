@@ -209,6 +209,52 @@ export async function executeModernTool(
         break;
       }
 
+      case 'run_command': {
+        const workingDir = parameters.working_dir ? resolvePath(parameters.working_dir) : workspacePath;
+        const commandResult = await invoke<{
+          stdout: string;
+          stderr: string;
+          exitCode: number;
+          success: boolean;
+        }>('tool_run_command', {
+          command: parameters.command || 'powershell',
+          args: parameters.args || [],
+          workingDir
+        });
+        result = commandResult;
+        break;
+      }
+
+      case 'file_check': {
+        const filePath = resolvePath(parameters.path);
+        const checkResult = await invoke<{
+          valid: boolean;
+          errors: string[];
+          warnings: string[];
+          file_type: string;
+          line_count: number;
+          encoding: string;
+        }>('tool_file_check', { path: filePath });
+        result = checkResult;
+        break;
+      }
+
+      case 'apply_diff': {
+        const filePath = resolvePath(parameters.path);
+        const diffResult = await invoke<{
+          success: boolean;
+          message: string;
+          lines_changed: number;
+          lines_added: number;
+          lines_removed: number;
+        }>('tool_apply_diff', {
+          path: filePath,
+          diffContent: parameters.diff_content
+        });
+        result = diffResult;
+        break;
+      }
+
       default:
         throw new Error(`Unknown tool: ${actualToolName}`);
     }

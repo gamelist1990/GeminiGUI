@@ -12,60 +12,6 @@ import { mkdir, writeTextFile, exists } from '@tauri-apps/plugin-fs';
 import { Command } from '@tauri-apps/plugin-shell';
 import type { ToolDefinition, ToolUsage, ToolExecutionResult } from '../types';
 
-/**
- * Parse Python tool file to extract register() definition
- * 
- * Looks for patterns like:
- * ```python
- * def register():
- *     return {
- *         'name': 'calculator',
- *         'docs': '...',
- *         ...
- *     }
- * ```
- */
-async function parseToolDefinition(pythonFile: string, content: string): Promise<ToolDefinition | null> {
-  try {
-    // Improved regex to handle multi-line Python dictionaries
-    // Matches: def register(): return { ... }
-    const registerMatch = content.match(/def\s+register\s*\(\s*\)\s*:[\s\S]*?return\s*\{([\s\S]*?)\n\s*\}/m);
-    if (!registerMatch) {
-      console.warn(`No register() function found in ${pythonFile}`);
-      return null;
-    }
-
-    // Extract the dictionary content
-    const dictContent = registerMatch[1];
-    
-    // Parse individual fields with support for multi-line strings
-    const nameMatch = dictContent.match(/['"]name['"]\s*:\s*['"]([^'"]+)['"]/);
-    const docsMatch = dictContent.match(/['"]docs['"]\s*:\s*['"]+([\s\S]*?)['"](?=\s*,|\s*})/m);
-    const usageMatch = dictContent.match(/['"]usage['"]\s*:\s*['"]+([\s\S]*?)['"](?=\s*,|\s*})/m);
-    
-    if (!nameMatch) {
-      console.warn(`No 'name' field found in ${pythonFile}`);
-      return null;
-    }
-
-    // For MVP, use simplified schema
-    return {
-      name: nameMatch[1],
-      docs: docsMatch ? docsMatch[1].replace(/\\n/g, '\n') : 'No documentation available',
-      usage: usageMatch ? usageMatch[1].replace(/\\n/g, '\n') : 'No usage information',
-      parameters: [], // TODO: parse from Python docstring or explicit dict
-      responseSchema: {
-        type: 'object',
-        description: 'Tool execution result'
-      },
-      pythonFile,
-      version: '1.0.0'
-    };
-  } catch (error) {
-    console.error(`Error parsing tool definition from ${pythonFile}:`, error);
-    return null;
-  }
-}
 
 
 /**
@@ -75,47 +21,14 @@ async function parseToolDefinition(pythonFile: string, content: string): Promise
  * 
  * @returns Array of tool definitions
  */
+/**
+ * @deprecated Python tool system has been replaced by modern Rust-based tools.
+ * Use MODERN_TOOLS from '../AITool/modernTools' instead.
+ * This function is kept for backward compatibility but returns an empty array.
+ */
 export async function loadToolsFromPublic(): Promise<ToolDefinition[]> {
-  try {
-    // List of known tool files (can be dynamically generated in build process)
-    const toolFiles = [
-      'file_operations.py',
-      'directory_operations.py'
-    ];
-
-    console.info('[Tools] Loading tools from public/tools using fetch()');
-
-    // Parse each tool definition
-    const tools: ToolDefinition[] = [];
-    for (const fileName of toolFiles) {
-      try {
-        const response = await fetch(`/tools/${fileName}`);
-        if (!response.ok) {
-          console.warn(`[Tools] Could not fetch ${fileName}: ${response.status}`);
-          continue;
-        }
-
-        const content = await response.text();
-        const toolDef = await parseToolDefinition(fileName, content);
-        
-        if (toolDef) {
-          tools.push(toolDef);
-          console.info(`[Tools] Loaded tool: ${toolDef.name} from ${fileName}`);
-        }
-      } catch (error) {
-        console.warn(`[Tools] Error loading ${fileName}:`, error);
-      }
-    }
-
-    if (tools.length === 0) {
-      console.info('[Tools] No tools loaded from public/tools/');
-    }
-
-    return tools;
-  } catch (error) {
-    console.error('[Tools] Error loading tools from public/tools:', error);
-    return [];
-  }
+  console.info('[Tools] loadToolsFromPublic is deprecated. Use MODERN_TOOLS instead.');
+  return [];
 }
 
 /**

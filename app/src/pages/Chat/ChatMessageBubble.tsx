@@ -15,8 +15,8 @@ const SyntaxHighlighter = React.lazy(() =>
 // oneDark is relatively small; keep it static import for style reference
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
-// Markdown components for syntax highlighting
-const markdownComponents = {
+// Markdown components for syntax highlighting - Exported for reuse in streaming
+export const markdownComponents = {
   code({ node, inline, className, children, ...props }: any) {
     const match = /language-(\\w+)/.exec(className || "");
     if (!inline && match) {
@@ -482,6 +482,50 @@ function ChatMessageBubble({
                       {t("chat.stats.messageStats.linesRemoved")}{" "}
                       {message.stats.files.totalLinesRemoved}
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* OpenAI Tool Usage Statistics */}
+            {message.toolUsage && message.toolUsage.length > 0 && (
+              <div className="tool-usage-section">
+                <h4 className="tool-usage-title">
+                  🔧 Tool Usage History ({message.toolUsage.length} calls)
+                </h4>
+                <div className="tool-usage-list">
+                  {message.toolUsage.map((tool, index) => (
+                    <div 
+                      key={`${tool.toolName}-${index}`} 
+                      className={`tool-usage-item ${tool.success ? 'success' : 'failed'}`}
+                    >
+                      <div className="tool-usage-header">
+                        <span className="tool-usage-icon">
+                          {tool.success ? '✓' : '✗'}
+                        </span>
+                        <span className="tool-usage-name">{tool.toolName}</span>
+                        <span className="tool-usage-time">{tool.executionTime}ms</span>
+                      </div>
+                      {tool.result && (
+                        <div className="tool-usage-result">
+                          <pre>{JSON.stringify(tool.result, null, 2)}</pre>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="tool-usage-summary">
+                  <div className="tool-usage-stat">
+                    <span className="stat-label">Total Execution:</span>
+                    <span className="stat-value">
+                      {message.toolUsage.reduce((sum, t) => sum + t.executionTime, 0)}ms
+                    </span>
+                  </div>
+                  <div className="tool-usage-stat">
+                    <span className="stat-label">Success Rate:</span>
+                    <span className="stat-value">
+                      {Math.round((message.toolUsage.filter(t => t.success).length / message.toolUsage.length) * 100)}%
+                    </span>
                   </div>
                 </div>
               </div>

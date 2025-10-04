@@ -63,8 +63,19 @@ export default function SettingsPage({ settings, onUpdateSettings, onClose, glob
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const handleSettingChange = (updates: Partial<SettingsType>) => {
-    setLocalSettings({ ...localSettings, ...updates });
+    const newSettings = { ...localSettings, ...updates };
+    setLocalSettings(newSettings);
     setHasUnsavedChanges(true);
+    
+    // ツール設定の変更は即座に保存（toolsとenabledToolsの両方が含まれる場合のみ）
+    if ('tools' in updates && 'enabledTools' in updates) {
+      console.log('[Settings] Tool configuration changed, saving immediately...', {
+        tools: updates.tools?.length,
+        enabledTools: updates.enabledTools?.length
+      });
+      onUpdateSettings(newSettings);
+      setHasUnsavedChanges(false);
+    }
   };
 
   const handleSave = () => {

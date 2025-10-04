@@ -17,6 +17,14 @@ function internalLog(msg: string, log?: LogFunction) {
 
 export interface GeminiResponse {
   response: string;
+  toolUsage?: Array<{
+    toolName: string;
+    executionTime: number;
+    success: boolean;
+    timestamp: Date;
+    parameters?: Record<string, any>;
+    result?: any;
+  }>;
   stats: {
     models: {
       [modelName: string]: {

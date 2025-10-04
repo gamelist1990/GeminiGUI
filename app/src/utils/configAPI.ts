@@ -72,13 +72,13 @@ export class Config {
    * Validate tools array and remove non-existent tools
    * @param configTools Tools from config.json
    * @returns Validated and cleaned tools array
+   * @deprecated Modern tools system uses MODERN_TOOLS directly
    */
   private async validateAndCleanupTools(configTools: ToolConfig[]): Promise<ToolConfig[]> {
     try {
-      // Import loadToolsFromPublic dynamically to avoid circular dependency
-      const { loadToolsFromPublic } = await import('./toolManager');
-      const availableTools = await loadToolsFromPublic();
-      const availableToolNames = new Set(availableTools.map(t => t.name));
+      // Modern tools system: Use MODERN_TOOLS from AITool/modernTools
+      const { getAllToolNames } = await import('../AITool/modernTools');
+      const availableToolNames = new Set(getAllToolNames());
       
       // Filter out tools that no longer exist
       const validatedTools = configTools.filter(tool => {

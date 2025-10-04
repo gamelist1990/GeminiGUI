@@ -9,17 +9,13 @@ import * as fsPlugin from "@tauri-apps/plugin-fs";
 import { ChatProps } from "./types";
 import ProcessingModal from "./ProcessingModal";
 import StatsModal from "./StatsModal";
-import ChatMessageBubble from "./ChatMessageBubble";
+import ChatMessageBubble, { markdownComponents } from "./ChatMessageBubble";
 import { cleanupManager } from "../../utils/cleanupManager";
 
 // Lazy load Markdown components for streaming
 const ReactMarkdown = React.lazy(
   () => import("react-markdown")
 ) as unknown as any;
-const SyntaxHighlighter = React.lazy(() =>
-  import("react-syntax-highlighter").then((mod) => ({ default: mod.Prism }))
-) as unknown as any;
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 export default function Chat({
   workspace,
@@ -1599,39 +1595,10 @@ export default function Chat({
                 <div className="message-bubble">
                   <div className="message-content streaming-content">
                     {streamingMessage ? (
-                      // Show streaming content with Markdown rendering
+                      // Show streaming content with Markdown rendering (using shared components)
                       <>
                         <React.Suspense fallback={<div>Loading...</div>}>
-                          <ReactMarkdown
-                            components={{
-                              code({ node, inline, className, children, ...props }: any) {
-                                const match = /language-(\w+)/.exec(className || "");
-                                if (!inline && match) {
-                                  return (
-                                    <React.Suspense fallback={<pre className="code-loading">Loading code…</pre>}>
-                                      <SyntaxHighlighter
-                                        style={oneDark}
-                                        language={match[1]}
-                                        PreTag="div"
-                                        {...props}
-                                      >
-                                        {String(children).replace(/\n$/, "")}
-                                      </SyntaxHighlighter>
-                                    </React.Suspense>
-                                  );
-                                } else {
-                                  return (
-                                    <code className={className} {...props}>
-                                      {children}
-                                    </code>
-                                  );
-                                }
-                              },
-                              p({ children, ...props }: any) {
-                                return <p {...props}>{children}</p>;
-                              },
-                            }}
-                          >
+                          <ReactMarkdown components={markdownComponents}>
                             {streamingMessage}
                           </ReactMarkdown>
                         </React.Suspense>

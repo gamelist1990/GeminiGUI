@@ -29,7 +29,13 @@ pub fn run() {
             tools::tool_list_directory,
             tools::tool_create_directory,
             // Search operations
-            tools::tool_search_files
+            tools::tool_search_files,
+            // Command operations
+            tools::tool_run_command,
+            // File check operations
+            tools::tool_file_check,
+            // Diff operations
+            tools::tool_apply_diff
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

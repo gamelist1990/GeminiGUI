@@ -5,6 +5,9 @@ import {
   FILE_OPERATION_TOOLS, 
   DIRECTORY_OPERATION_TOOLS, 
   SEARCH_TOOLS,
+  COMMAND_TOOLS,
+  FILE_CHECK_TOOLS,
+  DIFF_TOOLS,
   getAllToolNames 
 } from '../AITool/modernTools';
 import '../pages/Settings.css';
@@ -17,7 +20,7 @@ interface ModernToolSettingsPanelProps {
 }
 
 export default function ModernToolSettingsPanel({ 
-  enabledTools, 
+  enabledTools,
   tools,
   onUpdateEnabledTools,
   onUpdateTools 
@@ -50,11 +53,10 @@ export default function ModernToolSettingsPanel({
           lastChecked: new Date().toISOString()
         };
       } else {
-        // New tool - check if it was previously enabled
-        const wasEnabled = enabledTools.includes(toolName);
+        // New tool - default to enabled
         return {
           name: toolName,
-          enabled: wasEnabled !== undefined ? wasEnabled : true, // Default to enabled
+          enabled: true, // デフォルトで有効化
           lastChecked: new Date().toISOString()
         };
       }
@@ -71,28 +73,36 @@ export default function ModernToolSettingsPanel({
   };
 
   const handleToggleTool = (toolName: string) => {
-    // Update tools config
-    const updatedTools = tools.map(tool => 
-      tool.name === toolName 
-        ? { ...tool, enabled: !tool.enabled, lastChecked: new Date().toISOString() }
-        : tool
-    );
+    // Find the tool or create it
+    const existingTool = tools.find(t => t.name === toolName);
+    const newEnabledState = existingTool ? !existingTool.enabled : true;
     
-    // If tool doesn't exist in config yet, add it
-    if (!tools.find(t => t.name === toolName)) {
-      updatedTools.push({
-        name: toolName,
-        enabled: true,
-        lastChecked: new Date().toISOString()
-      });
+    // Update tools config
+    let updatedTools: ToolConfig[];
+    if (existingTool) {
+      updatedTools = tools.map(tool => 
+        tool.name === toolName 
+          ? { ...tool, enabled: newEnabledState, lastChecked: new Date().toISOString() }
+          : tool
+      );
+    } else {
+      updatedTools = [
+        ...tools,
+        {
+          name: toolName,
+          enabled: newEnabledState,
+          lastChecked: new Date().toISOString()
+        }
+      ];
     }
     
-    onUpdateTools(updatedTools);
-    
-    // Update enabledTools
+    // Calculate new enabledTools
     const newEnabledTools = updatedTools
       .filter(t => t.enabled)
       .map(t => t.name);
+    
+    // Update both configs at once
+    onUpdateTools(updatedTools);
     onUpdateEnabledTools(newEnabledTools);
   };
 
@@ -109,12 +119,11 @@ export default function ModernToolSettingsPanel({
 
   const isToolEnabled = (toolName: string): boolean => {
     const tool = tools.find(t => t.name === toolName);
-    return tool ? tool.enabled : true; // Default to enabled if not in config
-  };
-
-  const getToolDescription = (toolName: string): string => {
-    const tool = MODERN_TOOLS.find(t => t.function.name === toolName);
-    return tool ? tool.function.description : '';
+    if (tool) {
+      return tool.enabled;
+    }
+    // Fallback to enabledTools array if tool not in config
+    return enabledTools.includes(toolName);
   };
 
   const enabledCount = getAllToolNames().filter(isToolEnabled).length;
@@ -195,6 +204,72 @@ export default function ModernToolSettingsPanel({
         <h3 className="category-title">🔍 Search & Discovery</h3>
         <div className="tools-list">
           {SEARCH_TOOLS.map(tool => (
+            <div key={tool.function.name} className="tool-item">
+              <label className="tool-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isToolEnabled(tool.function.name)}
+                  onChange={() => handleToggleTool(tool.function.name)}
+                />
+                <div className="tool-info">
+                  <span className="tool-name">{tool.function.name}</span>
+                  <span className="tool-description">{tool.function.description}</span>
+                </div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Command Execution */}
+      <div className="tool-category">
+        <h3 className="category-title">⚡ Command Execution</h3>
+        <div className="tools-list">
+          {COMMAND_TOOLS.map(tool => (
+            <div key={tool.function.name} className="tool-item">
+              <label className="tool-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isToolEnabled(tool.function.name)}
+                  onChange={() => handleToggleTool(tool.function.name)}
+                />
+                <div className="tool-info">
+                  <span className="tool-name">{tool.function.name}</span>
+                  <span className="tool-description">{tool.function.description}</span>
+                </div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* File Validation */}
+      <div className="tool-category">
+        <h3 className="category-title">✅ File Validation</h3>
+        <div className="tools-list">
+          {FILE_CHECK_TOOLS.map(tool => (
+            <div key={tool.function.name} className="tool-item">
+              <label className="tool-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isToolEnabled(tool.function.name)}
+                  onChange={() => handleToggleTool(tool.function.name)}
+                />
+                <div className="tool-info">
+                  <span className="tool-name">{tool.function.name}</span>
+                  <span className="tool-description">{tool.function.description}</span>
+                </div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Diff & Patches */}
+      <div className="tool-category">
+        <h3 className="category-title">🔧 Diff & Patches</h3>
+        <div className="tools-list">
+          {DIFF_TOOLS.map(tool => (
             <div key={tool.function.name} className="tool-item">
               <label className="tool-checkbox">
                 <input

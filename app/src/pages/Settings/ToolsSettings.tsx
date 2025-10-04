@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Settings, ToolConfig } from '../../types';
 import { t } from '../../utils/i18n';
-import ToolSettingsPanel from '../../components/ToolSettingsPanel';
+import ModernToolSettingsPanel from '../../components/ModernToolSettingsPanel';
 import './ToolsSettings.css';
 
 interface ToolsSettingsProps {
@@ -10,7 +10,7 @@ interface ToolsSettingsProps {
 }
 
 export const ToolsSettings: React.FC<ToolsSettingsProps> = ({ settings, onUpdateSettings }) => {
-  const [showToolPanel, setShowToolPanel] = useState(false);
+  const [showToolPanel, setShowToolPanel] = useState(true); // デフォルトで開いた状態に
 
   return (
     <div className="settings-category">
@@ -72,11 +72,22 @@ export const ToolsSettings: React.FC<ToolsSettingsProps> = ({ settings, onUpdate
           </button>
           {showToolPanel && (
             <div className="tool-panel-container">
-              <ToolSettingsPanel 
+              <ModernToolSettingsPanel 
                 enabledTools={settings.enabledTools || []}
                 tools={settings.tools || []}
-                onUpdateEnabledTools={(tools: string[]) => onUpdateSettings({ enabledTools: tools })}
-                onUpdateTools={(tools: ToolConfig[]) => onUpdateSettings({ tools })}
+                onUpdateEnabledTools={(enabledTools: string[]) => {
+                  // enabledToolsとtoolsを同時に更新
+                  const updatedTools = (settings.tools || []).map(tool => ({
+                    ...tool,
+                    enabled: enabledTools.includes(tool.name)
+                  }));
+                  onUpdateSettings({ enabledTools, tools: updatedTools });
+                }}
+                onUpdateTools={(tools: ToolConfig[]) => {
+                  // toolsとenabledToolsを同時に更新
+                  const enabledTools = tools.filter(t => t.enabled).map(t => t.name);
+                  onUpdateSettings({ tools, enabledTools });
+                }}
               />
             </div>
           )}

@@ -8,8 +8,14 @@
 pub mod file_operations;
 pub mod directory_operations;
 pub mod search;
+pub mod command_operations;
+pub mod file_check;
+pub mod diff_operations;
 
 // Re-export all tool commands for easy access
 pub use file_operations::*;
 pub use directory_operations::*;
 pub use search::*;
+pub use command_operations::*;
+pub use file_check::*;
+pub use diff_operations::*;

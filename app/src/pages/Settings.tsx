@@ -4,7 +4,7 @@ import { t } from '../utils/i18n';
 import SetupModal from './Setup';
 import { detectGlobalNpmPath } from '../utils/setupAPI';
 import { Config } from '../utils/configAPI';
-import ToolSettingsPanel from '../components/ToolSettingsPanel';
+import ModernToolSettingsPanel from '../components/ModernToolSettingsPanel';
 
 interface SettingsProps {
   settings: SettingsType;
@@ -452,12 +452,12 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
             <label className="setting-label">🛠️ Tool Settings</label>
             <p className="setting-description">
               Manage AI tools that extend capabilities during chat sessions. 
-              Tools are Python scripts located in <code>public/tools/</code>.
+              Modern tools use Rust/Tauri for safe and efficient execution.
             </p>
-            <ToolSettingsPanel
+            <ModernToolSettingsPanel
               enabledTools={localSettings.enabledTools || []}
               tools={localSettings.tools || []}
-              onUpdateEnabledTools={(enabledTools) => 
+              onUpdateEnabledTools={(enabledTools: string[]) => 
                 setLocalSettings({ ...localSettings, enabledTools })
               }
               onUpdateTools={(tools: ToolConfig[]) =>
