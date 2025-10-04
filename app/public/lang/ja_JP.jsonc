@@ -123,8 +123,8 @@
       "usageCount": "使用回数:",
       "executionTime": "実行時間:",
       "fileChanges": "ファイル変更",
-      "linesAdded": "追加行数:",
-      "linesRemoved": "削除行数:",
+      "linesAdded": "追加行数",
+      "linesRemoved": "削除行数",
       "cancel": "キャンセル",
       "resend": "再送信 (Ctrl+Enter)",
       "overview": "概要",
@@ -133,22 +133,21 @@
       "totalMessages": "総メッセージ数",
       "apiStats": "API 統計",
       "diff": "差分:"
-    
-      "messageStats": {
-      "fileChanges": "ファイル変更",
-      "linesAdded": "追加行数",
-      "linesRemoved": "削除行数"
-    }
-      "processing": {
-      "compacting": "会話履歴を要約しています...",
-      "compactError": "❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。",
-      "compactPrompt": "以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:"
-    }
     },
     "messageStats": {
       "fileChanges": "ファイル変更",
       "linesAdded": "追加行数",
-      "linesRemoved": "削除行数"
+      "linesRemoved": "追加行数"
+    },
+    "processing": {
+      "compacting": "会話履歴を要約しています...",
+      "compactError": "❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。",
+      "compactPrompt": "以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:"
+    },
+    "messageStats": {
+      "fileChanges": "ファイル変更",
+      "linesAdded": "追加行数",
+      "linesRemoved": "追加行数"
     },
     "processing": {
       "compacting": "会話履歴を要約しています...",
@@ -180,7 +179,7 @@
     "apiKeyDescription": "💡 カスタムAPIキーを設定すると、環境変数 GEMINI_API_KEY として使用されます。",
     "apiKeyDefaultNote": "空白のままにすると、システムのデフォルトAPIキーが使用されます。",
     "conversationCleanup": "会話整理の推奨タイミング",
-    "messages": "メッセージ",
+    "messages": "messages",
     "cleanupDescription": "📊 このメッセージ数に達すると、/compactコマンドまたは新セッション作成を推奨します。",
     "cleanupReason": "会話が長くなるとトークン消費が増加するため、定期的な整理を推奨します。",
     "geminiSetupCheck": "🤖 Gemini CLI セットアップ確認",
