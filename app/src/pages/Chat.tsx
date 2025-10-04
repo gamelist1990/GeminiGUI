@@ -387,7 +387,7 @@ export default function Chat({
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `❌ 会話の要約中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: t('chat.errors.compactCommandFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -631,7 +631,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `❌ メッセージの改善中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: t('chat.errors.fixchatCommandFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
