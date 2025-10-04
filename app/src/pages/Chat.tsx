@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Command } from '@tauri-apps/plugin-shell';
+import { openFile } from '../utils/powershellExecutor';
 import './Chat.css';
 
 // Markdown components for syntax highlighting
@@ -1544,8 +1545,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
         }
 
         // Use PowerShell to open the file or directory
-        const command = Command.create('powershell.exe', ['-Command', `start "${targetPath.replace(/"/g, '""')}"`]);
-        await command.execute();
+        await openFile(targetPath);
       }
     } catch (error) {
       console.error('Failed to open target:', error);

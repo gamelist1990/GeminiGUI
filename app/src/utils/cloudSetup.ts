@@ -1,5 +1,6 @@
 import { readTextFile, exists } from '@tauri-apps/plugin-fs';
 import { Command } from '@tauri-apps/plugin-shell';
+import { getUserProfilePath, setEnvironmentVariable as setPowerShellEnvVar } from './powershellExecutor';
 
 type LogFunction = (message: string) => void;
 
@@ -33,12 +34,7 @@ function internalLog(message: string, log?: LogFunction) {
 async function loadOAuthCredentials(log?: LogFunction): Promise<OAuthCredentials | null> {
   internalLog('loadOAuthCredentials: Starting to load OAuth credentials', log);
   try {
-    const homeDir = await Command.create('powershell.exe', [
-      '-Command',
-      'echo $env:USERPROFILE'
-    ]).execute();
-
-    const userProfile = homeDir.stdout.trim();
+    const userProfile = await getUserProfilePath();
     const oauthPath = `${userProfile}\\.gemini\\oauth_creds.json`;
     internalLog(`OAuth credentials path: ${oauthPath}`, log);
     
@@ -240,27 +236,15 @@ async function setEnvironmentVariable(
   try {
     log(`環境変数 GOOGLE_CLOUD_PROJECT を設定しています...`);
 
-    const setEnvCommand = await Command.create('powershell.exe', [
-      '-Command',
-      `[System.Environment]::SetEnvironmentVariable('GOOGLE_CLOUD_PROJECT', '${projectId}', [System.EnvironmentVariableTarget]::User)`,
-    ]).execute();
+    await setPowerShellEnvVar('GOOGLE_CLOUD_PROJECT', projectId);
 
-    if (setEnvCommand.code === 0) {
-      log(`✓ 環境変数を設定しました: GOOGLE_CLOUD_PROJECT=${projectId}`);
-      return true;
-    } else {
-      log(`⚠️ 環境変数の設定に失敗しました`);
-      return false;
-    }
+    log(`✓ 環境変数を設定しました: GOOGLE_CLOUD_PROJECT=${projectId}`);
+    return true;
   } catch (error) {
     log(`エラー: 環境変数の設定に失敗しました: ${error}`);
     return false;
   }
 }
-
-/**
- * Google Cloud Projectの自動セットアップ（メイン関数）
- */
 export async function autoSetupCloudProject(
   log: LogFunction
 ): Promise<CloudProjectSetupResult> {
