@@ -75,11 +75,6 @@ function App() {
     updateLastOpened(workspace.id);
     addWorkspace(workspace);
     
-    // Auto-create first session if no sessions exist
-    if (sessions.length === 0) {
-      await createNewSession();
-    }
-    
     setCurrentView('chat');
   };
 
@@ -150,6 +145,7 @@ function App() {
           currentSessionId={currentSessionId}
           maxSessionsReached={maxSessionsReached}
           approvalMode={settings.approvalMode}
+          responseMode={settings.responseMode || 'async'}
           totalTokens={getTotalTokens()}
           customApiKey={settings.customApiKey}
           googleCloudProjectId={settings.googleCloudProjectId}

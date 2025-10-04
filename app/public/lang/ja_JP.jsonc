@@ -179,11 +179,6 @@
       "user": "ユーザー",
       "assistant": "アシスタント"
     },
-    "messageStats": {
-      "fileChanges": "ファイル変更",
-      "linesAdded": "追加行数",
-      "linesRemoved": "削除行数"
-    },
     "processing": {
       "compacting": "会話履歴を要約しています...",
       "compactError": "❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。",
@@ -228,6 +223,11 @@
     "autoEditApproval": "自動編集 (編集ツールを自動承認)",
     "yoloApproval": "YOLO (すべてのツールを自動承認)",
     "approvalDescription": "Gemini がツール承認をどのように処理するかを制御します。デフォルトでは手動承認が必要です。自動編集では編集ツールを自動承認し、YOLO ではすべてのアクションを自動承認します。",
+    "responseMode": "応答モード",
+    "asyncMode": "非同期モード (現在の標準)",
+    "streamMode": "ストリームモード (今後対応予定)",
+    "responseModeDescription": "AI応答の処理方法を選択します。非同期モードは完全な応答を一度に取得します。ストリームモードは将来実装予定で、リアルタイムで応答を受信します。",
+    "streamNotAvailable": "⚠️ ストリームモードは現在開発中です。将来のバージョンで利用可能になります。",
     "modelSelection": "🤖 モデル選択",
     "defaultModel": "デフォルト Gemini 2.5 Pro",
     "flashModel": "Gemini 2.5 Flash (高速・節約)",

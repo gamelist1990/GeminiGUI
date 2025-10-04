@@ -7,6 +7,7 @@ export interface ChatProps {
   currentSessionId: string;
   maxSessionsReached: boolean;
   approvalMode: "default" | "auto_edit" | "yolo";
+  responseMode: "async" | "stream"; // Response processing mode
   totalTokens: number;
   customApiKey?: string;
   googleCloudProjectId?: string;

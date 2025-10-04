@@ -77,6 +77,7 @@ export interface Settings {
   theme: 'light' | 'dark';
   approvalMode: 'default' | 'auto_edit' | 'yolo';
   model: 'default' | 'gemini-2.5-flash';
+  responseMode: 'async' | 'stream'; // Response processing mode
   customApiKey?: string;
   maxMessagesBeforeCompact: number;
   geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
@@ -87,3 +88,4 @@ export interface Settings {
 export type Theme = 'light' | 'dark';
 export type Language = 'ja_JP' | 'en_US';
 export type ApprovalMode = 'default' | 'auto_edit' | 'yolo';
+export type ResponseMode = 'async' | 'stream';

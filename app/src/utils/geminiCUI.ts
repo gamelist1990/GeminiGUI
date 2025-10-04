@@ -53,6 +53,17 @@ export interface GeminiResponse {
   };
 }
 
+// Stream response interface for future implementation
+export interface GeminiStreamChunk {
+  type: 'text' | 'stats' | 'done' | 'error';
+  content?: string;
+  stats?: GeminiResponse['stats'];
+  error?: string;
+}
+
+// Callback type for stream processing
+export type StreamCallback = (chunk: GeminiStreamChunk) => void;
+
 export interface GeminiOptions {
   approvalMode?: 'default' | 'auto_edit' | 'yolo';
   includeDirectories?: string[]; // Directories to include
@@ -478,4 +489,52 @@ User: ${prompt}
       internalLog(`Temp directory will be auto-cleaned: ${workspaceTempDir}`, log);
     }
   }
+}
+
+/**
+ * Stream-based Gemini API call (Future Implementation)
+ * 
+ * This function is a placeholder for future streaming response support.
+ * When implemented, it will provide real-time response streaming from the Gemini API.
+ * 
+ * @param prompt - User prompt
+ * @param workspacePath - Workspace path
+ * @param options - Gemini options
+ * @param googleCloudProjectId - Google Cloud Project ID
+ * @param geminiPath - Path to gemini.ps1
+ * @param onChunk - Callback for each stream chunk
+ * @param log - Log function
+ * @returns Promise<GeminiResponse> - Final response after stream completes
+ * 
+ * TODO: Implementation plan
+ * 1. Add streaming support to gemini.ps1 CLI (e.g., --stream flag)
+ * 2. Parse streaming JSON responses line by line
+ * 3. Call onChunk callback for each chunk
+ * 4. Accumulate final response and return
+ * 5. Handle errors and interruptions
+ */
+export async function callGeminiStream(
+  prompt: string,
+  workspacePath?: string,
+  options?: GeminiOptions,
+  googleCloudProjectId?: string,
+  geminiPath?: string,
+  onChunk?: StreamCallback,
+  log?: LogFunction
+): Promise<GeminiResponse> {
+  // For now, fallback to regular async call
+  // In the future, this will use streaming architecture
+  internalLog('Stream mode is not yet implemented, falling back to async mode', log);
+  
+  // Simulate streaming by calling async and sending as single chunk
+  const response = await callGemini(prompt, workspacePath, options, googleCloudProjectId, geminiPath, log);
+  
+  if (onChunk) {
+    // Send the complete response as a single chunk
+    onChunk({ type: 'text', content: response.response });
+    onChunk({ type: 'stats', stats: response.stats });
+    onChunk({ type: 'done' });
+  }
+  
+  return response;
 }

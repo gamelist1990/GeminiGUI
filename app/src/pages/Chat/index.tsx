@@ -18,6 +18,7 @@ export default function Chat({
   currentSessionId,
   maxSessionsReached,
   approvalMode,
+  responseMode,
   totalTokens,
   customApiKey,
   googleCloudProjectId,
@@ -692,13 +693,32 @@ export default function Chat({
         "Sending message with conversation history:",
         conversationHistory ? "Yes" : "No"
       );
-      const geminiResponse = await callGemini(
-        inputValue,
-        workspace.path,
-        options,
-        googleCloudProjectId,
-        geminiPath
-      );
+      
+      // Response mode handling: async (current) vs stream (future)
+      // Currently, only async mode is fully implemented
+      // Stream mode will be implemented in future updates
+      let geminiResponse;
+      if (responseMode === 'stream') {
+        // TODO: Future implementation - Stream mode
+        // For now, fallback to async mode
+        console.warn('Stream mode is not yet implemented, using async mode');
+        geminiResponse = await callGemini(
+          inputValue,
+          workspace.path,
+          options,
+          googleCloudProjectId,
+          geminiPath
+        );
+      } else {
+        // Async mode (default)
+        geminiResponse = await callGemini(
+          inputValue,
+          workspace.path,
+          options,
+          googleCloudProjectId,
+          geminiPath
+        );
+      }
 
       // Calculate total tokens from stats
       let totalTokens = 0;

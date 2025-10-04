@@ -149,6 +149,34 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
           </div>
 
           <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">⚡</span>
+              {t('settings.responseMode')}
+            </label>
+            <select
+              className="setting-select"
+              value={localSettings.responseMode || 'async'}
+              onChange={(e) =>
+                setLocalSettings({ ...localSettings, responseMode: e.target.value as 'async' | 'stream' })
+              }
+            >
+              <option value="async">{t('settings.asyncMode')}</option>
+              <option value="stream" disabled>{t('settings.streamMode')}</option>
+            </select>
+            <p className="setting-description">
+              {t('settings.responseModeDescription')}
+              {localSettings.responseMode === 'stream' && (
+                <>
+                  <br />
+                  <span style={{ color: 'var(--vscode-charts-orange)' }}>
+                    {t('settings.streamNotAvailable')}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="setting-group">
             <label className="setting-label">{t('settings.modelSelection')}</label>
             <select
               className="setting-select"
