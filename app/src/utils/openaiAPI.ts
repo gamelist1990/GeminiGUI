@@ -1,6 +1,7 @@
 import { GeminiResponse, StreamCallback } from './geminiCUI';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { readTextFile } from '@tauri-apps/plugin-fs';
+import { generateModernToolDefinitions } from './modernToolSystem';
+import { executeModernTool } from '../AITool/toolExecutor';
 
 type LogFunction = (message: string) => void;
 
@@ -21,8 +22,7 @@ export interface OpenAIOptions {
   conversationHistoryJson?: string; // JSON string of conversation history
   includes?: string[]; // File/directory attachments
   includeDirectories?: string[]; // Directory attachments
-  toolUsageJsonPath?: string; // Path to toolUsage.json
-  enabledTools?: string[]; // Enabled tool names
+  enabledTools?: string[]; // Enabled tool names (uses modern tool system)
   workspacePath?: string; // Current workspace path
   workspaceId?: string; // Workspace identifier
   sessionId?: string; // Session identifier
@@ -117,7 +117,7 @@ interface OpenAIStreamChunk {
 /**
  * Build comprehensive system prompt with workspace context, file attachments, and tool information
  */
-async function buildSystemPrompt(options: OpenAIOptions, log?: LogFunction): Promise<string> {
+async function buildSystemPrompt(options: OpenAIOptions): Promise<string> {
   const sections: string[] = [];
 
   // Add workspace context
@@ -145,43 +145,14 @@ ${allIncludes.map(inc => `- ${inc}`).join('\n')}
 You can reference these files in your responses.`);
   }
 
-  // Add tool information if provided
-  if (options.toolUsageJsonPath && options.enabledTools && options.enabledTools.length > 0) {
-    try {
-      // Read toolUsage.json to get tool details
-      const toolUsageContent = await readTextFile(options.toolUsageJsonPath);
-      const toolUsageData = JSON.parse(toolUsageContent);
-      
-      sections.push(`# Available Tools
+  // Modern tool system handles tool definitions via OpenAI function calling
+  // No need for system prompt explanation - tools are provided in the tools parameter
+  if (options.enabledTools && options.enabledTools.length > 0) {
+    sections.push(`# Available Tools
 
-You have access to the following Python-based tools for file operations and other tasks:
+You have access to the following tools: ${options.enabledTools.join(', ')}
 
-**Enabled Tools:** ${options.enabledTools.join(', ')}
-
-**Tool Usage File:** ${options.toolUsageJsonPath}
-
-**CRITICAL INSTRUCTIONS:**
-1. When the user asks you to perform file operations (create, edit, read files/directories), USE THE TOOLS
-2. Each tool has specific parameters and usage patterns defined in the tool definitions
-3. Tools are executed via Python and return JSON output
-4. Always follow the exact parameter format specified for each tool
-5. Tools support operations like:
-   - File operations (read, write, create, delete)
-   - Directory operations (list, create, traverse)
-   - Code analysis and manipulation
-   - And more based on enabled tools
-
-**Tool Definitions:**
-${JSON.stringify(toolUsageData, null, 2)}
-
-Please use these tools when appropriate to fulfill user requests.`);
-    } catch (error) {
-      internalLog(`Failed to read toolUsage.json: ${error}`, log);
-      sections.push(`# Available Tools
-
-You have access to tools: ${options.enabledTools.join(', ')}
-Tool definitions are available at: ${options.toolUsageJsonPath}`);
-    }
+**CRITICAL:** When the user asks you to perform file operations (create, edit, read, delete files/directories), you MUST use the provided function calling tools.`);
   }
 
   // Add conversation history instructions
@@ -200,42 +171,36 @@ Tool definitions are available at: ${options.toolUsageJsonPath}`);
 }
 
 /**
- * Convert toolUsage.json format to OpenAI Function Calling format
+ * Convert modern tool definitions to OpenAI Function Calling format
+ * Now uses the modernToolSystem instead of loading from toolUsage.json
  */
 async function loadOpenAITools(
-  toolUsageJsonPath: string,
   enabledTools: string[],
   log?: LogFunction
 ): Promise<OpenAITool[]> {
   try {
-    const toolUsageContent = await readTextFile(toolUsageJsonPath);
-    const toolUsageData = JSON.parse(toolUsageContent);
+    internalLog('Loading tools from modernToolSystem', log);
+    internalLog(`Enabled tools parameter: ${JSON.stringify(enabledTools)}`, log);
     
-    const tools: OpenAITool[] = [];
+    // Use modern tool system
+    const modernTools = generateModernToolDefinitions(enabledTools);
     
-    // Convert each enabled tool to OpenAI format
-    for (const toolName of enabledTools) {
-      const toolDef = toolUsageData.tools?.find((t: any) => 
-        t.name === toolName || t.name === `OriginTool_${toolName}`
-      );
-      
-      if (toolDef) {
-        tools.push({
-          type: 'function',
-          function: {
-            name: toolDef.name,
-            description: toolDef.docs || toolDef.description || `Tool: ${toolDef.name}`,
-            parameters: {
-              type: 'object',
-              properties: toolDef.parameters || {},
-              required: toolDef.required || [],
-            },
-          },
-        });
-      }
+    internalLog(`generateModernToolDefinitions returned ${modernTools.length} tools`, log);
+    
+    // Convert ModernToolDefinition to OpenAITool format
+    const tools: OpenAITool[] = modernTools.map(tool => ({
+      type: 'function' as const,
+      function: {
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+      },
+    }));
+    
+    internalLog(`Loaded ${tools.length} tools from modernToolSystem`, log);
+    if (tools.length > 0) {
+      internalLog(`Tool names: ${tools.map(t => t.function.name).join(', ')}`, log);
     }
-    
-    internalLog(`Loaded ${tools.length} OpenAI tools from ${enabledTools.length} enabled tools`, log);
     return tools;
   } catch (error) {
     internalLog(`Failed to load tools: ${error}`, log);
@@ -267,7 +232,7 @@ export async function callOpenAI(
     const messages: OpenAIMessage[] = [];
     
     // Build and add system prompt with workspace context and tool info
-    const systemPrompt = await buildSystemPrompt(options, log);
+    const systemPrompt = await buildSystemPrompt(options);
     if (systemPrompt) {
       messages.push({
         role: 'system',
@@ -298,11 +263,16 @@ export async function callOpenAI(
     
     // Load tools if enabled
     let tools: OpenAITool[] | undefined;
-    if (options.toolUsageJsonPath && options.enabledTools && options.enabledTools.length > 0) {
-      tools = await loadOpenAITools(options.toolUsageJsonPath, options.enabledTools, log);
+    if (options.enabledTools && options.enabledTools.length > 0) {
+      internalLog(`Attempting to load ${options.enabledTools.length} enabled tools: ${options.enabledTools.join(', ')}`, log);
+      tools = await loadOpenAITools(options.enabledTools, log);
       if (tools.length > 0) {
         internalLog(`Loaded ${tools.length} tools for OpenAI Function Calling`, log);
+      } else {
+        internalLog(`WARNING: loadOpenAITools returned 0 tools despite ${options.enabledTools.length} enabled tools`, log);
       }
+    } else {
+      internalLog(`No tools enabled (enabledTools: ${options.enabledTools ? options.enabledTools.length : 'undefined'})`, log);
     }
     
     const requestBody: OpenAIRequest = {
@@ -344,10 +314,41 @@ export async function callOpenAI(
     const usage = data.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     
     // Log tool calls if present
+    const toolExecutionResults: Array<{name: string; success: boolean; result?: any; error?: string}> = [];
     if (toolCalls.length > 0) {
       internalLog(`AI requested ${toolCalls.length} tool calls`, log);
+      
+      // Execute each tool call
       for (const toolCall of toolCalls) {
-        internalLog(`  - ${toolCall.function.name}(${toolCall.function.arguments})`, log);
+        const toolName = toolCall.function.name.replace(/^OriginTool_/, ''); // Remove prefix
+        internalLog(`Executing tool: ${toolName}`, log);
+        
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          const workspacePath = options.workspacePath || process.cwd();
+          const result = await executeModernTool(toolName, args, workspacePath);
+          
+          toolExecutionResults.push({
+            name: toolName,
+            success: result.success,
+            result: result.result,
+            error: result.error
+          });
+          
+          if (result.success) {
+            internalLog(`✓ Tool ${toolName} succeeded`, log);
+            internalLog(`Result: ${JSON.stringify(result.result)}`, log);
+          } else {
+            internalLog(`✗ Tool ${toolName} failed: ${result.error}`, log);
+          }
+        } catch (error) {
+          internalLog(`✗ Tool ${toolName} execution error: ${error}`, log);
+          toolExecutionResults.push({
+            name: toolName,
+            success: false,
+            error: String(error)
+          });
+        }
       }
     }
     
@@ -400,8 +401,18 @@ export async function callOpenAI(
         arguments: tc.function.arguments,
       }));
       
+      // Build comprehensive response with tool results
+      let toolResultsText = '';
+      for (const execResult of toolExecutionResults) {
+        if (execResult.success) {
+          toolResultsText += `\n\n[${execResult.name}] Success:\n${JSON.stringify(execResult.result, null, 2)}`;
+        } else {
+          toolResultsText += `\n\n[${execResult.name}] Error: ${execResult.error}`;
+        }
+      }
+      
       // Append tool call information to response
-      geminiResponse.response = content + '\n\n[TOOL_CALLS]\n' + JSON.stringify(toolCallsInfo, null, 2);
+      geminiResponse.response = content + toolResultsText + '\n\n[TOOL_CALLS]\n' + JSON.stringify(toolCallsInfo, null, 2);
     }
     
     return geminiResponse;
@@ -441,7 +452,7 @@ export async function callOpenAIStream(
     const messages: OpenAIMessage[] = [];
     
     // Build and add system prompt with workspace context and tool info
-    const systemPrompt = await buildSystemPrompt(options, log);
+    const systemPrompt = await buildSystemPrompt(options);
     if (systemPrompt) {
       messages.push({
         role: 'system',
@@ -472,11 +483,16 @@ export async function callOpenAIStream(
     
     // Load tools if enabled
     let tools: OpenAITool[] | undefined;
-    if (options.toolUsageJsonPath && options.enabledTools && options.enabledTools.length > 0) {
-      tools = await loadOpenAITools(options.toolUsageJsonPath, options.enabledTools, log);
+    if (options.enabledTools && options.enabledTools.length > 0) {
+      internalLog(`Attempting to load ${options.enabledTools.length} enabled tools: ${options.enabledTools.join(', ')}`, log);
+      tools = await loadOpenAITools(options.enabledTools, log);
       if (tools.length > 0) {
         internalLog(`Loaded ${tools.length} tools for streaming`, log);
+      } else {
+        internalLog(`WARNING: loadOpenAITools returned 0 tools despite ${options.enabledTools.length} enabled tools`, log);
       }
+    } else {
+      internalLog(`No tools enabled (enabledTools: ${options.enabledTools ? options.enabledTools.length : 'undefined'})`, log);
     }
     
     const requestBody: OpenAIRequest = {
@@ -595,6 +611,40 @@ export async function callOpenAIStream(
             if (completedToolCalls.length > 0) {
               internalLog(`Streaming completed with ${completedToolCalls.length} tool calls`, log);
               toolCallsReceived = completedToolCalls;
+              
+              // Execute each tool call
+              for (const toolCall of completedToolCalls) {
+                const toolName = toolCall.name.replace(/^OriginTool_/, ''); // Remove prefix
+                internalLog(`Executing tool (streaming): ${toolName}`, log);
+                
+                try {
+                  const args = JSON.parse(toolCall.arguments);
+                  const workspacePath = options.workspacePath || process.cwd();
+                  const result = await executeModernTool(toolName, args, workspacePath);
+                  
+                  if (result.success) {
+                    internalLog(`✓ Tool ${toolName} succeeded`, log);
+                    // Send tool result as a chunk
+                    onChunk({
+                      type: 'text',
+                      content: `\n\n[${toolName}] ${JSON.stringify(result.result, null, 2)}`,
+                    });
+                  } else {
+                    internalLog(`✗ Tool ${toolName} failed: ${result.error}`, log);
+                    onChunk({
+                      type: 'text',
+                      content: `\n\n[${toolName} ERROR] ${result.error}`,
+                    });
+                  }
+                } catch (error) {
+                  internalLog(`✗ Tool ${toolName} execution error: ${error}`, log);
+                  onChunk({
+                    type: 'text',
+                    content: `\n\n[${toolName} ERROR] ${error}`,
+                  });
+                }
+              }
+              
               onChunk({
                 type: 'text',
                 content: '\n\n[TOOL_CALLS]\n' + JSON.stringify(completedToolCalls, null, 2),

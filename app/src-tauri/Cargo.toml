@@ -28,4 +28,5 @@ tauri-plugin-os = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
+glob = "0.3"
 

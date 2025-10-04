@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../Chat.css";
-import { ChatMessage, ToolDefinition } from "../../types";
+import { ChatMessage } from "../../types";
 import { t } from "../../utils/i18n";
 import { formatElapsedTime, formatNumber } from "../../utils/storage";
 import { callAI, GeminiOptions } from "../../utils/geminiCUI";
@@ -10,7 +10,6 @@ import { ChatProps } from "./types";
 import ProcessingModal from "./ProcessingModal";
 import StatsModal from "./StatsModal";
 import ChatMessageBubble from "./ChatMessageBubble";
-import { setupToolsForSession } from "../../utils/toolManager";
 import { cleanupManager } from "../../utils/cleanupManager";
 
 // Lazy load Markdown components for streaming
@@ -331,23 +330,6 @@ export default function Chat({
       }, 1000);
 
       try {
-        // Setup tools for compact command
-        let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
-          tools: [], 
-          tempDir: '', 
-          toolUsageJsonPath: '' 
-        };
-        try {
-          toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
-          if (toolsSetup.tools.length > 0) {
-            console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for /compact command`);
-            cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
-            cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
-          }
-        } catch (toolError) {
-          console.warn('[Tools] Failed to setup tools for /compact:', toolError);
-        }
-
         // Build conversation history (exclude system messages)
         const historyMessages = currentSession.messages.filter(
           (msg) => msg.role !== "system"
@@ -397,7 +379,6 @@ export default function Chat({
             conversationHistoryJson: historyJson,
             workspaceId: workspace.id,
             sessionId: currentSessionId,
-            toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
             enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
           },
           {
@@ -491,23 +472,6 @@ export default function Chat({
       }, 1000);
 
       try {
-        // Setup tools for init command
-        let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
-          tools: [], 
-          tempDir: '', 
-          toolUsageJsonPath: '' 
-        };
-        try {
-          toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
-          if (toolsSetup.tools.length > 0) {
-            console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for /init command`);
-            cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
-            cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
-          }
-        } catch (toolError) {
-          console.warn('[Tools] Failed to setup tools for /init:', toolError);
-        }
-
         const geminiFilePath = `${workspace.path}/Gemini.md`;
         const hadExistingGemini = await fsPlugin.exists(geminiFilePath);
 
@@ -541,7 +505,6 @@ export default function Chat({
             model: "gemini-2.5-flash",
             customApiKey: customApiKey,
             includeDirectories: ["."], // Allow the model to inspect the workspace structure via tools
-            toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
             enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
           },
           {
@@ -631,23 +594,6 @@ export default function Chat({
       }, 1000);
 
       try {
-        // Setup tools for fixchat command
-        let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
-          tools: [], 
-          tempDir: '', 
-          toolUsageJsonPath: '' 
-        };
-        try {
-          toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
-          if (toolsSetup.tools.length > 0) {
-            console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for /fixchat command`);
-            cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
-            cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
-          }
-        } catch (toolError) {
-          console.warn('[Tools] Failed to setup tools for /fixchat:', toolError);
-        }
-
         const improvementPrompt = `以下のユーザーメッセージを、AIが理解しやすく、より具体的で明確な表現に改善してください。改善後のメッセージのみを返してください。余計な説明や前置きは不要です:\n\n${args}`;
 
         const improvedResponse = await callAI(
@@ -657,7 +603,6 @@ export default function Chat({
             approvalMode: approvalMode,
             model: "gemini-2.5-flash", // Use fast model
             customApiKey: customApiKey,
-            toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
             enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
           },
           {
@@ -809,25 +754,8 @@ export default function Chat({
     }, 1000);
 
     try {
-      // Setup tools for this session (if not already done)
-      let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
-        tools: [], 
-        tempDir: '', 
-        toolUsageJsonPath: '' 
-      };
-      try {
-        toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
-        if (toolsSetup.tools.length > 0) {
-          console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for session`);
-          // Register temp directory for cleanup
-          cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
-          cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
-        }
-      } catch (toolError) {
-        console.warn('[Tools] Failed to setup tools:', toolError);
-        // Continue without tools
-      }
-
+      // Modern tool system handles tools automatically - no setup needed
+      
       // Parse includes from input with workspace items for directory verification
       const { includes, directories } = parseIncludes(
         inputValue,
@@ -867,7 +795,6 @@ export default function Chat({
         workspaceId: workspace.id,
         sessionId: currentSessionId,
         // Add tool support
-        toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
         enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
       };
 
@@ -1326,25 +1253,8 @@ export default function Chat({
                             }
                           }, 1000);
                           try {
-                            // Setup tools for resend as well
-                            let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
-                              tools: [], 
-                              tempDir: '', 
-                              toolUsageJsonPath: '' 
-                            };
-                            try {
-                              toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
-                              if (toolsSetup.tools.length > 0) {
-                                console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for resend`);
-                                // Register temp directory for cleanup
-                                cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
-                                cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
-                              }
-                            } catch (toolError) {
-                              console.warn('[Tools] Failed to setup tools for resend:', toolError);
-                              // Continue without tools
-                            }
-
+                            // Modern tool system handles tools automatically - no setup needed
+                            
                             const { includes, directories } = parseIncludes(
                               newMessage.content,
                               workspaceItems
@@ -1394,7 +1304,6 @@ export default function Chat({
                               workspaceId: workspace.id,
                               sessionId: currentSessionId,
                               // Add tool support for resend
-                              toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
                               enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
                             };
 

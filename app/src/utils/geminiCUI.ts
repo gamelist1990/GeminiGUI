@@ -3,6 +3,7 @@ import { writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { cleanupManager } from './cleanupManager';
 import { callOpenAI, callOpenAIStream, OpenAIOptions } from './openaiAPI';
+import { generateGeminiToolInstructions } from '../AITool/toolExecutor';
 
 type LogFunction = (message: string) => void;
 
@@ -76,8 +77,7 @@ export interface GeminiOptions {
   conversationHistoryJson?: Array<{ role: string; content: string }>;
   workspaceId?: string;
   sessionId?: string;
-  toolUsageJsonPath?: string; // Path to toolUsage.json with tool definitions
-  enabledTools?: string[]; // List of enabled tool names
+  enabledTools?: string[]; // List of enabled tool names (uses modern tool system)
 }
 
 async function ensureDir(path: string) {
@@ -261,32 +261,13 @@ export async function callGemini(
 
     const promptSections: string[] = [`Contents: ${contentTokens.join(', ')}`];
 
-    // Add toolUsage.json if tools are enabled
-    if (options?.toolUsageJsonPath && options?.enabledTools && options.enabledTools.length > 0) {
-      const normalizedToolPath = options.toolUsageJsonPath.replace(/\\/g, '/');
-      const toolUsageToken = `@file:${normalizedToolPath}`;
-      
-      promptSections.push(`# IMPORTANT: Available Tools
-
-You have access to Python tools that can help you perform file operations and other tasks.
-
-**Tool Usage File:** ${toolUsageToken}
-
-This JSON file contains:
-- List of available tools with their capabilities
-- Usage examples and parameter schemas for each tool
-- Instructions on how to call each tool
-
-**CRITICAL INSTRUCTIONS:**
-1. Read the toolUsage.json file to understand what tools are available
-2. When the user asks you to perform file operations (create, edit, read files/directories), USE THE TOOLS
-3. Follow the exact parameter format specified in each tool's schema
-4. Tools are located in the temp directory and can be executed via Python
-5. Each tool returns JSON output with success status and results
-
-**Enabled Tools:** ${options.enabledTools.join(', ')}
-
-Please read ${toolUsageToken} before proceeding.`);
+    // Add modern tool instructions if tools are enabled
+    if (options?.enabledTools && options.enabledTools.length > 0) {
+      const toolInstructions = generateGeminiToolInstructions(options.enabledTools);
+      if (toolInstructions) {
+        promptSections.push(toolInstructions);
+        internalLog(`Added modern tool instructions for ${options.enabledTools.length} enabled tools`, log);
+      }
     }
 
     if (conversationToken) {
@@ -652,8 +633,7 @@ export async function callAI(
       conversationHistoryJson: options?.conversationHistory, // Add raw JSON history
       includes: options?.includes, // Add file attachments
       includeDirectories: options?.includeDirectories, // Add directory attachments
-      toolUsageJsonPath: options?.toolUsageJsonPath, // Add tool support
-      enabledTools: options?.enabledTools, // Add enabled tools
+      enabledTools: options?.enabledTools, // Add enabled tools (uses modern tool system)
       workspacePath, // Add workspace path so AI knows where it is
       workspaceId: options?.workspaceId, // Add workspace ID
       sessionId: options?.sessionId, // Add session ID
