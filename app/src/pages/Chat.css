@@ -1900,3 +1900,35 @@
 [data-theme="dark"] .error-dismiss:hover {
   background-color: rgba(252, 165, 165, 0.1);
 }
+
+/* Linkified external URLs inside messages */
+.message-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(59,130,246,0.06), rgba(99,102,241,0.03));
+  border: 1px solid rgba(59,130,246,0.08);
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  margin: 4px 0;
+}
+
+.message-link .link-icon {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.message-link .link-text {
+  max-width: 48ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-link:hover, .message-link:focus {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+}

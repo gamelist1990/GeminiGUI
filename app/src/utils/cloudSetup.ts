@@ -94,22 +94,43 @@ async function refreshAccessToken(refreshToken: string, log?: LogFunction): Prom
   }
 }
 
+
+
 /**
- * アクセストークンを取得（必要なら更新）
+ * アクセストークン取得（詳細診断付き）
+ * - oauth_creds.json が存在しない場合は { token: null, credsExist: false }
+ * - ファイルは存在するがリフレッシュに失敗した場合は { token: null, credsExist: true }
+ * - 成功時は { token: '<token>', credsExist: true }
  */
-async function getValidAccessToken(log?: LogFunction): Promise<string | null> {
-  const creds = await loadOAuthCredentials(log);
-  if (!creds) {
-    return null;
-  }
+async function getAccessTokenWithDiagnostics(log?: LogFunction): Promise<{ token: string | null; credsExist: boolean }> {
+  try {
+    const creds = await loadOAuthCredentials(log);
+    if (!creds) {
+      // loadOAuthCredentials already logs path/existence; avoid duplicating user-facing messages here.
+      internalLog('getAccessTokenWithDiagnostics: oauth_creds.json not found or unreadable', log);
+      return { token: null, credsExist: false };
+    }
 
-  // トークンが有効ならそのまま返す
-  if (isTokenValid(creds)) {
-    return creds.access_token;
-  }
+    // トークンが有効ならそのまま返す
+    if (isTokenValid(creds)) {
+      return { token: creds.access_token, credsExist: true };
+    }
 
-  // 期限切れなら更新
-  return await refreshAccessToken(creds.refresh_token, log);
+    // 期限切れならリフレッシュを試行
+    const refreshed = await refreshAccessToken(creds.refresh_token, log);
+    if (!refreshed) {
+      // Let callers decide how to present the failure to the user; keep an internal debug log here.
+      internalLog('getAccessTokenWithDiagnostics: refresh failed (no access token)', log);
+      internalLog('Possible causes: expired or revoked refresh_token, or network/auth errors', log);
+      return { token: null, credsExist: true };
+    }
+
+    return { token: refreshed, credsExist: true };
+  } catch (error) {
+    internalLog(`getAccessTokenWithDiagnostics error: ${error}`, log);
+    if (log) log(`エラー: トークン取得中にエラーが発生しました: ${error}`);
+    return { token: null, credsExist: false };
+  }
 }
 
 /**
@@ -252,19 +273,27 @@ export async function autoSetupCloudProject(
     if (log) log('🚀 Google Cloud Project の自動セットアップを開始します...');
     if (log) log('');
 
-    // 1. OAuth認証情報を取得
-    internalLog('Step 1: Loading OAuth credentials', log);
+    // 1. OAuth認証情報を取得（詳細診断）
+    internalLog('Step 1: Loading OAuth credentials (diagnostics)', log);
     if (log) log('1️⃣ OAuth認証情報を読み込んでいます...');
-    const accessToken = await getValidAccessToken(log);
-    internalLog(`Access token obtained: ${accessToken ? 'YES' : 'NO'}`, log);
-    
-    if (!accessToken) {
+    const tokenResult = await getAccessTokenWithDiagnostics(log);
+    internalLog(`Access token obtained: ${tokenResult.token ? 'YES' : 'NO'}, credsExist: ${tokenResult.credsExist}`, log);
+
+    if (!tokenResult.token) {
       internalLog('No access token available', log);
-      if (log) {
-        log('❌ OAuth認証情報が見つかりません');
-        log('先にGoogle アカウントでログインしてください');
+      if (!tokenResult.credsExist) {
+        if (log) {
+          log('❌ OAuth認証情報が見つかりません');
+          log('先にGoogle アカウントでログインしてください');
+        }
+        return { success: false, error: 'OAuth credentials not found' };
+      } else {
+        if (log) {
+          log('❌ OAuth認証情報は見つかりましたが、トークンの更新に失敗しました');
+          log('oauth_creds.json を確認し、必要であれば再認証を行ってください');
+        }
+        return { success: false, error: 'Failed to refresh access token' };
       }
-      return { success: false, error: 'OAuth credentials not found' };
     }
     internalLog('Access token validated successfully', log);
     if (log) log('✓ 認証情報を取得しました');
@@ -273,7 +302,7 @@ export async function autoSetupCloudProject(
     // 2. プロジェクトを作成
     internalLog('Step 2: Creating Cloud Project', log);
     if (log) log('2️⃣ Google Cloud Projectを作成しています...');
-    const projectId = await createCloudProject(accessToken, log);
+  const projectId = await createCloudProject(tokenResult.token as string, log);
     internalLog(`Project creation result: ${projectId}`, log);
     
     if (!projectId) {
@@ -286,7 +315,7 @@ export async function autoSetupCloudProject(
     // 3. Gemini APIを有効化
     internalLog('Step 3: Enabling Gemini API', log);
     if (log) log('3️⃣ Gemini APIを有効化しています...');
-    const apiEnabled = await enableGeminiAPI(accessToken, projectId, log);
+  const apiEnabled = await enableGeminiAPI(tokenResult.token as string, projectId, log);
     internalLog(`API enablement result: ${apiEnabled}`, log);
     
     if (!apiEnabled) {
@@ -340,11 +369,19 @@ export async function hasCloudProject(log?: LogFunction): Promise<boolean> {
   try {
     internalLog('hasCloudProject: Starting project existence check', log);
     
-    const accessToken = await getValidAccessToken(log);
-    if (!accessToken) {
-      if (log) {
-        log('⚠️ OAuth認証情報が見つかりません');
-        log('oauth_creds.json ファイルが存在しないか、読み取りに失敗しました');
+    const tokenResult = await getAccessTokenWithDiagnostics(log);
+    if (!tokenResult.token) {
+      // Provide an explicit, unambiguous message here based on the diagnostics
+      if (!tokenResult.credsExist) {
+        if (log) {
+          log('⚠️ OAuth認証情報が見つかりません (oauth_creds.json 未検出)');
+          log('oauth_creds.json ファイルが存在しないか、読み取りに失敗しました');
+        }
+      } else {
+        if (log) {
+          log('⚠️ OAuth認証情報は存在しますが、アクセストークンの取得/更新に失敗しました (refresh failed)');
+          log('oauth_creds.json を確認し、必要であれば再認証を行ってください');
+        }
       }
       return false;
     }
@@ -354,7 +391,7 @@ export async function hasCloudProject(log?: LogFunction): Promise<boolean> {
       'https://cloudresourcemanager.googleapis.com/v1/projects?pageSize=1',
       {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${tokenResult.token}`,
         },
       }
     );
@@ -396,8 +433,8 @@ export async function hasCloudProject(log?: LogFunction): Promise<boolean> {
  */
 export async function listCloudProjects(log: LogFunction): Promise<string[]> {
   try {
-    const accessToken = await getValidAccessToken();
-    if (!accessToken) {
+    const tokenResult = await getAccessTokenWithDiagnostics();
+    if (!tokenResult.token) {
       log('❌ OAuth認証情報が見つかりません');
       return [];
     }
@@ -407,7 +444,7 @@ export async function listCloudProjects(log: LogFunction): Promise<string[]> {
       'https://cloudresourcemanager.googleapis.com/v1/projects',
       {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${tokenResult.token}`,
         },
       }
     );
@@ -433,7 +470,7 @@ export async function listCloudProjects(log: LogFunction): Promise<string[]> {
 export async function setupExistingProject(log: LogFunction): Promise<{success: boolean, projectId?: string}> {
   internalLog('setupExistingProject: Starting', log);
   try {
-    const projectIds = await listCloudProjects(log);
+  const projectIds = await listCloudProjects(log);
 
     if (projectIds.length === 0) {
       internalLog('No projects found', log);

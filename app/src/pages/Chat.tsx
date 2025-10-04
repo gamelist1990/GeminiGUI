@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ChatSession, ChatMessage, Workspace } from '../types';
 import { t } from '../utils/i18n';
 import { formatElapsedTime, formatNumber } from '../utils/storage';
@@ -44,7 +44,84 @@ const markdownComponents = {
       );
     }
   },
+  p({ node, children, ...props }: any) {
+    // children may contain strings or elements. We need to linkify plain text nodes.
+    const processed: React.ReactNode[] = [];
+    const urlRegex = /(https?:\/\/[^\s<>\"'`]+)/g;
+
+    const linkifyString = (text: string) => {
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (!part) return null;
+        if (urlRegex.test(part)) {
+          const url = part;
+          return (
+            <a
+              key={`link-${i}-${url}`}
+              href={url}
+              className="message-link"
+              onClick={(e) => {
+                e.preventDefault();
+                openExternal(url);
+              }}
+              rel="noopener noreferrer"
+            >
+              <span className="link-icon">🔗</span>
+              <span className="link-text">{url}</span>
+            </a>
+          );
+        }
+        return <span key={`text-${i}-${part}`}>{part}</span>;
+      });
+    };
+
+    React.Children.forEach(children, (child) => {
+      if (typeof child === 'string') {
+        processed.push(...linkifyString(child));
+      } else {
+        processed.push(child as any);
+      }
+    });
+
+    return <p {...props}>{processed}</p>;
+  },
 };
+
+// Open external links using Tauri opener plugin when available, fallback to window.open
+async function openExternal(url: string) {
+  try {
+    const opener = await import('@tauri-apps/plugin-opener');
+    const mod: any = opener;
+    // Try common exported function names used in different versions/wrappers
+    if (typeof mod.openUrl === 'function') {
+      await mod.openUrl(url);
+      return;
+    }
+    if (typeof mod.open === 'function') {
+      await mod.open(url);
+      return;
+    }
+    // Some bundlers put exports on default
+    if (mod && mod.default) {
+      if (typeof mod.default.openUrl === 'function') {
+        await mod.default.openUrl(url);
+        return;
+      }
+      if (typeof mod.default.open === 'function') {
+        await mod.default.open(url);
+        return;
+      }
+    }
+  } catch (e) {
+    // ignore and fallback to window.open
+  }
+
+  try {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (e) {
+    // ignore
+  }
+}
 
 interface ChatProps {
   workspace: Workspace;
@@ -1521,7 +1598,9 @@ interface ChatMessageBubbleProps {
  */
 function renderMessageWithTags(content: string, workspacePath: string): React.ReactElement {
   // Split content by tags (#file:, #folder:, #codebase, /commands)
-  const tagRegex = /(#file:[^\s]+|#folder:[^\s]+|#codebase|\/\w+)/g;
+  // Important: only match commands that start at the beginning of the string or are preceded by whitespace
+  // This prevents matching slashes that are part of URLs (e.g. https://example.com/menu)
+  const tagRegex = /(#file:[^\s]+|#folder:[^\s]+|#codebase|(?:^|\s)(\/[A-Za-z0-9_-]+))/g;
   const parts: React.ReactElement[] = [];
   let lastIndex = 0;
   let match;
@@ -1564,18 +1643,59 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
       console.error('Failed to open target:', error);
       alert(t('fileAccess.fileOpenFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'));
     }
-  };  while ((match = tagRegex.exec(content)) !== null) {
-    // Add text before the tag
-    if (match.index > lastIndex) {
-      parts.push(
-        <span key={`text-${lastIndex}`}>
-          {content.substring(lastIndex, match.index)}
-        </span>
+  };
+
+  // helper: linkify plain text into nodes with clickable anchors
+  const urlRegex = /(https?:\/\/[^\s<>\"'`]+)/g;
+  const linkifyText = (text: string) => {
+    const nodes: React.ReactElement[] = [];
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = urlRegex.exec(text)) !== null) {
+      if (m.index > lastIndex) {
+        nodes.push(<span key={`t-${lastIndex}`}>{text.substring(lastIndex, m.index)}</span>);
+      }
+      const url = m[0];
+      nodes.push(
+        <a
+          key={`u-${m.index}`}
+          href={url}
+          className="message-link"
+          onClick={(e) => { e.preventDefault(); openExternal(url); }}
+          rel="noopener noreferrer"
+        >
+          <span className="link-icon">🔗</span>
+          <span className="link-text">{url}</span>
+        </a>
       );
+      lastIndex = m.index + url.length;
+    }
+    if (lastIndex < text.length) {
+      nodes.push(<span key={`t-last-${lastIndex}`}>{text.substring(lastIndex)}</span>);
+    }
+    return nodes;
+  };
+
+  while ((match = tagRegex.exec(content)) !== null) {
+    // Determine which group produced the tag. If group 2 matched, the overall match may include a leading
+    // whitespace (because we used (?:^|\s) to avoid matching slashes inside URLs). Compute the actual
+    // tag text and its true start index so we can correctly slice the surrounding text.
+    const fullMatch = match[0];
+    const group1 = match[1];
+    const group2 = match[2];
+    const tag = group2 ?? group1 ?? fullMatch;
+
+    // Compute tag start index (adjust if fullMatch contains a leading whitespace)
+    const tagStartIndex = match.index + (fullMatch.indexOf(tag) >= 0 ? fullMatch.indexOf(tag) : 0);
+
+    // Add text before the tag
+    if (tagStartIndex > lastIndex) {
+      const textBefore = content.substring(lastIndex, tagStartIndex);
+      // linkify text before tag
+      parts.push(...linkifyText(textBefore));
     }
 
     // Add the tag with appropriate styling
-    const tag = match[0];
     let tagType = 'tag-default';
     let icon = '🏷️';
     let isClickable = false;
@@ -1599,7 +1719,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
 
     parts.push(
       <span
-        key={`tag-${match.index}`}
+        key={`tag-${tagStartIndex}`}
         className={`message-tag ${tagType} ${isClickable ? 'clickable' : ''}`}
         onClick={isClickable ? () => handleTagClick(tag) : undefined}
         style={isClickable ? { cursor: 'pointer' } : undefined}
@@ -1610,16 +1730,13 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
       </span>
     );
 
-    lastIndex = match.index + tag.length;
+    lastIndex = tagStartIndex + tag.length;
   }
 
   // Add remaining text
   if (lastIndex < content.length) {
-    parts.push(
-      <span key={`text-${lastIndex}`}>
-        {content.substring(lastIndex)}
-      </span>
-    );
+    const remaining = content.substring(lastIndex);
+    parts.push(...linkifyText(remaining));
   }
 
   return <p>{parts}</p>;
