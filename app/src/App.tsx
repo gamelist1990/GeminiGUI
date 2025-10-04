@@ -11,6 +11,7 @@ import { Workspace, ChatMessage } from "./types";
 import { Config } from "./utils/configAPI";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { t } from "./utils/i18n";
+import { cleanupManager } from "./utils/cleanupManager";
 
 type View = 'workspace' | 'chat' | 'settings';
 
@@ -64,6 +65,12 @@ function App() {
   }, [settings.theme, isLoading]);
 
   const handleSelectWorkspace = async (workspace: Workspace) => {
+    // Cleanup previous workspace's temporary files if switching workspaces
+    if (currentWorkspace && currentWorkspace.id !== workspace.id) {
+      console.log(`[App] Switching workspace from ${currentWorkspace.id} to ${workspace.id}`);
+      await cleanupManager.cleanupWorkspace(currentWorkspace.id);
+    }
+    
     setCurrentWorkspace(workspace);
     updateLastOpened(workspace.id);
     addWorkspace(workspace);
@@ -78,6 +85,7 @@ function App() {
 
   const handleBackToWorkspace = () => {
     setCurrentView('workspace');
+    // Note: We don't cleanup here because user might come back
     setCurrentWorkspace(null);
   };
 

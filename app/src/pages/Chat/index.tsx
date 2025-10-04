@@ -599,6 +599,12 @@ export default function Chat({
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !currentSession) return;
 
+    // Prevent sending another message while a request is in-flight
+    if (isTyping) {
+      // ignore additional send attempts until current response completes
+      return;
+    }
+
     // Reset the recentlyCompletedSuggestion flag to ensure future messages can be sent
     setRecentlyCompletedSuggestion(false);
 
@@ -622,9 +628,12 @@ export default function Chat({
       tokenUsage: Math.ceil(inputValue.length / 4), // Estimate tokens for user message
     };
 
+    // Mark as typing/request-in-flight immediately to prevent races
+    setIsTyping(true);
+
+    // Send the user message so it appears in the UI immediately
     onSendMessage(currentSessionId, userMessage);
     setInputValue("");
-    setIsTyping(true);
     // start timer for this request
     requestStartRef.current = Date.now();
     setRequestElapsedTime(0);
@@ -646,17 +655,17 @@ export default function Chat({
       );
 
       // Build conversation history for context
-      // Exclude system messages (summaries) and only include recent user/assistant messages
-      const recentMessages = currentSession.messages
-        .filter((msg) => msg.role !== "system")
-        .slice(-10); // Keep last 10 messages for context (5 exchanges)
+      // Exclude system messages (summaries) and include all user/assistant messages
+      // This ensures the AI has access to the full conversation context
+      const allMessages = currentSession.messages
+        .filter((msg) => msg.role !== "system");
 
-      const conversationHistoryJson = recentMessages.map((msg) => ({
+      const conversationHistoryJson = allMessages.map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
 
-      const conversationHistory = recentMessages
+      const conversationHistory = allMessages
         .map((msg) => {
           const role = msg.role === "user" ? "User" : "Assistant";
           return `${role}: ${msg.content}`;
@@ -668,7 +677,7 @@ export default function Chat({
         includes: includes.length > 0 ? includes : undefined,
         includeDirectories: directories.length > 0 ? directories : undefined,
         conversationHistory:
-          conversationHistory && recentMessages.length > 0
+          conversationHistory && allMessages.length > 0
             ? conversationHistory
             : undefined,
         conversationHistoryJson:
@@ -1030,8 +1039,8 @@ export default function Chat({
                               );
                             const previousMessages = currentSession.messages
                               .slice(0, messageIndex)
-                              .filter((msg) => msg.role !== "system")
-                              .slice(-10); // Keep last 10 messages for context
+                              .filter((msg) => msg.role !== "system");
+                              // Include all previous messages for full context
 
                             const conversationHistoryJson =
                               previousMessages.map((msg) => ({
@@ -1282,7 +1291,9 @@ export default function Chat({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.ctrlKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  if (!isTyping) {
+                    handleSendMessage();
+                  }
                 } else if (
                   e.key === "Enter" &&
                   !e.shiftKey &&
@@ -1312,13 +1323,14 @@ export default function Chat({
                 }
               }}
               placeholder={t("chat.placeholder")}
+              disabled={isTyping}
               rows={1}
               style={{ height: textareaHeight }}
             />
             <button
               className="send-button primary"
               onClick={handleSendMessage}
-              disabled={!inputValue.trim()}
+                disabled={!inputValue.trim() || isTyping}
             >
               ➤
             </button>

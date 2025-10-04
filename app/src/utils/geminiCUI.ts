@@ -1,6 +1,7 @@
 import { Command } from '@tauri-apps/plugin-shell';
-import { writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
+import { writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
+import { cleanupManager } from './cleanupManager';
 
 type LogFunction = (message: string) => void;
 
@@ -69,20 +70,6 @@ async function ensureDir(path: string) {
   const dirExists = await exists(path);
   if (!dirExists) {
     await mkdir(path, { recursive: true });
-  }
-}
-
-async function cleanupDir(path: string, log?: LogFunction) {
-  try {
-    const existsFlag = await exists(path);
-    if (!existsFlag) {
-      return;
-    }
-    await remove(path, { recursive: true });
-    // 再作成しないようここではログだけ残す
-    internalLog(`Conversation temp directory removed: ${path}`, log);
-  } catch (error) {
-    internalLog('Failed to remove conversation temp directory: ' + String(error), log);
   }
 }
 
@@ -175,6 +162,12 @@ async function writeConversationHistoryFile({
 
     await writeTextFile(filePath, JSON.stringify(payload, null, 2));
     internalLog(`Conversation history saved to: ${filePath}`, log);
+    
+    // Register file for automatic cleanup
+    if (workspaceId && sessionId) {
+      cleanupManager.register(filePath, workspaceId, sessionId, 'file');
+    }
+    
     return filePath;
   } catch (error) {
     internalLog('Failed to write conversation history file: ' + String(error), log);
@@ -236,6 +229,11 @@ export async function callGemini(
         conversationFilePath = conversationFile;
         const normalized = conversationFile.replace(/\\/g, '/');
         conversationToken = `@file:${normalized}`;
+        
+        // Register temp directory for automatic cleanup
+        if (workspaceTempDir && options.workspaceId && options.sessionId) {
+          cleanupManager.register(workspaceTempDir, options.workspaceId, options.sessionId, 'directory');
+        }
       } else {
         // Fallback to inline history if file creation failed
         internalLog('Falling back to inline conversation history', log);
@@ -250,12 +248,41 @@ export async function callGemini(
     const promptSections: string[] = [`Contents: ${contentTokens.join(', ')}`];
 
     if (conversationToken) {
-      promptSections.push(`Conversation: ${conversationToken} (JSON with chronological "messages" array; use it to understand prior context.)`);
+      promptSections.push(`# CRITICAL: Read Conversation History First
+
+Before responding to the user's message, you MUST:
+1. Read and analyze the ENTIRE conversation history file provided below
+2. Understand the current context and what the user is trying to do
+3. Pay special attention to the LAST few exchanges to understand the ongoing activity
+4. If the user is playing a game (like shiritori/word chain), doing a specific task, or having a focused discussion, CONTINUE that activity appropriately
+5. DO NOT ignore the context and start a new topic or provide unrelated information
+
+Conversation History File: ${conversationToken}
+This JSON file contains a chronological "messages" array showing the full conversation.
+**You must read this file first before responding.**`);
     } else if (options?.conversationHistory) {
-      promptSections.push(`Conversation:\n${options.conversationHistory}`);
+      promptSections.push(`# CRITICAL: Read Conversation History First
+
+Before responding to the user's message, you MUST:
+1. Read and analyze the ENTIRE conversation history below
+2. Understand the current context and what the user is trying to do
+3. Pay special attention to the LAST few exchanges to understand the ongoing activity
+4. If the user is playing a game (like shiritori/word chain), doing a specific task, or having a focused discussion, CONTINUE that activity appropriately
+5. DO NOT ignore the context and start a new topic or provide unrelated information
+
+Conversation History:
+${options.conversationHistory}`);
     }
 
-    promptSections.push(`User: ${prompt}`);
+    promptSections.push(`# Current User Message
+
+User: ${prompt}
+
+# Your Response Guidelines
+- If there's an ongoing activity in the conversation history (game, task, discussion topic), continue it appropriately
+- Stay consistent with the conversation flow and context
+- Do not provide unrelated information or change topics unless the user explicitly asks
+- Keep responses focused and relevant to the current context`);
     const fullPrompt = promptSections.join('\n\n');
     
     // Add prompt as positional argument (not using -p flag)
@@ -441,40 +468,14 @@ export async function callGemini(
     internalLog('Error calling Gemini: ' + String(error), log);
     throw error;
   } finally {
-    // Defer removal of conversation file and temp directory to avoid race
-    // conditions where downstream processes (or model-invoked tools) may
-    // still attempt to read the file. Schedule cleanup after a grace
-    // period (5 minutes). This leaves a short-lived temp file on disk but
-    // avoids intermittent "File not found" errors.
-    try {
-      const GRACE_PERIOD_MS = 5 * 60 * 1000; // 5 minutes
-
-      if (conversationFilePath) {
-        const pathToRemove = conversationFilePath;
-        setTimeout(async () => {
-          try {
-            await remove(pathToRemove);
-            internalLog(`Deferred conversation history removed: ${pathToRemove}`, log);
-          } catch (cleanupError) {
-            internalLog('Deferred remove failed: ' + String(cleanupError), log);
-          }
-        }, GRACE_PERIOD_MS);
-      }
-
-      if (workspaceTempDir) {
-        const dirToCleanup = workspaceTempDir;
-        setTimeout(async () => {
-          try {
-            await cleanupDir(dirToCleanup, log);
-            internalLog(`Deferred workspace temp directory cleanup attempted: ${dirToCleanup}`, log);
-          } catch (cleanupError) {
-            internalLog('Deferred cleanup failed: ' + String(cleanupError), log);
-          }
-        }, GRACE_PERIOD_MS);
-      }
-    } catch (e) {
-      // Non-fatal: log and continue
-      internalLog('Failed to schedule deferred cleanup: ' + String(e), log);
+    // Cleanup is now managed by CleanupManager
+    // Files will be automatically cleaned up after MAX_AGE_MS
+    // Or can be manually cleaned up when session/workspace changes
+    if (conversationFilePath && options?.workspaceId && options?.sessionId) {
+      internalLog(`Conversation file will be auto-cleaned: ${conversationFilePath}`, log);
+    }
+    if (workspaceTempDir && options?.workspaceId && options?.sessionId) {
+      internalLog(`Temp directory will be auto-cleaned: ${workspaceTempDir}`, log);
     }
   }
 }
