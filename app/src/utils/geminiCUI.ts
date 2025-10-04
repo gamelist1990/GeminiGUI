@@ -662,36 +662,16 @@ export async function callAI(
     // Use streaming if enabled
     if (settings.responseMode === 'stream' && onChunk) {
       internalLog('Using OpenAI streaming mode', log);
-      let fullResponse = '';
       
-      await callOpenAIStream(
+      // Call OpenAI stream which now returns GeminiResponse with stats
+      const geminiResponse = await callOpenAIStream(
         prompt,
         openAIOptions,
-        (chunk) => {
-          if (chunk.type === 'text' && chunk.content) {
-            fullResponse += chunk.content;
-          }
-          onChunk(chunk);
-        },
+        onChunk,
         log
       );
       
-      // Return a basic response (streaming doesn't return stats the same way)
-      return {
-        response: fullResponse,
-        stats: {
-          models: {},
-          tools: {
-            totalCalls: 0,
-            totalSuccess: 0,
-            totalFail: 0,
-            totalDurationMs: 0,
-            totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
-            byName: {},
-          },
-          files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
-        },
-      };
+      return geminiResponse;
     } else {
       // Use non-streaming mode
       internalLog('Using OpenAI async mode', log);

@@ -217,6 +217,51 @@ class CleanupManager {
     this.registry.clear();
     await this.cleanupEntries(entries);
   }
+
+  /**
+   * Cleanup all GeminiTemp directories in a workspace
+   * This is called at the start of a chat session to remove any leftover temp files
+   */
+  async cleanupWorkspaceGeminiTemp(workspacePath: string): Promise<void> {
+    console.log(`[CleanupManager] Cleaning up GeminiTemp in workspace: ${workspacePath}`);
+    
+    try {
+      // Normalize path separator (use backslash for Windows, forward slash for others)
+      const separator = workspacePath.includes('\\') ? '\\' : '/';
+      const tempDir = `${workspacePath}${separator}temp`;
+      
+      const tempExists = await exists(tempDir);
+      
+      if (!tempExists) {
+        console.log(`[CleanupManager] No temp directory found at: ${tempDir}`);
+        return;
+      }
+
+      // Remove the entire temp directory recursively
+      await remove(tempDir, { recursive: true });
+      console.log(`[CleanupManager] Successfully removed temp directory: ${tempDir}`);
+      
+      // Clear registry entries for this workspace's temp files
+      const entriesToRemove: string[] = [];
+      for (const [key, entry] of this.registry.entries()) {
+        if (entry.path.includes(`${separator}temp${separator}`) && entry.path.startsWith(workspacePath)) {
+          entriesToRemove.push(key);
+        }
+      }
+      
+      entriesToRemove.forEach(key => {
+        this.registry.delete(key);
+        console.log(`[CleanupManager] Removed registry entry: ${key}`);
+      });
+      
+      if (entriesToRemove.length > 0) {
+        console.log(`[CleanupManager] Cleared ${entriesToRemove.length} registry entries for workspace temp`);
+      }
+    } catch (error) {
+      console.error(`[CleanupManager] Failed to cleanup workspace temp:`, error);
+      // Don't throw - we want the application to continue even if cleanup fails
+    }
+  }
 }
 
 // Export singleton instance

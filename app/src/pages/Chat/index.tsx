@@ -154,6 +154,23 @@ export default function Chat({
     }
   }, [workspace?.path]);
 
+  // Cleanup leftover GeminiTemp directories when workspace changes or chat starts
+  useEffect(() => {
+    if (workspace?.path) {
+      const cleanupTemp = async () => {
+        try {
+          console.log(`[Chat] Cleaning up leftover GeminiTemp in workspace: ${workspace.path}`);
+          await cleanupManager.cleanupWorkspaceGeminiTemp(workspace.path);
+          console.log(`[Chat] GeminiTemp cleanup completed successfully`);
+        } catch (error) {
+          console.error(`[Chat] Failed to cleanup GeminiTemp:`, error);
+        }
+      };
+
+      cleanupTemp();
+    }
+  }, [workspace?.path]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentSession?.messages]);

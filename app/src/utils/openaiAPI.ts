@@ -413,13 +413,18 @@ export async function callOpenAI(
 
 /**
  * Call OpenAI API with streaming support (fully async)
+ * Returns GeminiResponse with stats after streaming completes
  */
 export async function callOpenAIStream(
   prompt: string,
   options: OpenAIOptions,
   onChunk: StreamCallback,
   log?: LogFunction
-): Promise<void> {
+): Promise<GeminiResponse> {
+  let fullResponse = '';
+  let toolCallsReceived: Array<{ id: string; name: string; arguments: string }> = [];
+  const startTime = Date.now();
+  
   try {
     internalLog(`callOpenAIStream called with prompt length: ${prompt.length}`, log);
     
@@ -541,6 +546,7 @@ export async function callOpenAIStream(
               type: 'text',
               content: delta.content,
             });
+            fullResponse += delta.content;
           }
           
           // Handle tool calls (streamed incrementally)
@@ -588,6 +594,7 @@ export async function callOpenAIStream(
             
             if (completedToolCalls.length > 0) {
               internalLog(`Streaming completed with ${completedToolCalls.length} tool calls`, log);
+              toolCallsReceived = completedToolCalls;
               onChunk({
                 type: 'text',
                 content: '\n\n[TOOL_CALLS]\n' + JSON.stringify(completedToolCalls, null, 2),
@@ -608,7 +615,54 @@ export async function callOpenAIStream(
       }
     }
     
-    internalLog(`OpenAI streaming completed`, log);
+    const elapsedMs = Date.now() - startTime;
+    internalLog(`OpenAI streaming completed in ${elapsedMs}ms`, log);
+    
+    // Estimate token usage from response length
+    const estimatedPromptTokens = Math.ceil(prompt.length / 4);
+    const estimatedCompletionTokens = Math.ceil(fullResponse.length / 4);
+    const estimatedTotalTokens = estimatedPromptTokens + estimatedCompletionTokens;
+    
+    // Return GeminiResponse with estimated stats
+    return {
+      response: fullResponse,
+      stats: {
+        models: {
+          [model]: {
+            api: {
+              totalRequests: 1,
+              totalErrors: 0,
+              totalLatencyMs: elapsedMs,
+            },
+            tokens: {
+              prompt: estimatedPromptTokens,
+              candidates: estimatedCompletionTokens,
+              total: estimatedTotalTokens,
+              cached: 0,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: toolCallsReceived.length,
+          totalSuccess: 0, // Unknown in streaming
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: {
+            accept: 0,
+            reject: 0,
+            modify: 0,
+            auto_accept: toolCallsReceived.length,
+          },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+      },
+    };
   } catch (error) {
     internalLog(`OpenAI stream error: ${error}`, log);
     onChunk({
