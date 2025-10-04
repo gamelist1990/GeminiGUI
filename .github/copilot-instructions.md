@@ -1,94 +1,331 @@
-# Copilot Instructions for GeminiGUI
+# GitHub Copilot Instructions for GeminiGUI
 
-## Project Overview
-This is a desktop application built with Tauri v2, React 19, TypeScript, and Vite. It provides a GUI interface for interacting with Gemini AI.
+## 🎯 プロジェクト概要
+このリポジトリは **Tauri v2 + React 19 + TypeScript + Vite** で構築されたデスクトップGUIアプリケーション（Gemini AI & OpenAI クライアント）です。ワークスペースベースのチャットインターフェースを提供し、ツール実行、セッション管理、マルチAPIサポートなどの高度な機能を備えています。
 
-## Tech Stack
-- **Frontend**: React 19.1.0, TypeScript 5.8.3, Vite 7.0.4
-- **Backend**: Tauri v2 (Rust)
-- **Build Tool**: Vite with Tauri CLI
-- **Package Manager**: Bun (as indicated by bun.lock)
+## 🛠️ 技術スタック
+- **フロントエンド**: React 19.1.0, TypeScript 5.8.3, Vite 7.0.4
+- **バックエンド**: Tauri v2 (Rust)
+- **ビルドツール**: Vite with Tauri CLI
+- **パッケージマネージャー**: Bun (推奨), npm/yarn (互換)
+- **AI API**: Gemini AI (PowerShell CLI経由), OpenAI (Function Calling API)
 
-## Project Structure
+## 📁 重要なファイルとアーキテクチャ
+
+### 主要ディレクトリ構成
 ```
-/app
-  ├── src/                 # React TypeScript source code
-  │   ├── App.tsx         # Main React component
-  │   ├── App.css         # Main styles
-  │   └── main.tsx        # React entry point
-  ├── src-tauri/          # Rust/Tauri backend
-  │   ├── src/
-  │   │   ├── lib.rs      # Library with Tauri commands
-  │   │   └── main.rs     # Entry point
-  │   ├── build.rs        # Build script
-  │   └── Cargo.toml      # Rust dependencies
-  ├── public/             # Static assets
-  ├── index.html          # HTML entry point
-  ├── package.json        # Node.js dependencies
-  └── vite.config.ts      # Vite configuration
+app/src/
+├── AITool/              # Modern Tool System (ツール定義と実行エンジン)
+│   ├── modernTools.ts   # JSON Schemaベースのツール定義
+│   └── toolExecutor.ts  # Rust/Tauriコマンド経由のツール実行
+├── hooks/               # React hooks (ビジネスロジック)
+│   ├── useChatSessions.ts  # チャットセッション管理
+│   ├── useSettings.ts      # グローバル設定管理
+│   └── useWorkspaces.ts    # ワークスペース管理
+├── pages/               # アプリケーションビュー
+│   ├── Chat/           # チャットインターフェース
+│   ├── Settings/       # 設定パネル（カテゴリ別）
+│   ├── SettingsPage.tsx    # モダン設定ページ
+│   ├── WorkspaceSelection.tsx  # ワークスペース選択
+│   └── Setup.tsx       # 初期セットアップウィザード
+├── utils/              # ユーティリティ関数とAPI
+│   ├── configAPI.ts    # 設定の永続化（ファイルシステム）
+│   ├── geminiCUI.ts    # Gemini AI統合
+│   ├── openaiAPI.ts    # OpenAI API統合
+│   ├── cleanupManager.ts   # 一時ファイルの自動クリーンアップ
+│   ├── i18n.ts         # 国際化（JSONC形式）
+│   └── modernToolSystem.ts # ツールシステム互換レイヤー
+└── types/
+    └── index.ts        # 型定義（Workspace, Settings, など）
 ```
 
-## Supported Tauri Plugins
-The project uses the following official Tauri plugins:
-- `tauri-plugin-os` - OS information
-- `tauri-plugin-notification` - System notifications
-- `tauri-plugin-fs` - File system access
-- `tauri-plugin-shell` - Shell command execution
-- `tauri-plugin-dialog` - Native dialogs
-- `tauri-plugin-opener` - Open files/URLs with default apps
-- `tauri-controls` - Custom window controls (third-party)
+### データストレージ構造
+```
+~/Documents/PEXData/GeminiGUI/
+├── config.json         # グローバル設定
+├── workspaces.json     # ワークスペース一覧
+└── Chatrequest/
+    └── {workspaceId}/
+        ├── sessions/
+        │   └── {sessionId}.json  # チャットメッセージ
+        └── temp/
+            └── GeminiTemp/       # 自動クリーンアップされる一時ディレクトリ
+```
 
-## Development Guidelines
+## 🔑 核となるコンセプト
 
-### Code Style
-- Use TypeScript for all React components
-- Follow React 19 best practices with functional components and hooks
-## Copilot / AI エージェント向け素早く使える要点
+### 1. Modern Tool System
+**場所**: `app/src/AITool/`
 
-このリポジトリは Tauri(v2) + React(19) + TypeScript + Vite で作られたデスクトップ GUI（GeminiAPI クライアント）です。ここでは、AI エージェントがこのコードベースで即戦力になるための最小限の知識を示します。
+**特徴**:
+- JSON Schemaベースのツール定義（OpenAI/Anthropic/Gemini互換）
+- Tauriコマンド経由での安全なツール実行（Rustバックエンド）
+- ワークスペース境界の検証とセキュリティ
+- 7つの基本ツール: `read_file`, `write_file`, `delete_file`, `move_file`, `list_directory`, `create_directory`, `search_files`
 
-## 重要なファイルとアーキテクチャ（要点）
-- UI (React): `app/src/` — 主要ページは `pages/`（`Chat.tsx`, `Settings.tsx`, `WorkspaceSelection.tsx`, `Setup.tsx`）。
-- アプリ入口: `app/src/App.tsx`（グローバル設定、ワークスペース選択、hook の組合せで画面遷移を制御）。
-- ビジネスロジック / 再利用: `app/src/hooks/`（例: `useChatSessions.ts`, `useSettings.ts`, `useWorkspaces.ts`）に副作用や永続化のパターンが集約。
-- ユーティリティ: `app/src/utils/`（`configAPI.ts`, `geminiCUI.ts`, `i18n.ts`, `powershellExecutor.ts`, `localFileSystem.ts`）— 外部連携や設定周りを担当。
-- 翻訳: `app/public/lang/{en_US.jsonc,ja_JP.jsonc}` と `app/src/utils/i18n.ts`（JSONC をパースして `t(key)` を提供）。
-- ネイティブ側 (Tauri/Rust): `app/src-tauri/src/lib.rs`（`#[tauri::command]` と `invoke_handler!` でコマンド登録）。
-- パッケージ設定: `app/package.json`（スクリプト: `dev`, `build`, `tauri`）。Bundler は Bun を想定（`bun.lock` が存在）だが npm/Yarn でも動く。
+**OpenAI Function Calling フロー**:
+1. 初回リクエスト: AIがツール使用を決定 → `tool_calls` を返す
+2. ツール実行: フロントエンドがツールを実行、結果を収集
+3. フォローアップリクエスト: 結果を `tool` ロールメッセージとしてAIに送信
+4. 最終応答: AIが人間にわかりやすい説明を生成
 
-## 開発・ビルドの短い手順（確実に動かすためのコマンド）
-- 依存インストール（推奨）: `cd app` → `bun install`（あるいは `npm install`）
-- 開発（Tauri + Vite）: `bun run tauri dev`（`package.json` の `tauri` スクリプトに引数 `dev` を渡す）
-- フロントだけ: `bun run dev`（Vite）
-- ビルド: `bun run tauri build`
-- ポート: Vite デフォルトの dev ポートは 1420、HMR は 1421（プロジェクト内で明記あり）。
+### 2. 設定システム
+**場所**: `app/src/utils/configAPI.ts`
 
-## 主要パターンと注意点（コード例を参照）
-- Tauri コマンド追加: `src-tauri/src/lib.rs` に `#[tauri::command] fn foo(...) {}` を書き、`tauri::generate_handler![foo, ...]` に登録する。
-  例: `lib.rs` に `greet` が登録されている。
-- フロント→ネイティブ呼び出し: `invoke('command_name', { ... })`（`@tauri-apps/api` を使用）。
-- i18n: `t('category.key')` を使う。欠落時はキー文字列が返るため、キーで挙動を推測可能（参照: `app/src/utils/i18n.ts`）。
-- 設定/ワークスペース管理: `Config` クラス（`utils/configAPI.ts`）を通じてドキュメントディレクトリ下に永続化。`App.tsx` の `globalConfig` 初期化を参照。
-- Chat セッション: `useChatSessions` がセッション作成・送信・再送・圧縮等の操作を提供。ページロジックは `app/src/pages/Chat.tsx`。
+**Config クラスAPI**:
+- `load()`: ディスクから設定を読み込み
+- `save()`: ディスクに設定を書き込み
+- `get(key)`: 設定値を取得
+- `set(key, value)`: 設定値を設定
+- 自動的なディレクトリ作成とエラーハンドリング
 
-## プロジェクト固有の慣習（重要）
-- Bun を主に想定するが `package.json` のスクリプトは標準的（`vite`, `tauri`）。CI/開発環境で Bun がない場合は npm で代替可能。
-- `src-tauri` はネイティブコマンドのソースなので破壊的変更は慎重に。Tauri プラグインは Rust 側と JS 側で両方を更新する必要あり（`Cargo.toml` と `package.json`）。
-- 翻訳は JSONC（コメント付き JSON）。`i18n.ts` はコメント削除ロジックを含むため、翻訳追加時は JSONC 構文を守る。
+### 3. CleanupManager
+**場所**: `app/src/utils/cleanupManager.ts`
 
-## デバッグのヒント
-- フロントの高速確認は `bun run dev`（Vite）で行い、ネイティブ連携を確認するには `bun run tauri dev`。
-- Rust 側のログは Tauri 実行コンソールに出力される。Visual Studio Code では `src-tauri` 配下を Rust 拡張で開いてデバッグ可能。
+**目的**: AI操作中に作成された一時ファイルの自動クリーンアップ
 
-## 参考ファイル（すぐ参照すべき）
-- `app/src/App.tsx` — アプリ全体の起動・ビュー遷移
-- `app/src/hooks/useChatSessions.ts` — 会話ロジックの中心
-- `app/src/utils/i18n.ts` と `app/public/lang/*.jsonc` — 国際化フロー
-- `app/src-tauri/src/lib.rs` — Tauri コマンド登録例（`greet`）
-- `app/package.json` — 開発 / ビルド用スクリプト
+**機能**:
+- **レジストリ**: すべての一時ファイル/ディレクトリをメタデータと共に追跡
+- **自動クリーンアップ**: 60秒ごとに実行、10分以上経過したファイルを削除
+- **セッションベース**: 一時ファイルをワークスペース+セッションに関連付け
+- **手動クリーンアップ**: `cleanupSession()` で即座にクリーンアップ可能
 
-## 追加の注意と確認依頼
-- このファイルはコードベースから検出可能な実装パターンに限定しています。もしローカルの開発フロー（環境変数、gcloud の前提、CI 設定など）で追記が必要な点があれば教えてください。
+### 4. 国際化 (i18n)
+**場所**: `app/src/utils/i18n.ts`, `app/public/lang/`
+
+**実装**:
+- **フォーマット**: JSONC（コメント付きJSON）
+- **構造**: ネストされたキー（例: `settings.categories.general.title`）
+- **API**: `t('key')` で翻訳、`setLanguage()` で言語切替
+- **フォールバック**: 翻訳が見つからない場合はキー文字列を返す
+
+## 🚀 開発コマンド
+
+### セットアップ
+```powershell
+cd app
+bun install          # or: npm install
+```
+
+### 開発
+```powershell
+bun run dev          # フロントエンドのみ（Vite devサーバー）
+bun run tauri dev    # Tauriバックエンド込みの完全版
+```
+
+### ビルド
+```powershell
+bun run build        # フロントエンドアセットのビルド
+bun run tauri build  # 配布用アプリケーションバンドルのビルド
+```
+
+## 🔧 よくある開発パターン
+
+### 新しいTauriコマンドの追加
+1. `app/src-tauri/src/lib.rs` にコマンドを追加:
+```rust
+#[tauri::command]
+fn my_command(arg: String) -> Result<String, String> {
+    Ok(format!("Hello {}", arg))
+}
+```
+
+2. `invoke_handler!` に登録:
+```rust
+tauri::generate_handler![greet, my_command]
+```
+
+3. フロントエンドから呼び出し:
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+const result = await invoke<string>('my_command', { arg: 'World' });
+```
+
+### 翻訳の追加
+1. `app/public/lang/en_US.jsonc` と `ja_JP.jsonc` を編集:
+```jsonc
+{
+  "myFeature": {
+    "title": "My Feature",      // English
+    "title": "私の機能"         // Japanese
+  }
+}
+```
+
+2. コンポーネントで使用:
+```typescript
+import { t } from '../utils/i18n';
+<h1>{t('myFeature.title')}</h1>
+```
+
+### 新しいツールの追加
+1. `app/src/AITool/modernTools.ts` で定義:
+```typescript
+export const MY_TOOL: ModernToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'my_tool',
+    description: 'ツールの説明',
+    parameters: {
+      type: 'object',
+      properties: {
+        param1: { type: 'string', description: '第1パラメータ' }
+      },
+      required: ['param1']
+    }
+  }
+};
+```
+
+2. `app/src/AITool/toolExecutor.ts` で実装:
+```typescript
+case 'my_tool':
+  // ツール実行ロジック
+  return { success: true, result: data };
+```
+
+3. ツール配列とエクスポートに追加
+
+### 設定の管理
+```typescript
+// コンポーネント内
+const { settings, updateSettings } = useSettings();
+
+// 設定を更新
+updateSettings({ theme: 'dark' });
+
+// 設定は自動的にディスクに永続化される
+```
+
+### チャットセッションの操作
+```typescript
+const { sessions, currentSessionId, createSession, addMessage } = useChatSessions(workspaceId);
+
+// 新しいセッションを作成
+const sessionId = await createSession('セッション名');
+
+// メッセージを送信
+addMessage(sessionId, {
+  role: 'user',
+  content: 'こんにちはAI',
+  timestamp: new Date()
+});
+```
+
+## 🐛 デバッグのヒント
+
+### フロントエンドデバッグ
+- `bun run dev` で高速HMR（Hot Module Replacement）
+- Tauriウィンドウでブラウザ DevTools (F12) を使用
+- `[Component]` プレフィックス付きログをコンソールで確認
+
+### バックエンドデバッグ
+- RustログはTauri dev コンソールに表示される
+- VS Code + Rust Analyzer 拡張機能を使用
+- `src-tauri/src/` ファイルにブレークポイントを設定
+
+### よくある問題
+1. **TypeScriptエラー**: `bun run build` ですべての型をチェック
+2. **Tauriプラグインエラー**: `tauri.conf.json` のパーミッションを確認
+3. **ファイルシステムエラー**: Tauri FSプラグインのパーミッションを確認
+4. **翻訳の欠落**: キー文字列にフォールバックされる、コンソールを確認
+
+## 🎯 プロジェクト固有の慣習
+
+### 命名規則
+- **コンポーネント**: PascalCase (例: `ChatMessageBubble.tsx`)
+- **Hooks**: camelCase + `use` プレフィックス (例: `useChatSessions.ts`)
+- **ユーティリティ**: camelCase (例: `configAPI.ts`)
+- **定数**: UPPER_SNAKE_CASE (例: `MODERN_TOOLS`)
+- **型/インターフェース**: PascalCase (例: `ChatSession`, `Workspace`)
+
+### インポートの順序
+1. 外部ライブラリ（React、Tauri、など）
+2. 内部ユーティリティとフック
+3. コンポーネント
+4. 型
+5. CSS
+
+### エラーハンドリングパターン
+```typescript
+try {
+  const result = await someOperation();
+  console.log('[Component] Success:', result);
+} catch (error) {
+  console.error('[Component] Error:', error);
+  // ユーザーフレンドリーなエラーメッセージを表示
+}
+```
+
+### ログパターン
+- プレフィックスを使用: `[Chat]`, `[Settings]`, `[OpenAI]`, `[Gemini]`
+- 重要な状態変更をログ
+- タイミング情報付きでAPI呼び出しをログ
+- ログ出力前に機密データをサニタイズ
+
+## 📝 AIアシスタントへの注意事項
+
+このコードベースで作業する際:
+1. **必ず確認**: Tauriプラグインが `tauri.conf.json` で正しく設定されているか
+2. **検証**: ファイルパスがワークスペース境界内にあるか
+3. **維持**: 既存のフックベースのアーキテクチャ
+4. **保持**: UIテキストを変更する際は翻訳キーを保持
+5. **テスト**: AIロジックを変更する際はGeminiとOpenAIの両統合をテスト
+6. **更新**: 一時ファイルを作成する際はCleanupManagerへの登録を更新
+7. **従う**: 一貫性のために既存のコードパターンに従う
+8. **文書化**: 新機能をコメントとREADMEに文書化
+
+## 🔄 最近の主要な変更
+
+### ツールシステムのモダナイゼーション（最新）
+- レガシーツールマネージャーからModern Tool Systemへ移行
+- ツール定義と実行ロジックを分離
+- フォローアップリクエストを持つOpenAI Function Calling サポートを追加
+- AIへの適切なツール結果フィードバックを実装
+
+### 設定システムの刷新
+- カテゴリベースのナビゲーションを持つ統一設定インターフェース
+- 即座の永続化を伴うリアルタイムツール設定
+- ツールの有効/無効の同期問題を修正
+
+### OpenAI統合
+- 適切なツール実行を伴うストリーミングサポートを追加
+- 2フェーズリクエストパターンを実装（ツール呼び出し → 結果 → 最終応答）
+- ワークスペースコンテキストと会話履歴のサポートを追加
+
+## 🔍 重要なファイルリファレンス
+
+### コアアプリケーションファイル
+- `app/src/App.tsx` - メインルーティング、グローバル状態の初期化
+- `app/src/pages/Chat/index.tsx` - チャットインターフェース、AI操作ロジック
+- `app/src/pages/SettingsPage.tsx` - 統一設定インターフェース
+- `app/src/pages/WorkspaceSelection.tsx` - お気に入り付きワークスペースピッカー
+
+### ビジネスロジックフック
+- `app/src/hooks/useChatSessions.ts` - セッションCRUD、メッセージ送信、トークン追跡
+- `app/src/hooks/useSettings.ts` - 設定管理、永続化
+- `app/src/hooks/useWorkspaces.ts` - ワークスペースCRUD、お気に入り、最近のリスト
+
+### AI統合
+- `app/src/utils/geminiCUI.ts` - Gemini AI統合（PowerShell CLI）
+- `app/src/utils/openaiAPI.ts` - OpenAI API統合（Function Calling）
+- `app/src/AITool/modernTools.ts` - ツール定義（JSON Schema）
+- `app/src/AITool/toolExecutor.ts` - ツール実行エンジン
+
+### ユーティリティ
+- `app/src/utils/configAPI.ts` - 設定の永続化
+- `app/src/utils/cleanupManager.ts` - 一時ファイルのクリーンアップ
+- `app/src/utils/i18n.ts` - 国際化
+- `app/src/utils/workspace.ts` - ワークスペースファイルのスキャン
+
+### バックエンド
+- `app/src-tauri/src/lib.rs` - Tauriコマンド（ファイル操作、ツール実行）
+- `app/src-tauri/tauri.conf.json` - Tauri設定（パーミッション、ウィンドウ設定）
 
 ---
-更新案の内容はここまでです。修正や補足して欲しい箇所（例：CI 設定、テスト手順、秘密情報の扱い方）があれば指示ください。
+
+**最終更新**: 2025-10-05  
+**プロジェクトバージョン**: 0.1.0  
+**メンテナー**: gamelist1990
+
+**重要**: このドキュメントは、Copilot や Claude などのAIアシスタントがこのプロジェクトで効率的に作業できるように最適化されています。人間の開発者には、より詳細な `CLAUDE.md` を参照することをお勧めします。

@@ -34,20 +34,91 @@ export default function WorkspaceSelection({
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [isCheckingSetup, setIsCheckingSetup] = useState(true);
 
-  // Check Gemini CLI on component mount (only once per app session)
+  // Pre-check setup status before rendering loading state
   useEffect(() => {
+    let isComponentMounted = true;
+
+    const preCheckSetup = async () => {
+      try {
+        // If geminiAuth is true, skip all setup checks completely
+        if (settings.geminiAuth) {
+          console.log('[Setup] geminiAuth is true, skipping all setup checks');
+          if (isComponentMounted) {
+            setIsCheckingSetup(false);
+            onSetupCheckCompleted();
+          }
+          return;
+        }
+
+        // Quick pre-check: see if we already have auth complete status
+        if (setupCheckCompleted) {
+          console.log('[Setup] Already completed, skipping load');
+          if (isComponentMounted) setIsCheckingSetup(false);
+          return;
+        }
+
+        // If we have config and auth settings, do a quick validation
+        if (globalConfig) {
+          try {
+            const config = await globalConfig.loadConfig();
+            if (config?.googleCloudProjectId) {
+              console.log('[Setup] Pre-check: googleCloudProjectId found, auth complete');
+              if (isComponentMounted) setIsCheckingSetup(false);
+              return;
+            }
+          } catch (configError) {
+            console.log('[Setup] Pre-check: config error, will run full check');
+          }
+        }
+      } catch (error) {
+        console.log('[Setup] Pre-check failed, will run full check');
+      }
+
+      // If pre-check didn't trigger return, proceed with full check
+      if (isComponentMounted) {
+        await checkGeminiSetup();
+      }
+    };
+
     const checkGeminiSetup = async () => {
-      const logCallback = (msg: string) => console.log('[Setup Check]', msg);
+      const logCallback = (msg: string) => console.log('[Setup]', msg);
+
+      // geminiAuth が true の場合は完全にスキップ
+      if (settings.geminiAuth) {
+        logCallback('geminiAuth is true, skipping all setup checks');
+        setIsCheckingSetup(false);
+        onSetupCheckCompleted();
+        return;
+      }
 
       // 既にチェック済みの場合はスキップ
       if (setupCheckCompleted) {
-        logCallback('Already checked in this app session, skipping');
+        logCallback('認証は既に完了しています。セットアップチェックをスキップします');
         setIsCheckingSetup(false);
         return;
       }
 
+      // 事前チェック: 設定から認証状態を確認
+      logCallback('Gemini CLI のチェックを開始しています...');
       try {
-        logCallback('Starting setup verification');
+        // googleCloudProjectId が設定されている場合のみスキップ
+        if (globalConfig) {
+          try {
+            const config = await globalConfig.loadConfig();
+            if (config?.googleCloudProjectId) {
+              logCallback('googleCloudProjectId が設定されています。セットアップを完了と見なします');
+              setIsCheckingSetup(false);
+              return; // チェックを完全にスキップ
+            }
+          } catch (configError) {
+            logCallback(`設定読み込みエラー: ${configError}`);
+          }
+        }
+      } catch (error) {
+        logCallback(`事前チェックエラー: ${error}`);
+      }
+
+      try {
         logCallback(`config.geminiAuth: ${settings.geminiAuth}`);
 
         // geminiAuthフラグがtrueでも、実際のプロジェクト存在を確認
@@ -85,8 +156,12 @@ export default function WorkspaceSelection({
       }
     };
 
-    checkGeminiSetup();
-  }, [settings.geminiAuth, setupCheckCompleted, onSetupCheckCompleted]);
+    preCheckSetup();
+
+    return () => {
+      isComponentMounted = false;
+    }
+  }, [settings.geminiAuth, setupCheckCompleted, onSetupCheckCompleted, globalConfig, settings]);
 
   const handleSetupComplete = () => {
     setShowSetupModal(false);

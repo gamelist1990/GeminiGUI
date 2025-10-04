@@ -153,7 +153,25 @@
       "totalTokensSummary": "Total Tokens",
       "totalMessages": "Total Messages",
       "apiStats": "API Stats",
-      "diff": "Diff:"
+      "diff": "Diff:",
+      "export": {
+        "button": "Export",
+        "title": "Export Conversation History",
+        "selectSession": "Select Session",
+        "format": "Format",
+        "formatPdf": "PDF",
+        "formatTxt": "Text File",
+        "exporting": "Exporting...",
+        "selectSessionFirst": "Please select a session first",
+        "noSessionAvailable": "No sessions available for export",
+        "successPdf": "Conversation history exported to PDF successfully",
+        "successTxt": "Conversation history exported to text file successfully",
+        "error": "Failed to export conversation history"
+      }
+    },
+    "role": {
+      "user": "User",
+      "assistant": "Assistant"
     },
     "messageStats": {
       "fileChanges": "File Changes",
@@ -163,7 +181,12 @@
     "processing": {
       "compacting": "Summarizing conversation history...",
       "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
-      "compactPrompt": "Please summarize the following conversation history concisely. Clearly state important points, discussed topics, and decisions. Structure and organize it so that AI can easily reference it in future conversations:"
+      "compactPrompt": "Create a highly detailed and structured summary of the following conversation history so that future AI can understand it perfectly.\n\n# Summary Format\n\n## 📊 Conversation Overview\n- Period: [First message time] to [Last message time]\n- Total Messages: XX (User: XX, AI: XX)\n- Main Topics: [List topics]\n- Conversation Purpose: [What the user is trying to achieve]\n\n## 📝 Chronological Detailed Records\n\nFor each topic or activity, record in the following format:\n\n### [Time] Topic: [Topic Name]\n**User's Statements/Intentions:**\n- [Specific utterances]\n- [What the user was seeking]\n\n**AI's Responses:**\n- [Information provided or actions taken by AI]\n- [Results of responses]\n\n**Status/Progress:**\n- [Task completion status]\n- [Next required actions]\n\n**Important Context:**\n- [Background information to understand from this exchange]\n\n## 🎯 Ongoing Tasks/Activities\n\nIf there are continuing activities, record them:\n- Task Name: [e.g., Shiritori game, code implementation, problem solving]\n- Current State: [How far it has progressed]\n- Next Steps: [What should be done next]\n- Important Constraints: [Game rules, technical constraints, etc.]\n\n## ⚠️ Cautions/Learning Points\n\nThings to be careful about in future conversations:\n- User Preferences: [Prefers concise responses, detailed responses, etc.]\n- Misunderstandings/Corrections: [Points AI misunderstood and their corrections]\n- Communication Style: [Patterns of interaction with user]\n\n## 💡 Important Decisions/Conclusions\n\nThings decided or agreed upon in the conversation:\n- [Specific decision content]\n- [Future policy]\n\n## 📎 Reference Information\n\n- Related Files: [Files or resources mentioned]\n- External Links: [Referenced URLs]\n- Keywords: [Keywords for search or reference]\n\n---\n\n**Summary Creation Guidelines:**\n1. Maintain chronology so conversation flow is clear\n2. Record user intentions contrasted with AI responses\n3. Clearly record status of ongoing activities (especially games/tasks)\n4. Always record misunderstandings or corrections\n5. Include sufficient detail for immediate context understanding in next conversation\n6. Format readably in Markdown\n\nPlease summarize the following conversation history in the above format:",
+      "elapsedTime": "Elapsed time: {elapsedSeconds} seconds"
+    },
+    "compactWarning": {
+      "messageCountExceeded": "The message count has exceeded {maxMessagesBeforeCompact} messages.",
+      "recommendCompactOrNew": "It is recommended to organize the conversation with <strong>/compact</strong> or create a new session."
     },
     "overview": "Overview",
     "errors": {
@@ -194,11 +217,47 @@
     "save": "Save",
     "cancel": "Cancel",
     "back": "Back",
+    // SettingsPage categories
+    "categories": {
+      "general": {
+        "title": "General",
+        "label": "General Settings",
+        "description": "Language and theme settings"
+      },
+      "ai": {
+        "title": "AI",
+        "label": "AI Settings",
+        "description": "Model, API key, and response mode settings"
+      },
+      "tools": {
+        "title": "Tools",
+        "label": "Tool Settings",
+        "description": "Tool execution permissions and settings"
+      },
+      "appearance": {
+        "title": "Appearance",
+        "label": "Appearance",
+        "description": "UI and display settings"
+      },
+      "system": {
+        "title": "System",
+        "label": "System",
+        "description": "Setup verification and backup recommendations"
+      }
+    },
+    "unsavedChanges": "You have unsaved changes. Are you sure you want to close?",
+    "closeSettings": "Close Settings",
     "approvalMode": "Approval Mode",
     "defaultApproval": "Default (Prompt for approval)",
     "autoEditApproval": "Auto Edit (Auto-approve edit tools)",
     "yoloApproval": "YOLO (Auto-approve all tools)",
     "approvalDescription": "Controls how Gemini handles tool approvals. Default requires manual approval, Auto Edit automatically approves edits, and YOLO approves all actions.",
+    "responseMode": "Response Mode",
+    "asyncMode": "Async Mode (Current Standard)",
+    "streamMode": "Stream Mode (Coming Soon)",
+    "responseModeDescription": "Select how AI responses are processed. Async mode retrieves complete responses at once. Stream mode is planned for future implementation and will receive responses in real-time.",
+    "streamNotAvailable": "⚠️ Stream mode is currently under development. It will be available in a future version.",
+    "streamAvailableWithOpenAI": "✅ Stream mode is available when using OpenAI API!",
     "modelSelection": "🤖 Model Selection",
     "defaultModel": "Default Gemini 2.5 Pro",
     "flashModel": "Gemini 2.5 Flash (Fast & Efficient)",
@@ -220,7 +279,23 @@
     "backupText": "This application does not have checkpointing functionality. It is strongly recommended to take appropriate backups using Git or other version control systems before making code changes with AI.",
     "backupTip1": "✓ Commit to Git before starting changes",
     "backupTip2": "✓ Create separate backups of important files",
-    "backupTip3": "✓ Create branches before major changes"
+    "backupTip3": "✓ Create branches before major changes",
+    // OpenAI API Support
+    "enableOpenAI": "OpenAI API Support",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "openAIDescription": "🤖 When OpenAI API is enabled, you can use OpenAI models (GPT-4, GPT-3.5, etc.) instead of Gemini. Streaming is also available.",
+    "openAIApiKey": "OpenAI API Key",
+    "openAIApiKeyPlaceholder": "sk-... or xxx (placeholder acceptable)",
+    "openAIApiKeyDescription": "Enter your OpenAI API key. Placeholders (like xxx) are also acceptable.",
+    "openAIApiKeyNote": "If using a custom endpoint, set the appropriate API key.",
+    "openAIBaseURL": "OpenAI Base URL",
+    "openAIBaseURLDescription": "Specify the OpenAI API endpoint. Default is the official endpoint.",
+    "openAIBaseURLNote": "If using a custom endpoint (like local LLM), set the URL here.",
+    "openAIModel": "OpenAI Model",
+    "openAIModelDescription": "Specify the OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo, gpt-4-turbo).",
+    "openAIModelNote": "Defaults to gpt-3.5-turbo if left blank.",
+    "openAIStreamDescription": "⚡ Stream mode is available when using OpenAI API. Receive responses in real-time."
   },
   "common": {
     "confirm": "Confirm",
