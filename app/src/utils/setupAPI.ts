@@ -339,27 +339,32 @@ export const setupGemini = {
       log(`[VerifyAuth] Gemini CLI test output length: ${output.length} chars`);
 
       // GOOGLE_CLOUD_PROJECT に関するエラーが含まれるかチェック
-      if (output.includes('GOOGLE_CLOUD_PROJECT')) {
+      const needsProjectSetup = output.includes('GOOGLE_CLOUD_PROJECT');
+      
+      if (needsProjectSetup) {
         log('⚠️ Google Cloud Project の設定が必要です');
-        log('[VerifyAuth] Step 3: Checking for existing Cloud Projects');
-        const hasProject = await hasCloudProject(log);
-        log(`[VerifyAuth] hasProject result: ${hasProject}`);
-
-        if (hasProject) {
-          log('✓ Google Cloud Projectが見つかりました');
-          log(t('setup.logs.authSetupComplete'));
-          return { success: true, needsCloudSetup: false, hasProject: true };
-        } else {
-          log('⚠️ Google Cloud Projectが見つかりません');
-          log('プロジェクトを作成する必要があります');
-          return { success: false, needsCloudSetup: true, hasProject: false };
-        }
       }
+      
+      // プロジェクトチェックを実行
+      log('[VerifyAuth] Step 3: Checking for existing Cloud Projects');
+      const hasProject = await hasCloudProject(log);
+      log(`[VerifyAuth] hasProject result: ${hasProject}`);
 
-      // 特にエラーがなければ成功
-      log('✓ Gemini CLI のテストに成功しました');
-      log(t('setup.logs.authSetupComplete'));
-      return { success: true, needsCloudSetup: false };
+      if (hasProject) {
+        log('✓ Google Cloud Projectが見つかりました');
+        log(t('setup.logs.authSetupComplete'));
+        return { success: true, needsCloudSetup: false, hasProject: true };
+      } else if (needsProjectSetup) {
+        // プロジェクトが必要だがない場合
+        log('⚠️ Google Cloud Projectが見つかりません');
+        log('プロジェクトを作成する必要があります');
+        return { success: false, needsCloudSetup: true, hasProject: false };
+      } else {
+        // プロジェクトが不要な場合（エラーメッセージなし）
+        log('✓ Gemini CLI のテストに成功しました');
+        log(t('setup.logs.authSetupComplete'));
+        return { success: true, needsCloudSetup: false, hasProject: false };
+      }
     } catch (error) {
       log(`${t('setup.logs.authVerifyError')} ${error}`);
       log(`[VerifyAuth] Error details: ${error instanceof Error ? error.stack : 'Unknown'}`);

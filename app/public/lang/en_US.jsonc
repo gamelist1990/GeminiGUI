@@ -153,7 +153,21 @@
       "totalTokensSummary": "Total Tokens",
       "totalMessages": "Total Messages",
       "apiStats": "API Stats",
-      "diff": "Diff:"
+      "diff": "Diff:",
+      "export": {
+        "button": "Export",
+        "title": "Export Conversation History",
+        "selectSession": "Select Session",
+        "format": "Format",
+        "formatPdf": "PDF",
+        "formatTxt": "Text File",
+        "exporting": "Exporting...",
+        "selectSessionFirst": "Please select a session first",
+        "noSessionAvailable": "No sessions available for export",
+        "successPdf": "Conversation history exported to PDF successfully",
+        "successTxt": "Conversation history exported to text file successfully",
+        "error": "Failed to export conversation history"
+      }
     },
     "messageStats": {
       "fileChanges": "File Changes",

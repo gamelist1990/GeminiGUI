@@ -2,17 +2,22 @@ import { useState } from 'react';
 import { Settings as SettingsType } from '../types';
 import { t } from '../utils/i18n';
 import SetupModal from './Setup';
+import { detectGlobalNpmPath } from '../utils/setupAPI';
+import { Config } from '../utils/configAPI';
 import './Settings.css';
 
 interface SettingsProps {
   settings: SettingsType;
   onUpdateSettings: (settings: Partial<SettingsType>) => void;
   onClose: () => void;
+  globalConfig?: Config;
 }
 
-export default function Settings({ settings, onUpdateSettings, onClose }: SettingsProps) {
+export default function Settings({ settings, onUpdateSettings, onClose, globalConfig }: SettingsProps) {
   const [localSettings, setLocalSettings] = useState(settings);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const [isDetectingPath, setIsDetectingPath] = useState(false);
+  const [pathDetectionMessage, setPathDetectionMessage] = useState('');
 
   const handleSave = () => {
     onUpdateSettings(localSettings);
@@ -38,6 +43,46 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
     setShowSetupModal(false);
     // セットアップ完了をローカルストレージに保存
     localStorage.setItem('geminiSetupCompleted', 'true');
+  };
+
+  const handleRedetectGeminiPath = async () => {
+    setIsDetectingPath(true);
+    setPathDetectionMessage('gemini.ps1 のパスを検出中...');
+
+    try {
+      const detectedPaths = await detectGlobalNpmPath((msg: string) => {
+        setPathDetectionMessage(msg);
+      });
+
+      if (detectedPaths.npmPath && detectedPaths.hasGeminiCLI) {
+        const geminiPath = `${detectedPaths.npmPath}\\gemini.ps1`;
+        setPathDetectionMessage(`✓ パスを検出: ${geminiPath}`);
+
+        // Update local settings
+        const updatedSettings = { ...localSettings, geminiPath };
+        setLocalSettings(updatedSettings);
+
+        // Save to global config immediately
+        if (globalConfig) {
+          const currentConfig = await globalConfig.loadConfig();
+          if (currentConfig) {
+            currentConfig.geminiPath = geminiPath;
+            await globalConfig.saveConfig(currentConfig);
+            setPathDetectionMessage('✓ パスを保存しました');
+          }
+        }
+
+        setTimeout(() => {
+          setPathDetectionMessage('');
+        }, 3000);
+      } else {
+        setPathDetectionMessage('✗ gemini.ps1 が見つかりませんでした。Gemini CLI がインストールされているか確認してください。');
+      }
+    } catch (error) {
+      setPathDetectionMessage(`✗ エラー: ${error}`);
+    } finally {
+      setIsDetectingPath(false);
+    }
   };
 
   return (
@@ -184,6 +229,48 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
               {t('settings.cleanupDescription')}
               <br />
               <small>{t('settings.cleanupReason')}</small>
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">📍</span>
+              Gemini CLI パス設定
+            </label>
+            <div className="setting-action" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text"
+                className="setting-input"
+                placeholder="C:\\path\\to\\gemini.ps1"
+                value={localSettings.geminiPath || ''}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, geminiPath: e.target.value })
+                }
+                style={{ flex: 1, minWidth: '300px' }}
+              />
+              <button
+                className="action-button secondary"
+                onClick={handleRedetectGeminiPath}
+                disabled={isDetectingPath}
+                title="自動的にgemini.ps1のパスを検出して設定"
+              >
+                {isDetectingPath ? '検出中...' : '🔍 自動検出'}
+              </button>
+            </div>
+            {pathDetectionMessage && (
+              <p className="setting-description" style={{ 
+                color: pathDetectionMessage.includes('✓') ? 'var(--vscode-charts-green)' : 
+                       pathDetectionMessage.includes('✗') ? 'var(--vscode-charts-red)' : 
+                       'var(--text-secondary)'
+              }}>
+                {pathDetectionMessage}
+              </p>
+            )}
+            <p className="setting-description">
+              gemini.ps1 スクリプトへのフルパスを指定してください。
+              「自動検出」ボタンでnpmのグローバルインストールパスから自動的に検出できます。
+              <br />
+              <small>※ パスが正しくないと「Command failed with code 1」エラーが発生します</small>
             </p>
           </div>
 

@@ -1,44 +1,56 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChatSession, ChatMessage, Workspace } from '../types';
-import { t } from '../utils/i18n';
-import { formatElapsedTime, formatNumber } from '../utils/storage';
-import { callGemini, GeminiOptions } from '../utils/geminiCUI';
-import { scanWorkspace, getSuggestions, parseIncludes, FileItem } from '../utils/workspace';
-const ReactMarkdown = React.lazy(() => import('react-markdown')) as unknown as any;
-const SyntaxHighlighter = React.lazy(() => import('react-syntax-highlighter').then(mod => ({ default: mod.Prism }))) as unknown as any;
+import React, { useState, useRef, useEffect } from "react";
+import { ChatSession, ChatMessage, Workspace } from "../types";
+import { t } from "../utils/i18n";
+import { formatElapsedTime, formatNumber } from "../utils/storage";
+import { callGemini, GeminiOptions } from "../utils/geminiCUI";
+import {
+  scanWorkspace,
+  getSuggestions,
+  parseIncludes,
+  FileItem,
+} from "../utils/workspace";
+const ReactMarkdown = React.lazy(
+  () => import("react-markdown")
+) as unknown as any;
+const SyntaxHighlighter = React.lazy(() =>
+  import("react-syntax-highlighter").then((mod) => ({ default: mod.Prism }))
+) as unknown as any;
 // oneDark is relatively small; keep it static import for style reference
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { openFile } from '../utils/powershellExecutor';
-import * as opener from '@tauri-apps/plugin-opener';
-import * as fsPlugin from '@tauri-apps/plugin-fs';
-import './Chat.css';
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { openFile } from "../utils/powershellExecutor";
+import * as opener from "@tauri-apps/plugin-opener";
+import * as fsPlugin from "@tauri-apps/plugin-fs";
+import * as dialogPlugin from "@tauri-apps/plugin-dialog";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import "./Chat.css";
 
 // Markdown components for syntax highlighting
 const markdownComponents = {
   code({ node, inline, className, children, ...props }: any) {
-    const match = /language-(\w+)/.exec(className || '');
+    const match = /language-(\w+)/.exec(className || "");
     if (!inline && match) {
-      if (match[1] === 'markdown') {
+      if (match[1] === "markdown") {
         // For markdown code blocks, render the content as markdown
         return (
           <div className="markdown-preview">
             <React.Suspense fallback={<div>Loading preview…</div>}>
-              <ReactMarkdown>
-                {String(children)}
-              </ReactMarkdown>
+              <ReactMarkdown>{String(children)}</ReactMarkdown>
             </React.Suspense>
           </div>
         );
       } else {
         return (
-          <React.Suspense fallback={<pre className="code-loading">Loading code…</pre>}>
+          <React.Suspense
+            fallback={<pre className="code-loading">Loading code…</pre>}
+          >
             <SyntaxHighlighter
               style={oneDark}
               language={match[1]}
               PreTag="div"
               {...props}
             >
-              {String(children).replace(/\n$/, '')}
+              {String(children).replace(/\n$/, "")}
             </SyntaxHighlighter>
           </React.Suspense>
         );
@@ -83,7 +95,7 @@ const markdownComponents = {
     };
 
     React.Children.forEach(children, (child) => {
-      if (typeof child === 'string') {
+      if (typeof child === "string") {
         processed.push(...linkifyString(child));
       } else {
         processed.push(child as any);
@@ -99,20 +111,20 @@ async function openExternal(url: string) {
   try {
     const mod: any = opener;
     if (mod) {
-      if (typeof mod.openUrl === 'function') {
+      if (typeof mod.openUrl === "function") {
         await mod.openUrl(url);
         return;
       }
-      if (typeof mod.open === 'function') {
+      if (typeof mod.open === "function") {
         await mod.open(url);
         return;
       }
       if (mod.default) {
-        if (typeof mod.default.openUrl === 'function') {
+        if (typeof mod.default.openUrl === "function") {
           await mod.default.openUrl(url);
           return;
         }
-        if (typeof mod.default.open === 'function') {
+        if (typeof mod.default.open === "function") {
           await mod.default.open(url);
           return;
         }
@@ -123,7 +135,7 @@ async function openExternal(url: string) {
   }
 
   try {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, "_blank", "noopener,noreferrer");
   } catch (e) {
     // ignore
   }
@@ -135,7 +147,7 @@ interface ChatProps {
   currentSession: ChatSession | undefined;
   currentSessionId: string;
   maxSessionsReached: boolean;
-  approvalMode: 'default' | 'auto_edit' | 'yolo';
+  approvalMode: "default" | "auto_edit" | "yolo";
   totalTokens: number;
   customApiKey?: string;
   googleCloudProjectId?: string;
@@ -144,7 +156,11 @@ interface ChatProps {
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
-  onResendMessage: (sessionId: string, messageId: string, newMessage: ChatMessage) => void;
+  onResendMessage: (
+    sessionId: string,
+    messageId: string,
+    newMessage: ChatMessage
+  ) => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newName: string) => void;
   onCompactSession: (sessionId: string) => Promise<void>;
@@ -172,15 +188,17 @@ export default function Chat({
   onCompactSession,
   onBack,
 }: ChatProps) {
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [editingSessionName, setEditingSessionName] = useState('');
+  const [editingSessionName, setEditingSessionName] = useState("");
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [showFileSuggestions, setShowFileSuggestions] = useState(false);
   const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
-  const [workspaceSuggestions, setWorkspaceSuggestions] = useState<string[]>([]);
+  const [workspaceSuggestions, setWorkspaceSuggestions] = useState<string[]>(
+    []
+  );
   const [workspaceItems, setWorkspaceItems] = useState<FileItem[]>([]);
   const scanDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -194,11 +212,11 @@ export default function Chat({
     };
   }, []);
   const [cursorPosition, setCursorPosition] = useState(0);
-  const [elapsedTime, setElapsedTime] = useState('');
-  const [textareaHeight, setTextareaHeight] = useState('auto');
+  const [elapsedTime, setElapsedTime] = useState("");
+  const [textareaHeight, setTextareaHeight] = useState("auto");
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showProcessingModal, setShowProcessingModal] = useState(false);
-  const [processingMessage, setProcessingMessage] = useState('');
+  const [processingMessage, setProcessingMessage] = useState("");
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [showCompactWarning, setShowCompactWarning] = useState(false);
   const [requestElapsedTime, setRequestElapsedTime] = useState(0);
@@ -208,8 +226,9 @@ export default function Chat({
   const requestIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
-  const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] = useState(false);
-  const [geminiPathError, setGeminiPathError] = useState<string>('');
+  const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] =
+    useState(false);
+  const [geminiPathError, setGeminiPathError] = useState<string>("");
 
   // Load geminiPath from global config on workspace change
   useEffect(() => {
@@ -222,14 +241,14 @@ export default function Chat({
         setGeminiPath(loadedGeminiPath);
 
         if (!loadedGeminiPath) {
-          setGeminiPathError(t('chat.errors.geminiPathMissing'));
+          setGeminiPathError(t("chat.errors.geminiPathMissing"));
         } else {
-          setGeminiPathError('');
+          setGeminiPathError("");
         }
       } catch (error) {
-        console.error('Failed to load geminiPath from global config:', error);
+        console.error("Failed to load geminiPath from global config:", error);
         setGeminiPath(undefined);
-        setGeminiPathError(t('chat.errors.configLoadFailed'));
+        setGeminiPathError(t("chat.errors.configLoadFailed"));
       }
     };
 
@@ -241,27 +260,29 @@ export default function Chat({
   // Scan workspace for files and folders
   useEffect(() => {
     if (workspace?.path) {
-      scanWorkspace(workspace.path).then((items) => {
-        setWorkspaceItems(items); // Store original items
-        const suggestions = getSuggestions(items);
-        setWorkspaceSuggestions(suggestions);
-      }).catch((error) => {
-        console.error('Failed to scan workspace:', error);
-        // Fallback to basic suggestions
-        setWorkspaceSuggestions(['codebase']);
-        setWorkspaceItems([]);
-      });
+      scanWorkspace(workspace.path)
+        .then((items) => {
+          setWorkspaceItems(items); // Store original items
+          const suggestions = getSuggestions(items);
+          setWorkspaceSuggestions(suggestions);
+        })
+        .catch((error) => {
+          console.error("Failed to scan workspace:", error);
+          // Fallback to basic suggestions
+          setWorkspaceSuggestions(["codebase"]);
+          setWorkspaceItems([]);
+        });
     }
   }, [workspace?.path]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentSession?.messages]);
 
   // Update elapsed time in real-time
   useEffect(() => {
     if (!currentSession) {
-      setElapsedTime('');
+      setElapsedTime("");
       return;
     }
 
@@ -285,43 +306,47 @@ export default function Chat({
       return;
     }
 
-    const messageCount = currentSession.messages.filter(msg => msg.role !== 'system').length;
+    const messageCount = currentSession.messages.filter(
+      (msg) => msg.role !== "system"
+    ).length;
     setShowCompactWarning(messageCount >= maxMessagesBeforeCompact);
   }, [currentSession, maxMessagesBeforeCompact]);
 
   // Handle command and file suggestions
   useEffect(() => {
     const text = inputValue.substring(0, cursorPosition);
-    const lastWord = text.split(/\s/).pop() || '';
+    const lastWord = text.split(/\s/).pop() || "";
 
     // Command suggestions
-    if (lastWord.startsWith('/')) {
+    if (lastWord.startsWith("/")) {
       const query = lastWord.substring(1).toLowerCase();
-      const commands = ['compact', 'fixchat', 'init'];
-      const filtered = commands.filter(cmd => cmd.startsWith(query));
+      const commands = ["compact", "fixchat", "init"];
+      const filtered = commands.filter((cmd) => cmd.startsWith(query));
       setCommandSuggestions(filtered);
       setShowCommandSuggestions(filtered.length > 0);
       setShowFileSuggestions(false);
     }
     // File suggestions
-    else if (lastWord.startsWith('#')) {
+    else if (lastWord.startsWith("#")) {
       const query = lastWord.substring(1).toLowerCase(); // Remove # for matching
       // Debounced workspace rescan to refresh suggestions in real-time when typing '#'
       if (scanDebounceRef.current) clearTimeout(scanDebounceRef.current);
       scanDebounceRef.current = setTimeout(() => {
         if (workspace?.path) {
-          scanWorkspace(workspace.path).then((items) => {
-            setWorkspaceItems(items);
-            const suggestions = getSuggestions(items);
-            setWorkspaceSuggestions(suggestions);
-          }).catch((error) => {
-            console.error('Failed to scan workspace (debounced):', error);
-          });
+          scanWorkspace(workspace.path)
+            .then((items) => {
+              setWorkspaceItems(items);
+              const suggestions = getSuggestions(items);
+              setWorkspaceSuggestions(suggestions);
+            })
+            .catch((error) => {
+              console.error("Failed to scan workspace (debounced):", error);
+            });
         }
       }, 300);
       // Filter suggestions by matching the query against the suggestion text
       // This allows #config to match #file:config.json or #folder:config
-      const filtered = workspaceSuggestions.filter(suggestion => {
+      const filtered = workspaceSuggestions.filter((suggestion) => {
         const suggestionWithoutHash = suggestion.substring(1).toLowerCase(); // Remove # prefix
         return suggestionWithoutHash.includes(query);
       });
@@ -340,7 +365,7 @@ export default function Chat({
 
     // Auto-resize textarea
     const textarea = e.target;
-    textarea.style.height = 'auto';
+    textarea.style.height = "auto";
     const scrollHeight = textarea.scrollHeight;
     const lineHeight = 20; // Approximate line height
     const maxLines = 4;
@@ -359,7 +384,11 @@ export default function Chat({
 
     // Find the start of the current word (command or file)
     let wordStart = cursorPos - 1;
-    while (wordStart >= 0 && text[wordStart] !== ' ' && text[wordStart] !== '\n') {
+    while (
+      wordStart >= 0 &&
+      text[wordStart] !== " " &&
+      text[wordStart] !== "\n"
+    ) {
       wordStart--;
     }
     wordStart++;
@@ -367,7 +396,7 @@ export default function Chat({
     const before = text.substring(0, wordStart);
     const after = text.substring(cursorPos);
     // Suggestion already includes the prefix (# or /)
-    const newText = before + suggestion + ' ' + after;
+    const newText = before + suggestion + " " + after;
 
     setInputValue(newText);
     setShowCommandSuggestions(false);
@@ -393,11 +422,11 @@ export default function Chat({
   };
 
   const processCommand = async (command: string, args: string) => {
-    if (command === 'compact') {
+    if (command === "compact") {
       if (!currentSession) return;
 
       setShowProcessingModal(true);
-      setProcessingMessage(t('chat.stats.processing.compacting'));
+      setProcessingMessage(t("chat.stats.processing.compacting"));
       const startTime = Date.now();
 
       // Update elapsed time every second
@@ -407,7 +436,9 @@ export default function Chat({
 
       try {
         // Build conversation history (exclude system messages)
-        const historyMessages = currentSession.messages.filter(msg => msg.role !== 'system');
+        const historyMessages = currentSession.messages.filter(
+          (msg) => msg.role !== "system"
+        );
 
         // Check if there's any conversation to summarize
         if (historyMessages.length === 0) {
@@ -416,8 +447,8 @@ export default function Chat({
 
           const errorMessage: ChatMessage = {
             id: Date.now().toString(),
-            role: 'assistant',
-            content: t('chat.stats.processing.compactError'),
+            role: "assistant",
+            content: t("chat.stats.processing.compactError"),
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, errorMessage);
@@ -425,23 +456,37 @@ export default function Chat({
         }
 
         const historyText = historyMessages
-          .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
-          .join('\n\n');
+          .map(
+            (msg) =>
+              `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`
+          )
+          .join("\n\n");
 
-        const summaryPrompt = `${t('chat.stats.processing.compactPrompt')}\n\n${historyText}`;
+        const summaryPrompt = `${t(
+          "chat.stats.processing.compactPrompt"
+        )}\n\n${historyText}`;
 
-        const summaryResponse = await callGemini(summaryPrompt, workspace.path, {
-          approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
-          model: 'gemini-2.5-flash', // Use fast model for summary
-          customApiKey: customApiKey,
-        }, googleCloudProjectId, geminiPath);
+        const summaryResponse = await callGemini(
+          summaryPrompt,
+          workspace.path,
+          {
+            approvalMode: "yolo", // Use yolo mode for summary to avoid approval
+            model: "gemini-2.5-flash", // Use fast model for summary
+            customApiKey: customApiKey,
+          },
+          googleCloudProjectId,
+          geminiPath
+        );
 
         clearInterval(interval);
         setShowProcessingModal(false);
 
         // Validate response
-        if (!summaryResponse.response || summaryResponse.response.trim() === '') {
-          throw new Error(t('chat.errors.compactEmptyHistory'));
+        if (
+          !summaryResponse.response ||
+          summaryResponse.response.trim() === ""
+        ) {
+          throw new Error(t("chat.errors.compactEmptyHistory"));
         }
 
         // Clean up the response - remove any existing summary headers
@@ -449,16 +494,16 @@ export default function Chat({
 
         // Remove common summary headers that Gemini might add
         cleanedSummary = cleanedSummary
-          .replace(/^📝\s*会話履歴の要約[::\s]*/i, '')
-          .replace(/^会話履歴の要約[::\s]*/i, '')
-          .replace(/^[\*\*]+会話履歴の要約[\*\*]+[::\s]*/i, '')
-          .replace(/^#+\s*会話履歴の要約[::\s]*/i, '')
+          .replace(/^📝\s*会話履歴の要約[::\s]*/i, "")
+          .replace(/^会話履歴の要約[::\s]*/i, "")
+          .replace(/^[\*\*]+会話履歴の要約[\*\*]+[::\s]*/i, "")
+          .replace(/^#+\s*会話履歴の要約[::\s]*/i, "")
           .trim();
 
         // Step 1: Add summary message first (as system message)
         const systemMessage: ChatMessage = {
           id: Date.now().toString(),
-          role: 'system',
+          role: "system",
           content: `📝 **会話履歴の要約**\n\n${cleanedSummary}`,
           timestamp: new Date(),
           hidden: true,
@@ -466,7 +511,7 @@ export default function Chat({
         onSendMessage(currentSessionId, systemMessage);
 
         // Wait a bit to ensure messages are saved
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Compact the session (remove non-system messages)
         await onCompactSession(currentSessionId);
@@ -474,29 +519,30 @@ export default function Chat({
         // Add final confirmation (single message)
         const finalMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: t('chat.errors.compactCompleted'),
+          role: "assistant",
+          content: t("chat.errors.compactCompleted"),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, finalMessage);
-
       } catch (error) {
         clearInterval(interval);
         setShowProcessingModal(false);
-        console.error('Error compacting conversation:', error);
+        console.error("Error compacting conversation:", error);
 
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
-          role: 'assistant',
-          content: t('chat.errors.compactCommandFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
+          role: "assistant",
+          content: t("chat.errors.compactCommandFailed").replace(
+            "{error}",
+            error instanceof Error ? error.message : "Unknown error"
+          ),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
       }
-
-    } else if (command === 'init') {
+    } else if (command === "init") {
       setShowProcessingModal(true);
-      setProcessingMessage(t('chat.errors.initGenerating'));
+      setProcessingMessage(t("chat.errors.initGenerating"));
       const startTime = Date.now();
 
       const interval = setInterval(() => {
@@ -504,15 +550,15 @@ export default function Chat({
       }, 1000);
 
       try {
-  const geminiFilePath = `${workspace.path}/Gemini.md`;
-  const hadExistingGemini = await fsPlugin.exists(geminiFilePath);
+        const geminiFilePath = `${workspace.path}/Gemini.md`;
+        const hadExistingGemini = await fsPlugin.exists(geminiFilePath);
 
-        let existingGeminiContent = '';
+        let existingGeminiContent = "";
         if (hadExistingGemini) {
           try {
             existingGeminiContent = await fsPlugin.readTextFile(geminiFilePath);
           } catch (readError) {
-            console.warn('Failed to read existing Gemini.md:', readError);
+            console.warn("Failed to read existing Gemini.md:", readError);
           }
         }
 
@@ -565,8 +611,10 @@ Provide a complete analysis covering:
 - Ensure the result can replace the Gemini.md file entirely.
 - Highlight anything the next developer or AI assistant must know to work effectively.`;
 
-        const normalizedExistingContent = existingGeminiContent.replace(/\uFEFF/g, '').trim();
-        let initPrompt = '';
+        const normalizedExistingContent = existingGeminiContent
+          .replace(/\r/g, "")
+          .trim();
+        let initPrompt = "";
 
         if (hadExistingGemini) {
           initPrompt = `${basePrompt}
@@ -574,7 +622,7 @@ Provide a complete analysis covering:
 An existing Gemini.md file is already present. Review the current content enclosed between <current_gemini_md> markers, then update it to reflect the latest project state. Preserve useful insights, expand missing sections, and correct any outdated information. Produce a full replacement for Gemini.md.
 
 <current_gemini_md>
-${normalizedExistingContent || '(The file is currently empty.)'}
+${normalizedExistingContent || "(The file is currently empty.)"}
 </current_gemini_md>`;
         } else {
           initPrompt = `${basePrompt}
@@ -582,26 +630,34 @@ ${normalizedExistingContent || '(The file is currently empty.)'}
 No Gemini.md file exists yet. Explore the workspace with the available tools and create a comprehensive Gemini.md from scratch.`;
         }
 
-        const initResponse = await callGemini(initPrompt, workspace.path, {
-          approvalMode: 'yolo', // Force yolo mode for init command as requested
-          model: 'gemini-2.5-flash',
-          customApiKey: customApiKey,
-          includeDirectories: ['.'], // Allow the model to inspect the workspace structure via tools
-        }, googleCloudProjectId, geminiPath);
+        const initResponse = await callGemini(
+          initPrompt,
+          workspace.path,
+          {
+            approvalMode: "yolo", // Force yolo mode for init command as requested
+            model: "gemini-2.5-flash",
+            customApiKey: customApiKey,
+            includeDirectories: ["."], // Allow the model to inspect the workspace structure via tools
+          },
+          googleCloudProjectId,
+          geminiPath
+        );
 
         clearInterval(interval);
         setShowProcessingModal(false);
 
         // Check if AI actually created or updated the file using tools
-  const fileExists = await fsPlugin.exists(geminiFilePath);
+        const fileExists = await fsPlugin.exists(geminiFilePath);
         const fileStats = initResponse.stats?.files;
-        const hasFileChanges = fileStats ? (fileStats.totalLinesAdded > 0 || fileStats.totalLinesRemoved > 0) : false;
+        const hasFileChanges = fileStats
+          ? fileStats.totalLinesAdded > 0 || fileStats.totalLinesRemoved > 0
+          : false;
 
         if (fileExists && hasFileChanges) {
           // AI successfully created or updated the file using tools
           const successMessage: ChatMessage = {
             id: Date.now().toString(),
-            role: 'system',
+            role: "system",
             content: hadExistingGemini
               ? `✅ Gemini.mdを更新しました。#file:Gemini.md`
               : `✅ Gemini.mdが正常に作成されました。#file:Gemini.md`,
@@ -612,8 +668,8 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
           // AI didn't create the file or file creation failed
           const errorMessage: ChatMessage = {
             id: Date.now().toString(),
-            role: 'assistant',
-            content: t('chat.errors.initFailed'),
+            role: "assistant",
+            content: t("chat.errors.initFailed"),
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, errorMessage);
@@ -621,45 +677,54 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
       } catch (error) {
         clearInterval(interval);
         setShowProcessingModal(false);
-        console.error('Error creating Gemini.md:', error);
+        console.error("Error creating Gemini.md:", error);
 
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
-          role: 'assistant',
-          content: t('chat.errors.initFailedWithError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
+          role: "assistant",
+          content: t("chat.errors.initFailedWithError").replace(
+            "{error}",
+            error instanceof Error ? error.message : "Unknown error"
+          ),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
       }
-    } else if (command === 'fixchat') {
+    } else if (command === "fixchat") {
       if (!args.trim()) {
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
-          role: 'assistant',
-          content: t('chat.errors.fixchatNoText'),
+          role: "assistant",
+          content: t("chat.errors.fixchatNoText"),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
         return;
       }
-      
+
       setShowProcessingModal(true);
-      setProcessingMessage(t('chat.errors.fixchatProcessing'));
+      setProcessingMessage(t("chat.errors.fixchatProcessing"));
       const startTime = Date.now();
-      
+
       const interval = setInterval(() => {
         setProcessingElapsed(Math.floor((Date.now() - startTime) / 1000));
       }, 1000);
-      
+
       try {
         const improvementPrompt = `以下のユーザーメッセージを、AIが理解しやすく、より具体的で明確な表現に改善してください。改善後のメッセージのみを返してください。余計な説明や前置きは不要です:\n\n${args}`;
-        
-        const improvedResponse = await callGemini(improvementPrompt, workspace.path, {
-          approvalMode: approvalMode,
-          model: 'gemini-2.5-flash', // Use fast model
-          customApiKey: customApiKey,
-        }, googleCloudProjectId, geminiPath);
-        
+
+        const improvedResponse = await callGemini(
+          improvementPrompt,
+          workspace.path,
+          {
+            approvalMode: approvalMode,
+            model: "gemini-2.5-flash", // Use fast model
+            customApiKey: customApiKey,
+          },
+          googleCloudProjectId,
+          geminiPath
+        );
+
         clearInterval(interval);
         setShowProcessingModal(false);
 
@@ -674,33 +739,33 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
             const textarea = textareaRef.current;
 
             // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
-            
+
             // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
               window.HTMLTextAreaElement.prototype,
-              'value'
+              "value"
             )?.set;
-            
+
             if (nativeInputValueSetter) {
               nativeInputValueSetter.call(textarea, improvedText);
-              const event = new Event('input', { bubbles: true });
+              const event = new Event("input", { bubbles: true });
               textarea.dispatchEvent(event);
-              console.log('Dispatched input event');
-              console.log('Dispatched input event');
+              console.log("Dispatched input event");
+              console.log("Dispatched input event");
             }
-            console.log('Textarea value set to:', textarea.value);
-            
+            console.log("Textarea value set to:", textarea.value);
+
             // Add a visual highlight effect
-            textarea.classList.add('improved-message');
-            console.log('Added improved-message class');
+            textarea.classList.add("improved-message");
+            console.log("Added improved-message class");
             setTimeout(() => {
-              textarea.classList.remove('improved-message');
+              textarea.classList.remove("improved-message");
             }, 2000);
-            
+
             // Focus and adjust height
             textarea.focus();
-            console.log('Textarea focused');
-            textarea.style.height = 'auto';
+            console.log("Textarea focused");
+            textarea.style.height = "auto";
             const scrollHeight = textarea.scrollHeight;
             const lineHeight = 20;
             const maxLines = 4;
@@ -708,25 +773,30 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
             const newHeight = Math.min(scrollHeight, maxHeight);
             textarea.style.height = `${newHeight}px`;
             setTextareaHeight(`${newHeight}px`);
-            console.log('Textarea height adjusted to:', newHeight);
-            
+            console.log("Textarea height adjusted to:", newHeight);
+
             // Place cursor at the end
-            textarea.setSelectionRange(improvedText.length, improvedText.length);
-            console.log('Cursor placed at end');
+            textarea.setSelectionRange(
+              improvedText.length,
+              improvedText.length
+            );
+            console.log("Cursor placed at end");
           } else {
-            console.error('textareaRef.current is null!');
+            console.error("textareaRef.current is null!");
           }
         }, 100);
-        
       } catch (error) {
         clearInterval(interval);
         setShowProcessingModal(false);
-        console.error('Error improving message:', error);
-        
+        console.error("Error improving message:", error);
+
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
-          role: 'assistant',
-          content: t('chat.errors.fixchatCommandFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
+          role: "assistant",
+          content: t("chat.errors.fixchatCommandFailed").replace(
+            "{error}",
+            error instanceof Error ? error.message : "Unknown error"
+          ),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -742,91 +812,114 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
 
     // Check if it's a command
     const trimmedInput = inputValue.trim();
-    if (trimmedInput.startsWith('/')) {
-      const parts = trimmedInput.substring(1).split(' ');
+    if (trimmedInput.startsWith("/")) {
+      const parts = trimmedInput.substring(1).split(" ");
       const command = parts[0];
-      const args = parts.slice(1).join(' ');
-      
+      const args = parts.slice(1).join(" ");
+
       await processCommand(command, args);
-      setInputValue('');
+      setInputValue("");
       return;
     }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
-      role: 'user',
+      role: "user",
       content: inputValue,
       timestamp: new Date(),
       tokenUsage: Math.ceil(inputValue.length / 4), // Estimate tokens for user message
     };
 
     onSendMessage(currentSessionId, userMessage);
-    setInputValue('');
+    setInputValue("");
     setIsTyping(true);
-  // start timer for this request
-  requestStartRef.current = Date.now();
-  setRequestElapsedTime(0);
+    // start timer for this request
+    requestStartRef.current = Date.now();
+    setRequestElapsedTime(0);
 
-  // Start elapsed time counter
-  requestIntervalRef.current = setInterval(() => {
-    if (requestStartRef.current) {
-      setRequestElapsedTime(Math.floor((Date.now() - requestStartRef.current) / 1000));
-    }
-  }, 1000);
+    // Start elapsed time counter
+    requestIntervalRef.current = setInterval(() => {
+      if (requestStartRef.current) {
+        setRequestElapsedTime(
+          Math.floor((Date.now() - requestStartRef.current) / 1000)
+        );
+      }
+    }, 1000);
 
     try {
       // Parse includes from input with workspace items for directory verification
-      const { includes, directories } = parseIncludes(inputValue, workspaceItems);
-      
+      const { includes, directories } = parseIncludes(
+        inputValue,
+        workspaceItems
+      );
+
       // Build conversation history for context
       // Exclude system messages (summaries) and only include recent user/assistant messages
       const recentMessages = currentSession.messages
-        .filter(msg => msg.role !== 'system')
+        .filter((msg) => msg.role !== "system")
         .slice(-10); // Keep last 10 messages for context (5 exchanges)
-      
-      const conversationHistoryJson = recentMessages.map(msg => ({
+
+      const conversationHistoryJson = recentMessages.map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
 
       const conversationHistory = recentMessages
-        .map(msg => {
-          const role = msg.role === 'user' ? 'User' : 'Assistant';
+        .map((msg) => {
+          const role = msg.role === "user" ? "User" : "Assistant";
           return `${role}: ${msg.content}`;
         })
-        .join('\n\n');
-      
+        .join("\n\n");
+
       const options: GeminiOptions = {
         approvalMode: approvalMode,
         includes: includes.length > 0 ? includes : undefined,
         includeDirectories: directories.length > 0 ? directories : undefined,
-        conversationHistory: conversationHistory && recentMessages.length > 0 ? conversationHistory : undefined,
-        conversationHistoryJson: conversationHistoryJson.length > 0 ? conversationHistoryJson : undefined,
+        conversationHistory:
+          conversationHistory && recentMessages.length > 0
+            ? conversationHistory
+            : undefined,
+        conversationHistoryJson:
+          conversationHistoryJson.length > 0
+            ? conversationHistoryJson
+            : undefined,
         workspaceId: workspace.id,
         sessionId: currentSessionId,
       };
 
-      console.log('Sending message with conversation history:', conversationHistory ? 'Yes' : 'No');
-      const geminiResponse = await callGemini(inputValue, workspace.path, options, googleCloudProjectId, geminiPath);
-      
+      console.log(
+        "Sending message with conversation history:",
+        conversationHistory ? "Yes" : "No"
+      );
+      const geminiResponse = await callGemini(
+        inputValue,
+        workspace.path,
+        options,
+        googleCloudProjectId,
+        geminiPath
+      );
+
       // Calculate total tokens from stats
       let totalTokens = 0;
       if (geminiResponse.stats && geminiResponse.stats.models) {
-        totalTokens = Object.values(geminiResponse.stats.models).reduce((sum, model) => {
-          return sum + (model.tokens?.total || 0);
-        }, 0);
+        totalTokens = Object.values(geminiResponse.stats.models).reduce(
+          (sum, model) => {
+            return sum + (model.tokens?.total || 0);
+          },
+          0
+        );
       }
-      
+
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        role: 'assistant',
+        role: "assistant",
         content: geminiResponse.response,
         timestamp: new Date(),
         tokenUsage: totalTokens,
         stats: geminiResponse.stats,
       };
       onSendMessage(currentSessionId, aiMessage);
-      
+
       // Reset request timer
       if (requestStartRef.current) {
         requestStartRef.current = null;
@@ -834,26 +927,52 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
     } catch (error) {
       // Detect FatalToolExecutionError and suggest approval mode changes
       try {
-        const errObj = (error && typeof error === 'object') ? (error as any) : null;
+        const errObj =
+          error && typeof error === "object" ? (error as any) : null;
         const errType = errObj?.type || errObj?.error?.type || undefined;
-        const errMessage = errObj?.message || errObj?.error?.message || String(error);
-        if (errType === 'FatalToolExecutionError') {
+        const errMessage =
+          errObj?.message || errObj?.error?.message || String(error);
+
+        // Check for geminiPath error
+        if (
+          errMessage.includes("Command failed with code 1") &&
+          (errMessage.includes("is not recognized as the name of a cmdlet") ||
+            errMessage.includes("gemini.ps1"))
+        ) {
+          const pathErrorMessage: ChatMessage = {
+            id: (Date.now() + 2).toString(),
+            role: "assistant",
+            content: `❌ **Gemini CLI パスエラー**\n\ngemini.ps1 のパスが正しく設定されていないか、ファイルが見つかりません。\n\n**エラー詳細:**\n\`\`\`\n${errMessage}\n\`\`\`\n\n**対処方法:**\n1. 設定画面を開く（右上の⚙️ボタン）\n2. 「Gemini CLI パス設定」セクションで「🔍 自動検出」ボタンをクリック\n3. パスが自動的に検出されない場合は、手動で正しいパスを入力してください\n\n**ヒント:**\n- 通常、gemini.ps1 は npm のグローバルインストールディレクトリにあります\n- 例: \`C:\\Users\\YourName\\AppData\\Roaming\\npm\\gemini.ps1\`\n- コマンド \`npm config get prefix\` で確認できます`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, pathErrorMessage);
+          return; // Skip default error message
+        }
+
+        if (errType === "FatalToolExecutionError") {
           const adviseMessage: ChatMessage = {
             id: (Date.now() + 2).toString(),
-            role: 'assistant',
+            role: "assistant",
             content: `⚠️ ツールの実行で権限エラーが発生しました: ${errMessage}\n\nこの操作にはツールの実行権限が必要です。設定から承認モードを「auto_edit」または「yolo」に変更して自動承認を許可しますか？\n- auto_edit: 編集ツールを自動承認\n- yolo: すべてのツールを自動承認\n\n現在の承認モード: ${approvalMode}\n設定を変更する場合はSettingsで更新してください。`,
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, adviseMessage);
+          return; // Skip default error message
         }
       } catch (parseErr) {
-        console.error('Error parsing error object for FatalToolExecutionError:', parseErr);
+        console.error(
+          "Error parsing error object for FatalToolExecutionError:",
+          parseErr
+        );
       }
-      console.error('Error calling Gemini:', error);
+      console.error("Error calling Gemini:", error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: t('chat.errors.geminiError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
+        role: "assistant",
+        content: t("chat.errors.geminiError").replace(
+          "{error}",
+          error instanceof Error ? error.message : "Unknown error"
+        ),
         timestamp: new Date(),
       };
       onSendMessage(currentSessionId, errorMessage);
@@ -871,7 +990,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
   const handleNewChat = async () => {
     const success = await onCreateNewSession();
     if (!success) {
-      alert(t('chat.sessionLimit'));
+      alert(t("chat.sessionLimit"));
     }
   };
 
@@ -885,12 +1004,12 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
       onRenameSession(sessionId, editingSessionName.trim());
     }
     setEditingSessionId(null);
-    setEditingSessionName('');
+    setEditingSessionName("");
   };
 
   const handleCancelRename = () => {
     setEditingSessionId(null);
-    setEditingSessionName('');
+    setEditingSessionName("");
   };
 
   return (
@@ -901,17 +1020,16 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         </button>
         <div className="chat-stats">
           <div className="stat">
-            <span className="stat-label">{t('chat.tokenUsage')}:</span>
+            <span className="stat-label">{t("chat.tokenUsage")}:</span>
             <span className="stat-value">
-              {formatNumber(currentSession?.tokenUsage || 0)} / {formatNumber(totalTokens)}
+              {formatNumber(currentSession?.tokenUsage || 0)} /{" "}
+              {formatNumber(totalTokens)}
             </span>
           </div>
           {currentSession && (
             <div className="stat">
-              <span className="stat-label">{t('chat.elapsedTime')}:</span>
-              <span className="stat-value">
-                {elapsedTime}
-              </span>
+              <span className="stat-label">{t("chat.elapsedTime")}:</span>
+              <span className="stat-value">{elapsedTime}</span>
             </div>
           )}
         </div>
@@ -919,28 +1037,30 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
           className="stats-button secondary"
           onClick={() => setShowStatsModal(true)}
         >
-          {t('chat.stats.button')}
+          {t("chat.stats.button")}
         </button>
         <button
           className="new-chat-button primary"
           onClick={handleNewChat}
           disabled={maxSessionsReached}
         >
-          ✨ {t('chat.newChat')}
+          ✨ {t("chat.newChat")}
         </button>
       </div>
 
       <div className="chat-container">
         <div className="chat-sidebar">
           <div className="sessions-header">
-            <h3>{t('chat.sessions')}</h3>
+            <h3>{t("chat.sessions")}</h3>
             <span className="session-count">{sessions.length}/5</span>
           </div>
           <div className="sessions-list">
             {sessions.map((session) => (
               <div
                 key={session.id}
-                className={`session-item ${session.id === currentSessionId ? 'active' : ''}`}
+                className={`session-item ${
+                  session.id === currentSessionId ? "active" : ""
+                }`}
                 onClick={() => onSwitchSession(session.id)}
               >
                 <div className="session-info">
@@ -951,9 +1071,9 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                       value={editingSessionName}
                       onChange={(e) => setEditingSessionName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           handleSaveRename(session.id);
-                        } else if (e.key === 'Escape') {
+                        } else if (e.key === "Escape") {
                           handleCancelRename();
                         }
                         e.stopPropagation();
@@ -963,7 +1083,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                       autoFocus
                     />
                   ) : (
-                    <span 
+                    <span
                       className="session-name"
                       onDoubleClick={(e) => {
                         e.stopPropagation();
@@ -980,7 +1100,9 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                       <span className="timer-text">{requestElapsedTime}s</span>
                     </div>
                   ) : (
-                    <span className="session-tokens">{formatNumber(session.tokenUsage)} tokens</span>
+                    <span className="session-tokens">
+                      {formatNumber(session.tokenUsage)} tokens
+                    </span>
                   )}
                 </div>
                 {sessions.length > 1 && (
@@ -1007,7 +1129,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                 <span>{geminiPathError}</span>
                 <button
                   className="error-dismiss"
-                  onClick={() => setGeminiPathError('')}
+                  onClick={() => setGeminiPathError("")}
                 >
                   ✕
                 </button>
@@ -1022,181 +1144,259 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                     <svg width="64" height="64" viewBox="0 0 48 48" fill="none">
                       <circle cx="24" cy="24" r="20" fill="url(#gradient)" />
                       <defs>
-                        <linearGradient id="gradient" x1="4" y1="4" x2="44" y2="44">
+                        <linearGradient
+                          id="gradient"
+                          x1="4"
+                          y1="4"
+                          x2="44"
+                          y2="44"
+                        >
                           <stop offset="0%" stopColor="#4285f4" />
                           <stop offset="100%" stopColor="#9334e6" />
                         </linearGradient>
                       </defs>
                     </svg>
                   </div>
-                  <p>{t('chat.noMessages')}</p>
+                  <p>{t("chat.noMessages")}</p>
                 </div>
               ) : (
                 currentSession?.messages
                   .filter((message) => !message.hidden)
                   .map((message) => (
-                  <ChatMessageBubble 
-                    key={message.id} 
-                    message={message}
-                    workspace={workspace}
-                    onResendMessage={async (newMessage) => {
-                      // Call resend to update the session history
-                      onResendMessage(currentSessionId, message.id, newMessage);
-                      
-                      // If it's a user message, call Gemini API with the new content
-                      if (newMessage.role === 'user') {
-                        setIsTyping(true);
-                        // Start timer for resend request
-                        requestStartRef.current = Date.now();
-                        setRequestElapsedTime(0);
+                    <ChatMessageBubble
+                      key={message.id}
+                      message={message}
+                      workspace={workspace}
+                      onResendMessage={async (newMessage) => {
+                        // Call resend to update the session history
+                        onResendMessage(
+                          currentSessionId,
+                          message.id,
+                          newMessage
+                        );
 
-                        // Start elapsed time counter
-                        requestIntervalRef.current = setInterval(() => {
-                          if (requestStartRef.current) {
-                            setRequestElapsedTime(Math.floor((Date.now() - requestStartRef.current) / 1000));
-                          }
-                        }, 1000);
-                        try {
-                          const { includes, directories } = parseIncludes(newMessage.content, workspaceItems);
-                          
-                          // Build conversation history up to this point
-                          const messageIndex = currentSession.messages.findIndex(m => m.id === message.id);
-                          const previousMessages = currentSession.messages
-                            .slice(0, messageIndex)
-                            .filter(msg => msg.role !== 'system')
-                            .slice(-10); // Keep last 10 messages for context
-                          
-                          const conversationHistoryJson = previousMessages.map(msg => ({
-                            role: msg.role,
-                            content: msg.content,
-                          }));
-
-                          const conversationHistory = previousMessages
-                            .map(msg => {
-                              const role = msg.role === 'user' ? 'User' : 'Assistant';
-                              return `${role}: ${msg.content}`;
-                            })
-                            .join('\n\n');
-                          
-                          const options: GeminiOptions = {
-                            approvalMode: approvalMode,
-                            includes: includes.length > 0 ? includes : undefined,
-                            includeDirectories: directories.length > 0 ? directories : undefined,
-                            conversationHistory: conversationHistory && previousMessages.length > 0 ? conversationHistory : undefined,
-                            conversationHistoryJson: conversationHistoryJson.length > 0 ? conversationHistoryJson : undefined,
-                            workspaceId: workspace.id,
-                            sessionId: currentSessionId,
-                          };
-                          
-                          console.log('Resending message with conversation history:', conversationHistory ? 'Yes' : 'No');
-                          const geminiResponse = await callGemini(newMessage.content, workspace.path, options, googleCloudProjectId, geminiPath);
-                          
-                          // Check if the response contains a FatalToolExecutionError
-                          let responseContent = geminiResponse.response;
-                          let hasFatalError = false;
-                          let fatalErrorObj: any = null;
-                          
-                          try {
-                            // Try to parse the response as JSON to check for FatalToolExecutionError
-                            const parsedResponse = JSON.parse(responseContent);
-                            if (parsedResponse && typeof parsedResponse === 'object' && parsedResponse.error) {
-                              const errorObj = parsedResponse.error;
-                              if (errorObj.type === 'FatalToolExecutionError') {
-                                hasFatalError = true;
-                                fatalErrorObj = errorObj;
-                                console.log('FatalToolExecutionError found in response:', errorObj);
-                              }
-                            }
-                          } catch (parseError) {
-                            // Not JSON, treat as normal response
-                            console.log('Response is not JSON, treating as normal response');
-                          }
-                          
-                          if (hasFatalError) {
-                            // Handle FatalToolExecutionError from response
-                            const errType = fatalErrorObj.type;
-                            const errCode = fatalErrorObj.code;
-                            const errMessage = fatalErrorObj.message;
-                            
-                            console.log('Handling FatalToolExecutionError from response:', { errType, errCode, errMessage });
-                            
-                            const isInvalidParamsError = errCode === 'invalid_tool_params' ||
-                              errMessage.includes('must be within one of the workspace directories');
-                            const isToolNameError = errCode === 'tool_not_registered' || 
-                                                   errMessage.includes('not found in registry') || 
-                                                   errMessage.includes('Tool') && errMessage.includes('not found');
-                            
-                            if (isInvalidParamsError) {
-                              const adviseMessage: ChatMessage = {
-                                id: (Date.now() + 1).toString(),
-                                role: 'assistant',
-                                content: `⚠️ **ファイルアクセスエラー**: ${errMessage}\n\n🔧 **解決方法**:\n• 操作できるファイル/フォルダは現在のワークスペース配下のみです（現在のワークスペース: \`${workspace.path}\`）。\n• 対象ファイルをワークスペースフォルダの中へ移動するか、\`#file:...\` や \`#folder:...\` プレフィックスを使って明示的に指定してください。\n• 一時ファイルを扱う場合は \`Documents/PEXData/GeminiGUI/Chatrequest/${workspace.id}\` 配下を利用してください。`,
-                                timestamp: new Date(),
-                              };
-                              console.log('Sending invalid tool params guidance from response');
-                              onSendMessage(currentSessionId, adviseMessage);
-                            } else if (isToolNameError) {
-                              // Tool name error - provide guidance about available tools
-                              const adviseMessage: ChatMessage = {
-                                id: (Date.now() + 1).toString(),
-                                role: 'assistant',
-                                content: `⚠️ **ツール名エラー**: ${errMessage}\n\n🔧 **解決方法**: AIが間違ったツール名を使用しようとしました。\n\n**利用可能なツール**:\n• \`read_file\` - ファイルの内容を読み取る\n• \`web_fetch\` - ウェブページの内容を取得\n• \`glob\` - ファイル検索\n\n**考えられる原因**:\n• AIの設定やプロンプトに問題がある可能性があります\n• 必要に応じて設定画面からモデルやAPIキーを確認してください\n\n別の方法でリクエストを試すか、設定を見直してください。`,
-                                timestamp: new Date(),
-                              };
-                              console.log('Sending tool name error guidance from response');
-                              onSendMessage(currentSessionId, adviseMessage);
-                            } else {
-                              // Approval mode error - suggest changing approval mode
-                              const adviseMessage: ChatMessage = {
-                                id: (Date.now() + 1).toString(),
-                                role: 'assistant',
-                                content: `⚠️ **ツール実行エラー**: ${errMessage}\n\n🔧 **解決方法**: 承認モードが「default」のため、ツールの実行が制限されています。\n\n**以下のいずれかのモードに変更してください：**\n• **auto_edit**: 編集ツールを自動承認\n• **yolo**: すべてのツールを自動承認\n\n設定画面から承認モードを変更してください。`,
-                                timestamp: new Date(),
-                              };
-                              console.log('Sending approval mode error guidance from response');
-                              onSendMessage(currentSessionId, adviseMessage);
-                            }
-                          } else {
-                            // Normal response - calculate total tokens from stats
-                            let totalTokens = 0;
-                            if (geminiResponse.stats && geminiResponse.stats.models) {
-                              totalTokens = Object.values(geminiResponse.stats.models).reduce((sum, model) => {
-                                return sum + (model.tokens?.total || 0);
-                              }, 0);
-                            }
-                            
-                            const aiMessage: ChatMessage = {
-                              id: (Date.now() + 1).toString(),
-                              role: 'assistant',
-                              content: responseContent,
-                              timestamp: new Date(),
-                              tokenUsage: totalTokens,
-                              stats: geminiResponse.stats,
-                            };
-                            onSendMessage(currentSessionId, aiMessage);
-                          }
-                        } catch (error) {
-                          console.error('Error calling Gemini:', error);
-                          const errorMessage: ChatMessage = {
-                            id: (Date.now() + 2).toString(),
-                            role: 'assistant',
-                            content: t('chat.errors.geminiError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
-                            timestamp: new Date(),
-                          };
-                          onSendMessage(currentSessionId, errorMessage);
-                        } finally {
-                          setIsTyping(false);
-                          // Clear the elapsed time counter
-                          if (requestIntervalRef.current) {
-                            clearInterval(requestIntervalRef.current);
-                            requestIntervalRef.current = null;
-                          }
+                        // If it's a user message, call Gemini API with the new content
+                        if (newMessage.role === "user") {
+                          setIsTyping(true);
+                          // Start timer for resend request
+                          requestStartRef.current = Date.now();
                           setRequestElapsedTime(0);
+
+                          // Start elapsed time counter
+                          requestIntervalRef.current = setInterval(() => {
+                            if (requestStartRef.current) {
+                              setRequestElapsedTime(
+                                Math.floor(
+                                  (Date.now() - requestStartRef.current) / 1000
+                                )
+                              );
+                            }
+                          }, 1000);
+                          try {
+                            const { includes, directories } = parseIncludes(
+                              newMessage.content,
+                              workspaceItems
+                            );
+
+                            // Build conversation history up to this point
+                            const messageIndex =
+                              currentSession.messages.findIndex(
+                                (m) => m.id === message.id
+                              );
+                            const previousMessages = currentSession.messages
+                              .slice(0, messageIndex)
+                              .filter((msg) => msg.role !== "system")
+                              .slice(-10); // Keep last 10 messages for context
+
+                            const conversationHistoryJson =
+                              previousMessages.map((msg) => ({
+                                role: msg.role,
+                                content: msg.content,
+                              }));
+
+                            const conversationHistory = previousMessages
+                              .map((msg) => {
+                                const role =
+                                  msg.role === "user" ? "User" : "Assistant";
+                                return `${role}: ${msg.content}`;
+                              })
+                              .join("\n\n");
+
+                            const options: GeminiOptions = {
+                              approvalMode: approvalMode,
+                              includes:
+                                includes.length > 0 ? includes : undefined,
+                              includeDirectories:
+                                directories.length > 0
+                                  ? directories
+                                  : undefined,
+                              conversationHistory:
+                                conversationHistory &&
+                                previousMessages.length > 0
+                                  ? conversationHistory
+                                  : undefined,
+                              conversationHistoryJson:
+                                conversationHistoryJson.length > 0
+                                  ? conversationHistoryJson
+                                  : undefined,
+                              workspaceId: workspace.id,
+                              sessionId: currentSessionId,
+                            };
+
+                            console.log(
+                              "Resending message with conversation history:",
+                              conversationHistory ? "Yes" : "No"
+                            );
+                            const geminiResponse = await callGemini(
+                              newMessage.content,
+                              workspace.path,
+                              options,
+                              googleCloudProjectId,
+                              geminiPath
+                            );
+
+                            // Check if the response contains a FatalToolExecutionError
+                            let responseContent = geminiResponse.response;
+                            let hasFatalError = false;
+                            let fatalErrorObj: any = null;
+
+                            try {
+                              // Try to parse the response as JSON to check for FatalToolExecutionError
+                              const parsedResponse =
+                                JSON.parse(responseContent);
+                              if (
+                                parsedResponse &&
+                                typeof parsedResponse === "object" &&
+                                parsedResponse.error
+                              ) {
+                                const errorObj = parsedResponse.error;
+                                if (
+                                  errorObj.type === "FatalToolExecutionError"
+                                ) {
+                                  hasFatalError = true;
+                                  fatalErrorObj = errorObj;
+                                  console.log(
+                                    "FatalToolExecutionError found in response:",
+                                    errorObj
+                                  );
+                                }
+                              }
+                            } catch (parseError) {
+                              // Not JSON, treat as normal response
+                              console.log(
+                                "Response is not JSON, treating as normal response"
+                              );
+                            }
+
+                            if (hasFatalError) {
+                              // Handle FatalToolExecutionError from response
+                              const errType = fatalErrorObj.type;
+                              const errCode = fatalErrorObj.code;
+                              const errMessage = fatalErrorObj.message;
+
+                              console.log(
+                                "Handling FatalToolExecutionError from response:",
+                                { errType, errCode, errMessage }
+                              );
+
+                              const isInvalidParamsError =
+                                errCode === "invalid_tool_params" ||
+                                errMessage.includes(
+                                  "must be within one of the workspace directories"
+                                );
+                              const isToolNameError =
+                                errCode === "tool_not_registered" ||
+                                errMessage.includes("not found in registry") ||
+                                (errMessage.includes("Tool") &&
+                                  errMessage.includes("not found"));
+
+                              if (isInvalidParamsError) {
+                                const adviseMessage: ChatMessage = {
+                                  id: (Date.now() + 1).toString(),
+                                  role: "assistant",
+                                  content: `⚠️ **ファイルアクセスエラー**: ${errMessage}\n\n🔧 **解決方法**:\n• 操作できるファイル/フォルダは現在のワークスペース配下のみです（現在のワークスペース: \`${workspace.path}\`）。\n• 対象ファイルをワークスペースフォルダの中へ移動するか、\`#file:...\` や \`#folder:...\` プレフィックスを使って明示的に指定してください。\n• 一時ファイルを扱う場合は \`Documents/PEXData/GeminiGUI/Chatrequest/${workspace.id}\` 配下を利用してください。`,
+                                  timestamp: new Date(),
+                                };
+                                console.log(
+                                  "Sending invalid tool params guidance from response"
+                                );
+                                onSendMessage(currentSessionId, adviseMessage);
+                              } else if (isToolNameError) {
+                                // Tool name error - provide guidance about available tools
+                                const adviseMessage: ChatMessage = {
+                                  id: (Date.now() + 1).toString(),
+                                  role: "assistant",
+                                  content: `⚠️ **ツール名エラー**: ${errMessage}\n\n🔧 **解決方法**: AIが間違ったツール名を使用しようとしました。\n\n**利用可能なツール**:\n• \`read_file\` - ファイルの内容を読み取る\n• \`web_fetch\` - ウェブページの内容を取得\n• \`glob\` - ファイル検索\n\n**考えられる原因**:\n• AIの設定やプロンプトに問題がある可能性があります\n• 必要に応じて設定画面からモデルやAPIキーを確認してください\n\n別の方法でリクエストを試すか、設定を見直してください。`,
+                                  timestamp: new Date(),
+                                };
+                                console.log(
+                                  "Sending tool name error guidance from response"
+                                );
+                                onSendMessage(currentSessionId, adviseMessage);
+                              } else {
+                                // Approval mode error - suggest changing approval mode
+                                const adviseMessage: ChatMessage = {
+                                  id: (Date.now() + 1).toString(),
+                                  role: "assistant",
+                                  content: `⚠️ **ツール実行エラー**: ${errMessage}\n\n🔧 **解決方法**: 承認モードが「default」のため、ツールの実行が制限されています。\n\n**以下のいずれかのモードに変更してください：**\n• **auto_edit**: 編集ツールを自動承認\n• **yolo**: すべてのツールを自動承認\n\n設定画面から承認モードを変更してください。`,
+                                  timestamp: new Date(),
+                                };
+                                console.log(
+                                  "Sending approval mode error guidance from response"
+                                );
+                                onSendMessage(currentSessionId, adviseMessage);
+                              }
+                            } else {
+                              // Normal response - calculate total tokens from stats
+                              let totalTokens = 0;
+                              if (
+                                geminiResponse.stats &&
+                                geminiResponse.stats.models
+                              ) {
+                                totalTokens = Object.values(
+                                  geminiResponse.stats.models
+                                ).reduce((sum, model) => {
+                                  return sum + (model.tokens?.total || 0);
+                                }, 0);
+                              }
+
+                              const aiMessage: ChatMessage = {
+                                id: (Date.now() + 1).toString(),
+                                role: "assistant",
+                                content: responseContent,
+                                timestamp: new Date(),
+                                tokenUsage: totalTokens,
+                                stats: geminiResponse.stats,
+                              };
+                              onSendMessage(currentSessionId, aiMessage);
+                            }
+                          } catch (error) {
+                            console.error("Error calling Gemini:", error);
+                            const errorMessage: ChatMessage = {
+                              id: (Date.now() + 2).toString(),
+                              role: "assistant",
+                              content: t("chat.errors.geminiError").replace(
+                                "{error}",
+                                error instanceof Error
+                                  ? error.message
+                                  : "Unknown error"
+                              ),
+                              timestamp: new Date(),
+                            };
+                            onSendMessage(currentSessionId, errorMessage);
+                          } finally {
+                            setIsTyping(false);
+                            // Clear the elapsed time counter
+                            if (requestIntervalRef.current) {
+                              clearInterval(requestIntervalRef.current);
+                              requestIntervalRef.current = null;
+                            }
+                            setRequestElapsedTime(0);
+                          }
                         }
-                      }
-                    }}
-                  />
-                ))
+                      }}
+                    />
+                  ))
               );
             })()}
             {isTyping && (
@@ -1216,36 +1416,38 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
           <div className="input-container">
             {(showCommandSuggestions || showFileSuggestions) && (
               <div className="suggestions-popup">
-                {showCommandSuggestions && commandSuggestions.map((cmd) => (
-                  <div
-                    key={cmd}
-                    className="suggestion-item"
-                    data-type="command"
-                    onClick={() => insertSuggestion(`/${cmd}`)}
-                  >
-                    /{cmd} - {t(`chat.commands.${cmd}`)}
-                  </div>
-                ))}
-                {showFileSuggestions && fileSuggestions.map((file) => {
-                  // Determine the type based on the prefix
-                  let dataType = 'file';
-                  if (file === '#codebase') {
-                    dataType = 'codebase';
-                  } else if (file.startsWith('#folder:')) {
-                    dataType = 'folder';
-                  }
-                  
-                  return (
+                {showCommandSuggestions &&
+                  commandSuggestions.map((cmd) => (
                     <div
-                      key={file}
+                      key={cmd}
                       className="suggestion-item"
-                      data-type={dataType}
-                      onClick={() => insertSuggestion(file)}
+                      data-type="command"
+                      onClick={() => insertSuggestion(`/${cmd}`)}
                     >
-                      {file}
+                      /{cmd} - {t(`chat.commands.${cmd}`)}
                     </div>
-                  );
-                })}
+                  ))}
+                {showFileSuggestions &&
+                  fileSuggestions.map((file) => {
+                    // Determine the type based on the prefix
+                    let dataType = "file";
+                    if (file === "#codebase") {
+                      dataType = "codebase";
+                    } else if (file.startsWith("#folder:")) {
+                      dataType = "folder";
+                    }
+
+                    return (
+                      <div
+                        key={file}
+                        className="suggestion-item"
+                        data-type={dataType}
+                        onClick={() => insertSuggestion(file)}
+                      >
+                        {file}
+                      </div>
+                    );
+                  })}
               </div>
             )}
             <textarea
@@ -1253,25 +1455,38 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.ctrlKey) {
+                if (e.key === "Enter" && e.ctrlKey) {
                   e.preventDefault();
                   handleSendMessage();
-                } else if (e.key === 'Enter' && !e.shiftKey && !showCommandSuggestions && !showFileSuggestions && !recentlyCompletedSuggestion) {
+                } else if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !showCommandSuggestions &&
+                  !showFileSuggestions &&
+                  !recentlyCompletedSuggestion
+                ) {
                   // Allow Enter for new line, but only Ctrl+Enter sends
                   // This prevents accidental sends and multiple suggestions
                   e.preventDefault();
                 }
                 // Handle suggestion selection with Enter/Tab
-                if ((e.key === 'Enter' || e.key === 'Tab') && (showCommandSuggestions || showFileSuggestions)) {
+                if (
+                  (e.key === "Enter" || e.key === "Tab") &&
+                  (showCommandSuggestions || showFileSuggestions)
+                ) {
                   e.preventDefault();
-                  const suggestions = showCommandSuggestions ? commandSuggestions : fileSuggestions;
+                  const suggestions = showCommandSuggestions
+                    ? commandSuggestions
+                    : fileSuggestions;
                   if (suggestions.length > 0) {
-                    const suggestion = showCommandSuggestions ? `/${suggestions[0]}` : suggestions[0];
+                    const suggestion = showCommandSuggestions
+                      ? `/${suggestions[0]}`
+                      : suggestions[0];
                     insertSuggestion(suggestion);
                   }
                 }
               }}
-              placeholder={t('chat.placeholder')}
+              placeholder={t("chat.placeholder")}
               rows={1}
               style={{ height: textareaHeight }}
             />
@@ -1307,9 +1522,13 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
             <span className="warning-icon">⚠️</span>
             <span className="warning-text">
               メッセージ数が{maxMessagesBeforeCompact}件を超えました。
-              <strong>/compact</strong>で会話を整理するか、新しいセッションを作成することをお勧めします。
+              <strong>/compact</strong>
+              で会話を整理するか、新しいセッションを作成することをお勧めします。
             </span>
-            <button className="warning-close" onClick={() => setShowCompactWarning(false)}>
+            <button
+              className="warning-close"
+              onClick={() => setShowCompactWarning(false)}
+            >
               ✕
             </button>
           </div>
@@ -1338,9 +1557,7 @@ function ProcessingModal({ message, elapsedSeconds }: ProcessingModalProps) {
             <span className="dot"></span>
             <span className="dot"></span>
           </div>
-          <div className="processing-elapsed">
-            経過時間: {elapsedSeconds}秒
-          </div>
+          <div className="processing-elapsed">経過時間: {elapsedSeconds}秒</div>
         </div>
       </div>
     </div>
@@ -1355,235 +1572,629 @@ interface StatsModalProps {
 
 function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
   // Calculate aggregate statistics from all sessions
-  const aggregateStats = sessions.reduce((acc, session) => {
-    session.messages.forEach((message) => {
-      if (message.stats) {
-        // Aggregate model stats
-        Object.entries(message.stats.models).forEach(([modelName, modelData]) => {
-          if (!acc.models[modelName]) {
-            acc.models[modelName] = {
-              api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
-              tokens: { prompt: 0, candidates: 0, total: 0, cached: 0, thoughts: 0, tool: 0 },
-            };
-          }
-          acc.models[modelName].api.totalRequests += modelData.api.totalRequests;
-          acc.models[modelName].api.totalErrors += modelData.api.totalErrors;
-          acc.models[modelName].api.totalLatencyMs += modelData.api.totalLatencyMs;
-          acc.models[modelName].tokens.prompt += modelData.tokens.prompt;
-          acc.models[modelName].tokens.candidates += modelData.tokens.candidates;
-          acc.models[modelName].tokens.total += modelData.tokens.total;
-          acc.models[modelName].tokens.cached += modelData.tokens.cached;
-          acc.models[modelName].tokens.thoughts += modelData.tokens.thoughts;
-          acc.models[modelName].tokens.tool += modelData.tokens.tool;
+  const aggregateStats = sessions.reduce(
+    (acc, session) => {
+      session.messages.forEach((message) => {
+        if (message.stats) {
+          // Aggregate model stats
+          Object.entries(message.stats.models).forEach(
+            ([modelName, modelData]) => {
+              if (!acc.models[modelName]) {
+                acc.models[modelName] = {
+                  api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+                  tokens: {
+                    prompt: 0,
+                    candidates: 0,
+                    total: 0,
+                    cached: 0,
+                    thoughts: 0,
+                    tool: 0,
+                  },
+                };
+              }
+              acc.models[modelName].api.totalRequests +=
+                modelData.api.totalRequests;
+              acc.models[modelName].api.totalErrors +=
+                modelData.api.totalErrors;
+              acc.models[modelName].api.totalLatencyMs +=
+                modelData.api.totalLatencyMs;
+              acc.models[modelName].tokens.prompt += modelData.tokens.prompt;
+              acc.models[modelName].tokens.candidates +=
+                modelData.tokens.candidates;
+              acc.models[modelName].tokens.total += modelData.tokens.total;
+              acc.models[modelName].tokens.cached += modelData.tokens.cached;
+              acc.models[modelName].tokens.thoughts +=
+                modelData.tokens.thoughts;
+              acc.models[modelName].tokens.tool += modelData.tokens.tool;
+            }
+          );
+
+          // Aggregate tool stats
+          acc.tools.totalCalls += message.stats.tools.totalCalls;
+          acc.tools.totalSuccess += message.stats.tools.totalSuccess;
+          acc.tools.totalFail += message.stats.tools.totalFail;
+          acc.tools.totalDurationMs += message.stats.tools.totalDurationMs;
+
+          Object.entries(message.stats.tools.byName).forEach(
+            ([toolName, toolData]) => {
+              if (!acc.tools.byName[toolName]) {
+                acc.tools.byName[toolName] = { count: 0, durationMs: 0 };
+              }
+              acc.tools.byName[toolName].count += toolData.count;
+              acc.tools.byName[toolName].durationMs += toolData.durationMs;
+            }
+          );
+
+          // Aggregate file stats
+          acc.files.totalLinesAdded += message.stats.files.totalLinesAdded;
+          acc.files.totalLinesRemoved += message.stats.files.totalLinesRemoved;
+        }
+      });
+      return acc;
+    },
+    {
+      models: {} as Record<string, any>,
+      tools: {
+        totalCalls: 0,
+        totalSuccess: 0,
+        totalFail: 0,
+        totalDurationMs: 0,
+        byName: {} as Record<string, any>,
+      },
+      files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+    }
+  );
+
+  // Export functionality
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("all");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string>("");
+
+  const selectedSession =
+    selectedSessionId === "all"
+      ? null
+      : sessions.find((s) => s.id === selectedSessionId) || null;
+
+  const exportAsText = async () => {
+    if (!selectedSession) {
+      alert(t("chat.stats.export.selectSessionFirst"));
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+
+      const textContent = generateConversationText(selectedSession);
+      const defaultName = `${selectedSession.name.replace(
+        /[^a-zA-Z0-9\-_]/g,
+        "_"
+      )}_conversation.txt`;
+
+      const savePath = await dialogPlugin.save({
+        title: t("chat.stats.export.title"),
+        filters: [
+          {
+            name: "Text Files",
+            extensions: ["txt"],
+          },
+        ],
+        defaultPath: defaultName,
+      });
+
+      if (savePath) {
+        await fsPlugin.writeTextFile(savePath, textContent);
+        setExportSuccessMessage(t("chat.stats.export.successTxt"));
+        // Clear success message after 3 seconds
+        setTimeout(() => setExportSuccessMessage(""), 3000);
+      }
+    } catch (error) {
+      console.error("Text export failed:", error);
+      alert(t("chat.stats.export.error"));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportAsPdf = async () => {
+    if (!selectedSession) {
+      alert(t("chat.stats.export.selectSessionFirst"));
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+
+      // Create a temporary div with conversation content
+      const tempDiv = document.createElement("div");
+      tempDiv.style.width = "1200px"; // Increased width for better quality
+      tempDiv.style.maxWidth = "1200px";
+      tempDiv.style.padding = "40px"; // Increased padding
+      tempDiv.style.fontFamily = "Arial, sans-serif";
+      tempDiv.style.backgroundColor = "white";
+      tempDiv.style.color = "black";
+      tempDiv.style.fontSize = "16px"; // Larger font size for better readability
+      tempDiv.style.lineHeight = "1.6";
+      tempDiv.innerHTML = generateConversationHtml(selectedSession);
+
+      // Position temporarily
+      tempDiv.style.position = "absolute";
+      tempDiv.style.left = "-9999px";
+      tempDiv.style.top = "-9999px";
+      document.body.appendChild(tempDiv);
+
+      try {
+        const canvas = await html2canvas(tempDiv, {
+          scale: 4, // Increased scale for higher quality
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          width: 1200,
+          height: tempDiv.offsetHeight,
+          windowWidth: 1200,
+          windowHeight: tempDiv.offsetHeight,
         });
 
-        // Aggregate tool stats
-        acc.tools.totalCalls += message.stats.tools.totalCalls;
-        acc.tools.totalSuccess += message.stats.tools.totalSuccess;
-        acc.tools.totalFail += message.stats.tools.totalFail;
-        acc.tools.totalDurationMs += message.stats.tools.totalDurationMs;
-
-        Object.entries(message.stats.tools.byName).forEach(([toolName, toolData]) => {
-          if (!acc.tools.byName[toolName]) {
-            acc.tools.byName[toolName] = { count: 0, durationMs: 0 };
-          }
-          acc.tools.byName[toolName].count += toolData.count;
-          acc.tools.byName[toolName].durationMs += toolData.durationMs;
+        const imgData = canvas.toDataURL("image/png", 1.0); // Maximum quality
+        const pdf = new jsPDF({
+          orientation: "portrait",
+          unit: "px",
+          format: "a4",
+          compress: false, // Better quality
         });
 
-        // Aggregate file stats
-        acc.files.totalLinesAdded += message.stats.files.totalLinesAdded;
-        acc.files.totalLinesRemoved += message.stats.files.totalLinesRemoved;
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+
+        // Calculate scaling to fit page while maintaining aspect ratio
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+        const finalWidth = imgWidth * ratio;
+        const finalHeight = imgHeight * ratio;
+
+        // Center the image on the page
+        const xOffset = (pdfWidth - finalWidth) / 2;
+        const yOffset = (pdfHeight - finalHeight) / 2;
+
+        pdf.addImage(imgData, "PNG", xOffset, yOffset, finalWidth, finalHeight);
+        const defaultName = `${selectedSession.name.replace(
+          /[^a-zA-Z0-9\-_]/g,
+          "_"
+        )}_conversation.pdf`;
+
+        pdf.save(defaultName);
+        setExportSuccessMessage(t("chat.stats.export.successPdf"));
+        // Clear success message after 3 seconds
+        setTimeout(() => setExportSuccessMessage(""), 3000);
+      } finally {
+        document.body.removeChild(tempDiv);
+      }
+    } catch (error) {
+      console.error("PDF export failed:", error);
+      alert(t("chat.stats.export.error"));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const generateConversationText = (session: ChatSession): string => {
+    let content = `${t("chat.stats.export.title")} - ${session.name}\n`;
+    content += `=${"=".repeat(50)}=\n\n`;
+    content += `${t("chat.elapsedTime")}: ${formatElapsedTime(
+      session.createdAt
+    )}\n`;
+    content += `${t("chat.tokenUsage")}: ${formatNumber(
+      session.tokenUsage
+    )}\n\n`;
+
+    session.messages.forEach((message, index) => {
+      if (message.hidden) return; // Skip hidden messages (system summaries)
+
+      const roleLabel = message.role === "user" ? "User" : "Assistant";
+      const timestamp = message.timestamp
+        ? message.timestamp.toLocaleString()
+        : "";
+
+      content += `${index + 1}. ${roleLabel} (${timestamp})\n`;
+      content += `${"–".repeat(30)}\n`;
+      content += `${message.content}\n\n`;
+
+      if (message.tokenUsage) {
+        content += `   [${t("chat.stats.tokenUsage").replace(
+          "トークン使用量",
+          t("chat.tokenUsage")
+        )}: ${message.tokenUsage}]\n\n`;
       }
     });
-    return acc;
-  }, {
-    models: {} as Record<string, any>,
-    tools: { totalCalls: 0, totalSuccess: 0, totalFail: 0, totalDurationMs: 0, byName: {} as Record<string, any> },
-    files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
-  });
+
+    content += `=${"=".repeat(50)}=\n`;
+    content += `${t("chat.stats.export.title")} - ${
+      session.name
+    } (${new Date().toLocaleDateString()})\n`;
+
+    return content;
+  };
+
+  const generateConversationHtml = (session: ChatSession): string => {
+    let content = `
+      <h1 style="font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #333;">
+        ${t("chat.stats.export.title")} - ${session.name}
+      </h1>
+      <div style="font-size: 14px; color: #666; margin-bottom: 20px;">
+        <div>${t("chat.elapsedTime")}: ${formatElapsedTime(
+      session.createdAt
+    )}</div>
+        <div>${t("chat.tokenUsage")}: ${formatNumber(session.tokenUsage)}</div>
+      </div>
+    `;
+
+    session.messages.forEach((message, index) => {
+      if (message.hidden) return;
+
+      const roleLabel = message.role === "user" ? "User" : "Assistant";
+      const timestamp = message.timestamp
+        ? message.timestamp.toLocaleString()
+        : "";
+      const bgColor = message.role === "user" ? "#e3f2fd" : "#f5f5f5";
+      const textColor = "#333";
+
+      content += `
+        <div style="margin-bottom: 20px; padding: 15px; background-color: ${bgColor}; border-radius: 8px; border-left: 4px solid ${
+        message.role === "user" ? "#2196f3" : "#4caf50"
+      };">
+          <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px; color: ${textColor};">
+            ${index + 1}. ${roleLabel}
+            <span style="font-size: 12px; font-weight: normal; color: #666;"> (${timestamp})</span>
+          </div>
+          <div style="font-family: 'Courier New', monospace; white-space: pre-wrap; color: ${textColor}; line-height: 1.4;">
+            ${message.content.replace(/\n/g, "<br>")}
+          </div>
+          ${
+            message.tokenUsage
+              ? `<div style="font-size: 12px; color: #666; margin-top: 8px;">[${t(
+                  "chat.stats.tokenUsage"
+                ).replace("トークン使用量", t("chat.tokenUsage"))}: ${
+                  message.tokenUsage
+                }]</div>`
+              : ""
+          }
+        </div>
+      `;
+    });
+
+    content += `
+      <div style="text-align: center; font-size: 12px; color: #999; margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
+        Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+      </div>
+    `;
+
+    return content;
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content stats-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-content stats-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
-          <h2>📊 {t('chat.stats.title')}</h2>
+          <h2>📊 {t("chat.stats.title")}</h2>
           <button className="modal-close" onClick={onClose}>
             ✕
           </button>
         </div>
-        <div className="modal-body">
-          {/* Overview Section */}
-          <div className="stats-section overview-section">
-            <h3>📈 {t('chat.stats.overview')}</h3>
-            <div className="overview-grid">
-              <div className="overview-card">
-                <div className="overview-icon">💬</div>
-                <div className="overview-content">
-                  <div className="overview-label">{t('chat.stats.sessionCount')}</div>
-                  <div className="overview-value">{sessions.length}</div>
+
+        {/* Export Section */}
+        {sessions.length > 0 && (
+          <div className="export-section">
+            <div className="export-session-selector">
+              <label htmlFor="session-select">
+                {t("chat.stats.export.selectSession")}:
+              </label>
+              <select
+                id="session-select"
+                value={selectedSessionId}
+                onChange={(e) => setSelectedSessionId(e.target.value)}
+              >
+                <option value="all" disabled>
+                  {t("chat.stats.export.noSessionAvailable")}
+                </option>
+                {sessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {session.name} ({formatNumber(session.messages.length)}{" "}
+                    メッセージ)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="export-buttons">
+              <button
+                onClick={exportAsText}
+                disabled={isExporting || selectedSessionId === "all"}
+              >
+                {isExporting
+                  ? t("chat.stats.export.exporting")
+                  : `${t("chat.stats.export.button")} TXT`}
+              </button>
+
+              <button
+                onClick={exportAsPdf}
+                disabled={isExporting || selectedSessionId === "all"}
+              >
+                {isExporting
+                  ? t("chat.stats.export.exporting")
+                  : `${t("chat.stats.export.button")} PDF`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Export Success Notification */}
+        {exportSuccessMessage && (
+          <div
+            className="export-success-notification"
+            style={{
+              padding: "12px var(--spacing-lg)",
+              backgroundColor: "#d4edda",
+              border: "1px solid #c3e6cb",
+              borderRadius: "var(--radius-md)",
+              margin: "var(--spacing-sm) var(--spacing-lg)",
+              color: "#155724",
+              fontSize: "14px",
+              fontWeight: "500",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>✅</span>
+            <span>{exportSuccessMessage}</span>
+          </div>
+        )}
+        {/* Overview Section */}
+        <div className="stats-section overview-section">
+          <h3>📈 {t("chat.stats.overview")}</h3>
+          <div className="overview-grid">
+            <div className="overview-card">
+              <div className="overview-icon">💬</div>
+              <div className="overview-content">
+                <div className="overview-label">
+                  {t("chat.stats.sessionCount")}
+                </div>
+                <div className="overview-value">{sessions.length}</div>
+              </div>
+            </div>
+            <div className="overview-card">
+              <div className="overview-icon">🎯</div>
+              <div className="overview-content">
+                <div className="overview-label">
+                  {t("chat.stats.totalTokensSummary")}
+                </div>
+                <div className="overview-value">
+                  {formatNumber(totalTokens)}
                 </div>
               </div>
-              <div className="overview-card">
-                <div className="overview-icon">🎯</div>
-                <div className="overview-content">
-                  <div className="overview-label">{t('chat.stats.totalTokensSummary')}</div>
-                  <div className="overview-value">{formatNumber(totalTokens)}</div>
+            </div>
+            <div className="overview-card">
+              <div className="overview-icon">💬</div>
+              <div className="overview-content">
+                <div className="overview-label">
+                  {t("chat.stats.totalMessages")}
                 </div>
-              </div>
-              <div className="overview-card">
-                <div className="overview-icon">💬</div>
-                <div className="overview-content">
-                  <div className="overview-label">{t('chat.stats.totalMessages')}</div>
-                  <div className="overview-value">
-                    {sessions.reduce((sum, s) => sum + s.messages.length, 0)}
-                  </div>
+                <div className="overview-value">
+                  {sessions.reduce((sum, s) => sum + s.messages.length, 0)}
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Model Usage Section */}
-          {Object.keys(aggregateStats.models).length > 0 && (
-            <div className="stats-section">
-              <h3>🤖 {t('chat.stats.modelUsage')}</h3>
-              {Object.entries(aggregateStats.models).map(([modelName, modelData]: [string, any]) => (
+        {/* Model Usage Section */}
+        {Object.keys(aggregateStats.models).length > 0 && (
+          <div className="stats-section">
+            <h3>🤖 {t("chat.stats.modelUsage")}</h3>
+            {Object.entries(aggregateStats.models).map(
+              ([modelName, modelData]: [string, any]) => (
                 <div key={modelName} className="model-card">
                   <div className="model-header">
                     <span className="model-name">{modelName}</span>
                   </div>
-                  
+
                   <div className="stats-grid">
                     <div className="stat-group">
-                      <h4>{t('chat.stats.apiStats')}</h4>
+                      <h4>{t("chat.stats.apiStats")}</h4>
                       <div className="stat-row">
                         <span className="stat-icon">📤</span>
-                        <span className="stat-label">{t('chat.stats.requests')}</span>
-                        <span className="stat-value">{modelData.api.totalRequests}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.requests")}
+                        </span>
+                        <span className="stat-value">
+                          {modelData.api.totalRequests}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">❌</span>
-                        <span className="stat-label">{t('chat.stats.errors')}</span>
-                        <span className="stat-value">{modelData.api.totalErrors}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.errors")}
+                        </span>
+                        <span className="stat-value">
+                          {modelData.api.totalErrors}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">⏱️</span>
-                        <span className="stat-label">{t('chat.stats.latency')}</span>
-                        <span className="stat-value">{modelData.api.totalLatencyMs}ms</span>
+                        <span className="stat-label">
+                          {t("chat.stats.latency")}
+                        </span>
+                        <span className="stat-value">
+                          {modelData.api.totalLatencyMs}ms
+                        </span>
                       </div>
                     </div>
 
                     <div className="stat-group">
-                      <h4>{t('chat.stats.tokenUsage')}</h4>
+                      <h4>{t("chat.stats.tokenUsage")}</h4>
                       <div className="stat-row">
                         <span className="stat-icon">📝</span>
-                        <span className="stat-label">{t('chat.stats.promptTokens')}</span>
-                        <span className="stat-value highlight-primary">{formatNumber(modelData.tokens.prompt)}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.promptTokens")}
+                        </span>
+                        <span className="stat-value highlight-primary">
+                          {formatNumber(modelData.tokens.prompt)}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">💬</span>
-                        <span className="stat-label">{t('chat.stats.responseTokens')}</span>
-                        <span className="stat-value highlight-success">{formatNumber(modelData.tokens.candidates)}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.responseTokens")}
+                        </span>
+                        <span className="stat-value highlight-success">
+                          {formatNumber(modelData.tokens.candidates)}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">🎯</span>
-                        <span className="stat-label">{t('chat.stats.totalTokens')}</span>
-                        <span className="stat-value highlight-total">{formatNumber(modelData.tokens.total)}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.totalTokens")}
+                        </span>
+                        <span className="stat-value highlight-total">
+                          {formatNumber(modelData.tokens.total)}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">💾</span>
-                        <span className="stat-label">{t('chat.stats.cachedTokens')}</span>
-                        <span className="stat-value">{formatNumber(modelData.tokens.cached)}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.cachedTokens")}
+                        </span>
+                        <span className="stat-value">
+                          {formatNumber(modelData.tokens.cached)}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">💭</span>
-                        <span className="stat-label">{t('chat.stats.thoughtsTokens')}</span>
-                        <span className="stat-value">{formatNumber(modelData.tokens.thoughts)}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.thoughtsTokens")}
+                        </span>
+                        <span className="stat-value">
+                          {formatNumber(modelData.tokens.thoughts)}
+                        </span>
                       </div>
                       <div className="stat-row">
                         <span className="stat-icon">🔧</span>
-                        <span className="stat-label">{t('chat.stats.toolTokens')}</span>
-                        <span className="stat-value">{formatNumber(modelData.tokens.tool)}</span>
+                        <span className="stat-label">
+                          {t("chat.stats.toolTokens")}
+                        </span>
+                        <span className="stat-value">
+                          {formatNumber(modelData.tokens.tool)}
+                        </span>
                       </div>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              )
+            )}
+          </div>
+        )}
 
-          {/* Tool Usage Section */}
-          <div className="stats-section">
-            <h3>🔧 {t('chat.stats.toolUsage')}</h3>
-            <div className="tool-summary-card">
-              <div className="stat-row">
-                <span className="stat-icon">📞</span>
-                <span className="stat-label">{t('chat.stats.totalCalls')}</span>
-                <span className="stat-value">{aggregateStats.tools.totalCalls}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-icon">✅</span>
-                <span className="stat-label">{t('chat.stats.success')}</span>
-                <span className="stat-value highlight-success">{aggregateStats.tools.totalSuccess}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-icon">⚠️</span>
-                <span className="stat-label">{t('chat.stats.fail')}</span>
-                <span className="stat-value highlight-error">{aggregateStats.tools.totalFail}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-icon">⏱️</span>
-                <span className="stat-label">{t('chat.stats.totalDuration')}</span>
-                <span className="stat-value">{aggregateStats.tools.totalDurationMs}ms</span>
-              </div>
+        {/* Tool Usage Section */}
+        <div className="stats-section">
+          <h3>🔧 {t("chat.stats.toolUsage")}</h3>
+          <div className="tool-summary-card">
+            <div className="stat-row">
+              <span className="stat-icon">📞</span>
+              <span className="stat-label">{t("chat.stats.totalCalls")}</span>
+              <span className="stat-value">
+                {aggregateStats.tools.totalCalls}
+              </span>
             </div>
-            
-            {Object.keys(aggregateStats.tools.byName).length > 0 && (
-              <div className="tools-details">
-                <h4>{t('chat.stats.toolDetails')}</h4>
-                <div className="tools-grid">
-                  {Object.entries(aggregateStats.tools.byName).map(([toolName, toolData]: [string, any]) => (
+            <div className="stat-row">
+              <span className="stat-icon">✅</span>
+              <span className="stat-label">{t("chat.stats.success")}</span>
+              <span className="stat-value highlight-success">
+                {aggregateStats.tools.totalSuccess}
+              </span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-icon">⚠️</span>
+              <span className="stat-label">{t("chat.stats.fail")}</span>
+              <span className="stat-value highlight-error">
+                {aggregateStats.tools.totalFail}
+              </span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-icon">⏱️</span>
+              <span className="stat-label">
+                {t("chat.stats.totalDuration")}
+              </span>
+              <span className="stat-value">
+                {aggregateStats.tools.totalDurationMs}ms
+              </span>
+            </div>
+          </div>
+
+          {Object.keys(aggregateStats.tools.byName).length > 0 && (
+            <div className="tools-details">
+              <h4>{t("chat.stats.toolDetails")}</h4>
+              <div className="tools-grid">
+                {Object.entries(aggregateStats.tools.byName).map(
+                  ([toolName, toolData]: [string, any]) => (
                     <div key={toolName} className="tool-detail-card">
                       <div className="tool-name">🔨 {toolName}</div>
                       <div className="tool-stats">
                         <div className="stat-row">
-                          <span className="stat-label">{t('chat.stats.usageCount')}</span>
+                          <span className="stat-label">
+                            {t("chat.stats.usageCount")}
+                          </span>
                           <span className="stat-value">{toolData.count}</span>
                         </div>
                         <div className="stat-row">
-                          <span className="stat-label">{t('chat.stats.executionTime')}</span>
-                          <span className="stat-value">{toolData.durationMs}ms</span>
+                          <span className="stat-label">
+                            {t("chat.stats.executionTime")}
+                          </span>
+                          <span className="stat-value">
+                            {toolData.durationMs}ms
+                          </span>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
 
-          {/* File Changes Section */}
-          <div className="stats-section">
-            <h3>📁 {t('chat.stats.fileChanges')}</h3>
-            <div className="file-changes-card">
-              <div className="stat-row">
-                <span className="stat-icon">➕</span>
-                <span className="stat-label">{t('chat.stats.linesAdded')}</span>
-                <span className="stat-value highlight-success">{aggregateStats.files.totalLinesAdded}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-icon">➖</span>
-                <span className="stat-label">{t('chat.stats.linesRemoved')}</span>
-                <span className="stat-value highlight-error">{aggregateStats.files.totalLinesRemoved}</span>
-              </div>
-              <div className="stat-row">
-                <span className="stat-icon">📊</span>
-                <span className="stat-label">{t('chat.stats.diff')}</span>
-                <span className="stat-value">
-                  {aggregateStats.files.totalLinesAdded - aggregateStats.files.totalLinesRemoved > 0 ? '+' : ''}
-                  {aggregateStats.files.totalLinesAdded - aggregateStats.files.totalLinesRemoved}
-                </span>
-              </div>
+        {/* File Changes Section */}
+        <div className="stats-section">
+          <h3>📁 {t("chat.stats.fileChanges")}</h3>
+          <div className="file-changes-card">
+            <div className="stat-row">
+              <span className="stat-icon">➕</span>
+              <span className="stat-label">{t("chat.stats.linesAdded")}</span>
+              <span className="stat-value highlight-success">
+                {aggregateStats.files.totalLinesAdded}
+              </span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-icon">➖</span>
+              <span className="stat-label">{t("chat.stats.linesRemoved")}</span>
+              <span className="stat-value highlight-error">
+                {aggregateStats.files.totalLinesRemoved}
+              </span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-icon">📊</span>
+              <span className="stat-label">{t("chat.stats.diff")}</span>
+              <span className="stat-value">
+                {aggregateStats.files.totalLinesAdded -
+                  aggregateStats.files.totalLinesRemoved >
+                0
+                  ? "+"
+                  : ""}
+                {aggregateStats.files.totalLinesAdded -
+                  aggregateStats.files.totalLinesRemoved}
+              </span>
             </div>
           </div>
         </div>
@@ -1601,42 +2212,48 @@ interface ChatMessageBubbleProps {
 /**
  * Render message with clickable tags (#file:, #folder:, #codebase, /commands)
  */
-function renderMessageWithTags(content: string, workspacePath: string): React.ReactElement {
+function renderMessageWithTags(
+  content: string,
+  workspacePath: string
+): React.ReactElement {
   // Split content by tags (#file:, #folder:, #codebase, /commands)
   // Important: only match commands that start at the beginning of the string or are preceded by whitespace
   // This prevents matching slashes that are part of URLs (e.g. https://example.com/menu)
-  const tagRegex = /(#file:[^\s]+|#folder:[^\s]+|#codebase|(?:^|\s)(\/[A-Za-z0-9_-]+))/g;
+  const tagRegex =
+    /(#file:[^\s]+|#folder:[^\s]+|#codebase|(?:^|\s)(\/[A-Za-z0-9_-]+))/g;
   const parts: React.ReactElement[] = [];
   let lastIndex = 0;
   let match;
 
   const handleTagClick = async (tag: string) => {
     try {
-      let targetPath = '';
+      let targetPath = "";
 
-      if (tag.startsWith('#file:')) {
+      if (tag.startsWith("#file:")) {
         // Open the file directly
         const filePath = tag.substring(6); // Remove '#file:'
         // Convert relative path to absolute path if needed
-        targetPath = filePath.startsWith('/') || filePath.includes(':')
-          ? filePath
-          : `${workspacePath}/${filePath}`.replace(/\\/g, '/');
-      } else if (tag.startsWith('#folder:')) {
+        targetPath =
+          filePath.startsWith("/") || filePath.includes(":")
+            ? filePath
+            : `${workspacePath}/${filePath}`.replace(/\\/g, "/");
+      } else if (tag.startsWith("#folder:")) {
         // Open the folder
         const folderPath = tag.substring(8); // Remove '#folder:'
-        targetPath = folderPath.startsWith('/') || folderPath.includes(':')
-          ? folderPath
-          : `${workspacePath}/${folderPath}`.replace(/\\/g, '/');
-      } else if (tag === '#codebase') {
+        targetPath =
+          folderPath.startsWith("/") || folderPath.includes(":")
+            ? folderPath
+            : `${workspacePath}/${folderPath}`.replace(/\\/g, "/");
+      } else if (tag === "#codebase") {
         // Open the workspace root directory
         targetPath = workspacePath;
       }
 
       if (targetPath) {
         // Check if file exists before trying to open
-  const fileExists = await fsPlugin.exists(targetPath);
+        const fileExists = await fsPlugin.exists(targetPath);
         if (!fileExists) {
-          alert(t('fileAccess.fileNotFound').replace('{path}', targetPath));
+          alert(t("fileAccess.fileNotFound").replace("{path}", targetPath));
           return;
         }
 
@@ -1644,8 +2261,13 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
         await openFile(targetPath);
       }
     } catch (error) {
-      console.error('Failed to open target:', error);
-      alert(t('fileAccess.fileOpenFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'));
+      console.error("Failed to open target:", error);
+      alert(
+        t("fileAccess.fileOpenFailed").replace(
+          "{error}",
+          error instanceof Error ? error.message : "Unknown error"
+        )
+      );
     }
   };
 
@@ -1657,7 +2279,11 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
     let m: RegExpExecArray | null;
     while ((m = urlRegex.exec(text)) !== null) {
       if (m.index > lastIndex) {
-        nodes.push(<span key={`t-${lastIndex}`}>{text.substring(lastIndex, m.index)}</span>);
+        nodes.push(
+          <span key={`t-${lastIndex}`}>
+            {text.substring(lastIndex, m.index)}
+          </span>
+        );
       }
       const url = m[0];
       nodes.push(
@@ -1665,7 +2291,10 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
           key={`u-${m.index}`}
           href={url}
           className="message-link"
-          onClick={(e) => { e.preventDefault(); openExternal(url); }}
+          onClick={(e) => {
+            e.preventDefault();
+            openExternal(url);
+          }}
           rel="noopener noreferrer"
         >
           <span className="link-icon">🔗</span>
@@ -1675,7 +2304,9 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
       lastIndex = m.index + url.length;
     }
     if (lastIndex < text.length) {
-      nodes.push(<span key={`t-last-${lastIndex}`}>{text.substring(lastIndex)}</span>);
+      nodes.push(
+        <span key={`t-last-${lastIndex}`}>{text.substring(lastIndex)}</span>
+      );
     }
     return nodes;
   };
@@ -1690,7 +2321,8 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
     const tag = group2 ?? group1 ?? fullMatch;
 
     // Compute tag start index (adjust if fullMatch contains a leading whitespace)
-    const tagStartIndex = match.index + (fullMatch.indexOf(tag) >= 0 ? fullMatch.indexOf(tag) : 0);
+    const tagStartIndex =
+      match.index + (fullMatch.indexOf(tag) >= 0 ? fullMatch.indexOf(tag) : 0);
 
     // Add text before the tag
     if (tagStartIndex > lastIndex) {
@@ -1700,34 +2332,34 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
     }
 
     // Add the tag with appropriate styling
-    let tagType = 'tag-default';
-    let icon = '🏷️';
+    let tagType = "tag-default";
+    let icon = "🏷️";
     let isClickable = false;
 
-    if (tag.startsWith('#file:')) {
-      tagType = 'tag-file';
-      icon = '📄';
+    if (tag.startsWith("#file:")) {
+      tagType = "tag-file";
+      icon = "📄";
       isClickable = true;
-    } else if (tag.startsWith('#folder:')) {
-      tagType = 'tag-folder';
-      icon = '📁';
+    } else if (tag.startsWith("#folder:")) {
+      tagType = "tag-folder";
+      icon = "📁";
       isClickable = true;
-    } else if (tag === '#codebase') {
-      tagType = 'tag-codebase';
-      icon = '📦';
+    } else if (tag === "#codebase") {
+      tagType = "tag-codebase";
+      icon = "📦";
       isClickable = true;
-    } else if (tag.startsWith('/')) {
-      tagType = 'tag-command';
-      icon = '⚡';
+    } else if (tag.startsWith("/")) {
+      tagType = "tag-command";
+      icon = "⚡";
     }
 
     parts.push(
       <span
         key={`tag-${tagStartIndex}`}
-        className={`message-tag ${tagType} ${isClickable ? 'clickable' : ''}`}
+        className={`message-tag ${tagType} ${isClickable ? "clickable" : ""}`}
         onClick={isClickable ? () => handleTagClick(tag) : undefined}
-        style={isClickable ? { cursor: 'pointer' } : undefined}
-        title={isClickable ? 'クリックしてディレクトリを開く' : undefined}
+        style={isClickable ? { cursor: "pointer" } : undefined}
+        title={isClickable ? "クリックしてディレクトリを開く" : undefined}
       >
         <span className="tag-icon">{icon}</span>
         {tag}
@@ -1746,18 +2378,18 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
   return <p>{parts}</p>;
 }
 
-function ChatMessageBubble({ 
+function ChatMessageBubble({
   message,
   workspace,
-  onResendMessage
+  onResendMessage,
 }: ChatMessageBubbleProps) {
   const [showStats, setShowStats] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
-  const [editTextareaHeight, setEditTextareaHeight] = useState('auto');
+  const [editTextareaHeight, setEditTextareaHeight] = useState("auto");
 
   const handleDoubleClick = () => {
-    if (message.role === 'user' && onResendMessage) {
+    if (message.role === "user" && onResendMessage) {
       setIsEditing(true);
       setEditContent(message.content);
     }
@@ -1768,7 +2400,7 @@ function ChatMessageBubble({
 
     // Auto-resize edit textarea
     const textarea = e.target;
-    textarea.style.height = 'auto';
+    textarea.style.height = "auto";
     const scrollHeight = textarea.scrollHeight;
     const lineHeight = 20; // Approximate line height
     const maxLines = 6; // Allow more lines for editing
@@ -1779,7 +2411,12 @@ function ChatMessageBubble({
   };
 
   const handleSaveEdit = () => {
-    console.log('handleSaveEdit called', { onResendMessage: !!onResendMessage, editContent: editContent.trim(), originalContent: message.content, isDifferent: editContent.trim() !== message.content });
+    console.log("handleSaveEdit called", {
+      onResendMessage: !!onResendMessage,
+      editContent: editContent.trim(),
+      originalContent: message.content,
+      isDifferent: editContent.trim() !== message.content,
+    });
     if (onResendMessage) {
       const newMessage: ChatMessage = {
         ...message,
@@ -1800,7 +2437,7 @@ function ChatMessageBubble({
   return (
     <div className={`message ${message.role}`}>
       <div className="message-avatar">
-        {message.role === 'user' ? '👤' : '🤖'}
+        {message.role === "user" ? "👤" : "🤖"}
       </div>
       <div className="message-bubble">
         {isEditing ? (
@@ -1817,18 +2454,21 @@ function ChatMessageBubble({
               <button className="edit-save primary" onClick={handleSaveEdit}>
                 再送信
               </button>
-              <button className="edit-cancel secondary" onClick={handleCancelEdit}>
+              <button
+                className="edit-cancel secondary"
+                onClick={handleCancelEdit}
+              >
                 キャンセル
               </button>
             </div>
           </div>
         ) : (
           <div onDoubleClick={handleDoubleClick}>
-            {message.role === 'assistant' ? (
+            {message.role === "assistant" ? (
               <ReactMarkdown components={markdownComponents}>
                 {message.content}
               </ReactMarkdown>
-            ) : message.role === 'system' ? (
+            ) : message.role === "system" ? (
               renderMessageWithTags(message.content, workspace.path)
             ) : (
               renderMessageWithTags(message.content, workspace.path)
@@ -1837,71 +2477,124 @@ function ChatMessageBubble({
         )}
         {message.stats && !isEditing && (
           <div className="message-stats-toggle">
-            <button 
+            <button
               className="stats-toggle-button"
               onClick={() => setShowStats(!showStats)}
             >
-              📊 詳細統計 {showStats ? '▲' : '▼'}
+              📊 詳細統計 {showStats ? "▲" : "▼"}
             </button>
             {showStats && (
               <div className="message-stats">
                 <div className="stats-section">
-                  <h4>{t('fileAccess.modelStats')}</h4>
-                  {Object.entries(message.stats.models).map(([modelName, modelData]) => (
-                    <div key={modelName} className="model-info">
-                      <div className="model-name">{modelName}</div>
-                      <div className="model-details">
-                        <div>{t('fileAccess.requestCount')} {modelData.api.totalRequests}</div>
-                        <div>{t('fileAccess.errorCount')} {modelData.api.totalErrors}</div>
-                        <div>{t('fileAccess.latency')} {modelData.api.totalLatencyMs}ms</div>
+                  <h4>{t("fileAccess.modelStats")}</h4>
+                  {Object.entries(message.stats.models).map(
+                    ([modelName, modelData]) => (
+                      <div key={modelName} className="model-info">
+                        <div className="model-name">{modelName}</div>
+                        <div className="model-details">
+                          <div>
+                            {t("fileAccess.requestCount")}{" "}
+                            {modelData.api.totalRequests}
+                          </div>
+                          <div>
+                            {t("fileAccess.errorCount")}{" "}
+                            {modelData.api.totalErrors}
+                          </div>
+                          <div>
+                            {t("fileAccess.latency")}{" "}
+                            {modelData.api.totalLatencyMs}ms
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
 
                 <div className="stats-section">
-                  <h4>{t('fileAccess.tokenStats')}</h4>
-                  {Object.entries(message.stats.models).map(([modelName, modelData]) => (
-                    <div key={modelName} className="token-info">
-                      <div>{t('fileAccess.promptTokens')} {modelData.tokens.prompt}</div>
-                      <div>{t('fileAccess.responseTokens')} {modelData.tokens.candidates}</div>
-                      <div>{t('fileAccess.totalTokens')} {modelData.tokens.total}</div>
-                      <div>{t('fileAccess.cachedTokens')} {modelData.tokens.cached}</div>
-                      <div>{t('fileAccess.thoughtTokens')} {modelData.tokens.thoughts}</div>
-                      <div>{t('fileAccess.toolTokens')} {modelData.tokens.tool}</div>
-                    </div>
-                  ))}
+                  <h4>{t("fileAccess.tokenStats")}</h4>
+                  {Object.entries(message.stats.models).map(
+                    ([modelName, modelData]) => (
+                      <div key={modelName} className="token-info">
+                        <div>
+                          {t("fileAccess.promptTokens")}{" "}
+                          {modelData.tokens.prompt}
+                        </div>
+                        <div>
+                          {t("fileAccess.responseTokens")}{" "}
+                          {modelData.tokens.candidates}
+                        </div>
+                        <div>
+                          {t("fileAccess.totalTokens")} {modelData.tokens.total}
+                        </div>
+                        <div>
+                          {t("fileAccess.cachedTokens")}{" "}
+                          {modelData.tokens.cached}
+                        </div>
+                        <div>
+                          {t("fileAccess.thoughtTokens")}{" "}
+                          {modelData.tokens.thoughts}
+                        </div>
+                        <div>
+                          {t("fileAccess.toolTokens")} {modelData.tokens.tool}
+                        </div>
+                      </div>
+                    )
+                  )}
                 </div>
 
                 <div className="stats-section">
-                  <h4>{t('fileAccess.toolStats')}</h4>
+                  <h4>{t("fileAccess.toolStats")}</h4>
                   <div className="tools-summary">
-                    <div>{t('fileAccess.totalCalls')} {message.stats.tools.totalCalls}</div>
-                    <div>{t('fileAccess.successful')} {message.stats.tools.totalSuccess}</div>
-                    <div>{t('fileAccess.failed')} {message.stats.tools.totalFail}</div>
-                    <div>{t('fileAccess.totalExecutionTime')} {message.stats.tools.totalDurationMs}ms</div>
+                    <div>
+                      {t("fileAccess.totalCalls")}{" "}
+                      {message.stats.tools.totalCalls}
+                    </div>
+                    <div>
+                      {t("fileAccess.successful")}{" "}
+                      {message.stats.tools.totalSuccess}
+                    </div>
+                    <div>
+                      {t("fileAccess.failed")} {message.stats.tools.totalFail}
+                    </div>
+                    <div>
+                      {t("fileAccess.totalExecutionTime")}{" "}
+                      {message.stats.tools.totalDurationMs}ms
+                    </div>
                   </div>
                   {Object.keys(message.stats.tools.byName).length > 0 && (
                     <div className="tools-details">
-                      <h5>{t('fileAccess.toolsDetailed')}</h5>
-                      {Object.entries(message.stats.tools.byName).map(([toolName, toolData]) => (
-                        <div key={toolName} className="tool-detail">
-                          <div className="tool-name">{toolName}</div>
-                          <div className="tool-stats">
-                            <div>{t('fileAccess.usageCount')} {toolData.count}</div>
-                            <div>{t('fileAccess.executionTime')} {toolData.durationMs}ms</div>
+                      <h5>{t("fileAccess.toolsDetailed")}</h5>
+                      {Object.entries(message.stats.tools.byName).map(
+                        ([toolName, toolData]) => (
+                          <div key={toolName} className="tool-detail">
+                            <div className="tool-name">{toolName}</div>
+                            <div className="tool-stats">
+                              <div>
+                                {t("fileAccess.usageCount")} {toolData.count}
+                              </div>
+                              <div>
+                                {t("fileAccess.executionTime")}{" "}
+                                {toolData.durationMs}ms
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      )}
                     </div>
                   )}
                 </div>
 
                 <div className="stats-section">
-                  <h4>{t('chat.stats.messageStats.fileChanges')}</h4>
+                  <h4>{t("chat.stats.messageStats.fileChanges")}</h4>
                   <div className="file-changes">
-                    <div>{t('chat.stats.messageStats.linesAdded')} {message.stats.files.totalLinesAdded}</div>
-                    <div>{t('chat.stats.messageStats.linesRemoved')} {message.stats.files.totalLinesRemoved}</div>
+                    <div>
+                      {t("chat.stats.messageStats.linesAdded")}{" "}
+                      {message.stats.files.totalLinesAdded}
+                    </div>
+                    <div>
+                      {t("chat.stats.messageStats.linesRemoved")}{" "}
+                      {message.stats.files.totalLinesRemoved}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -108,15 +108,9 @@ function App() {
 
   if (isLoading || !globalConfig) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        height: '100vh',
-        backgroundColor: 'var(--background)',
-        color: 'var(--text-primary)'
-      }}>
-        {t('common.loading')}
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <div className="loading-text">{t('common.loading')}</div>
       </div>
     );
   }
@@ -124,7 +118,7 @@ function App() {
   return (
     <>
       {currentView === 'workspace' && (
-        <React.Suspense fallback={<div style={{padding:20}}>Loading…</div>}>
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading…</div></div>}>
           <WorkspaceSelection
             recentWorkspaces={recentWorkspaces}
             favoriteWorkspaces={favoriteWorkspaces}
@@ -140,7 +134,7 @@ function App() {
       )}
       
       {currentView === 'chat' && currentWorkspace && (
-        <React.Suspense fallback={<div style={{padding:20}}>Loading chat…</div>}>
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading chat…</div></div>}>
           <Chat
           workspace={currentWorkspace}
           sessions={sessions}
@@ -166,11 +160,12 @@ function App() {
       )}
 
       {currentView === 'settings' && (
-        <React.Suspense fallback={<div style={{padding:20}}>Loading settings…</div>}>
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading settings…</div></div>}>
           <Settings
           settings={settings}
           onUpdateSettings={updateSettings}
           onClose={handleCloseSettings}
+          globalConfig={globalConfig}
           />
         </React.Suspense>
       )}

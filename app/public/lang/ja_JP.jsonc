@@ -153,7 +153,21 @@
       "totalTokensSummary": "合計トークン",
       "totalMessages": "総メッセージ数",
       "apiStats": "API 統計",
-      "diff": "差分:"
+      "diff": "差分:",
+      "export": {
+        "button": "エクスポート",
+        "title": "会話履歴のエクスポート",
+        "selectSession": "セッションを選択",
+        "format": "フォーマット",
+        "formatPdf": "PDF",
+        "formatTxt": "テキストファイル",
+        "exporting": "エクスポート中...",
+        "selectSessionFirst": "まずセッションを選択してください",
+        "noSessionAvailable": "エクスポート可能なセッションがありません",
+        "successPdf": "会話履歴がPDFに正常にエクスポートされました",
+        "successTxt": "会話履歴がテキストファイルに正常にエクスポートされました",
+        "error": "会話履歴のエクスポートに失敗しました"
+      }
     },
     "messageStats": {
       "fileChanges": "ファイル変更",
