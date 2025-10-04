@@ -143,7 +143,7 @@ export default function WorkspaceSelection({
       {isCheckingSetup ? (
         <div className="workspace-loading">
           <div className="spinner"></div>
-          <p>Checking Gemini CLI setup...</p>
+          <p>{t('workspace.checkingSetup')}</p>
         </div>
       ) : (
         <>

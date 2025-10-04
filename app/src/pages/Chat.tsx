@@ -129,14 +129,14 @@ export default function Chat({
         setGeminiPath(loadedGeminiPath);
 
         if (!loadedGeminiPath) {
-          setGeminiPathError('geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。');
+          setGeminiPathError(t('chat.errors.geminiPathMissing'));
         } else {
           setGeminiPathError('');
         }
       } catch (error) {
         console.error('Failed to load geminiPath from global config:', error);
         setGeminiPath(undefined);
-        setGeminiPathError('設定ファイルの読み込みに失敗しました。');
+        setGeminiPathError(t('chat.errors.configLoadFailed'));
       }
     };
 
@@ -340,7 +340,7 @@ export default function Chat({
 
         // Validate response
         if (!summaryResponse.response || summaryResponse.response.trim() === '') {
-          throw new Error('要約レスポンスが空です');
+          throw new Error(t('chat.errors.compactEmptyHistory'));
         }
 
         // Clean up the response - remove any existing summary headers
@@ -374,7 +374,7 @@ export default function Chat({
         const finalMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: '✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。',
+          content: t('chat.errors.compactCompleted'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, finalMessage);
@@ -395,7 +395,7 @@ export default function Chat({
 
     } else if (command === 'init') {
       setShowProcessingModal(true);
-      setProcessingMessage('Gemini.mdを生成しています...');
+      setProcessingMessage(t('chat.errors.initGenerating'));
       const startTime = Date.now();
 
       const interval = setInterval(() => {
@@ -513,7 +513,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
           const errorMessage: ChatMessage = {
             id: Date.now().toString(),
             role: 'assistant',
-            content: `❌ Gemini.mdの作成に失敗しました。AIがファイルを作成できなかったか、ツールの実行に問題が発生しました。`,
+            content: t('chat.errors.initFailed'),
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, errorMessage);
@@ -526,7 +526,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `❌ Gemini.mdの作成中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: t('chat.errors.initFailedWithError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -536,7 +536,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: '❌ /fixchat コマンドには改善したいテキストを指定してください。\n\n使用例: /fixchat このコードを説明して',
+          content: t('chat.errors.fixchatNoText'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -544,7 +544,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
       }
       
       setShowProcessingModal(true);
-      setProcessingMessage('AIがメッセージを改善しています...');
+      setProcessingMessage(t('chat.errors.fixchatProcessing'));
       const startTime = Date.now();
       
       const interval = setInterval(() => {
@@ -758,7 +758,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: t('chat.errors.geminiError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
         timestamp: new Date(),
       };
       onSendMessage(currentSessionId, errorMessage);
@@ -1083,9 +1083,9 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                         } catch (error) {
                           console.error('Error calling Gemini:', error);
                           const errorMessage: ChatMessage = {
-                            id: (Date.now() + 1).toString(),
+                            id: (Date.now() + 2).toString(),
                             role: 'assistant',
-                            content: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                            content: t('chat.errors.geminiError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
                             timestamp: new Date(),
                           };
                           onSendMessage(currentSessionId, errorMessage);
