@@ -395,11 +395,42 @@ User: ${prompt}
     let jsonString = '';
     let jsonSource = '';
     
-    // Check stderr for JSON
+    // Check stderr for error patterns (including quota errors)
     if (stderrString) {
-      const jsonMatch = stderrString.match(/\{[\s\S]*"error"[\s\S]*\}/);
+      // First, check for quota exceeded error (429)
+      if (stderrString.includes('Quota exceeded') || stderrString.includes('429') || stderrString.includes('RATE_LIMIT_EXCEEDED')) {
+        internalLog('Quota exceeded error detected in stderr', log);
+        
+        // Try to extract more detailed error information
+        const quotaMatch = stderrString.match(/Quota exceeded for quota metric '([^']+)'/i);
+        const metricName = quotaMatch ? quotaMatch[1] : 'API requests';
+        
+        // Create a structured error response
+        throw new Error(JSON.stringify({
+          type: 'QuotaExceededError',
+          code: 429,
+          metric: metricName,
+          message: `API クォータ制限に達しました: ${metricName}`,
+          details: 'リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。',
+          rawError: stderrString.substring(0, 500) // Include first 500 chars for debugging
+        }));
+      }
+      
+      // Try to extract JSON from stderr (may be incomplete due to stream truncation)
+      const jsonMatch = stderrString.match(/\[?\{[\s\S]*"error"[\s\S]*\}\]?/);
       if (jsonMatch) {
         jsonString = jsonMatch[0];
+        // Remove leading '[' if present (from error array)
+        if (jsonString.startsWith('[')) {
+          jsonString = jsonString.substring(1);
+        }
+        // Try to close incomplete JSON
+        if (!jsonString.endsWith('}')) {
+          const lastBrace = jsonString.lastIndexOf('}');
+          if (lastBrace > 0) {
+            jsonString = jsonString.substring(0, lastBrace + 1);
+          }
+        }
         jsonSource = 'stderr';
         internalLog('Found JSON in stderr', log);
       }
@@ -407,14 +438,14 @@ User: ${prompt}
     
     // If not found in stderr, check stdout
     if (!jsonString && stdoutString) {
-  jsonString = stdoutString;
-  jsonSource = 'stdout';
-  internalLog('Using stdout as JSON', log);
+      jsonString = stdoutString;
+      jsonSource = 'stdout';
+      internalLog('Using stdout as JSON', log);
     }
     
     if (jsonString) {
       try {
-  internalLog(`JSON response preview from ${jsonSource}: ${jsonString.substring(0, 200)}...`, log);
+        internalLog(`JSON response preview from ${jsonSource}: ${jsonString.substring(0, 200)}...`, log);
         const parsedResponse = JSON.parse(jsonString);
         
         // Check if the response contains a FatalToolExecutionError
@@ -461,6 +492,26 @@ User: ${prompt}
         }
       } catch (parseError) {
         internalLog('Failed to parse JSON: ' + String(parseError), log);
+        
+        // Check if the unparsed JSON contains quota error information
+        if (jsonString.includes('Quota exceeded') || jsonString.includes('429') || jsonString.includes('RATE_LIMIT_EXCEEDED')) {
+          internalLog('Quota exceeded error detected in unparsed JSON', log);
+          
+          // Try to extract metric name from the partial JSON
+          const quotaMatch = jsonString.match(/Quota exceeded for quota metric '([^']+)'/i) ||
+                            jsonString.match(/quota_metric["']?:\s*["']([^"']+)["']/i);
+          const metricName = quotaMatch ? quotaMatch[1] : 'API requests';
+          
+          throw new Error(JSON.stringify({
+            type: 'QuotaExceededError',
+            code: 429,
+            metric: metricName,
+            message: `API クォータ制限に達しました: ${metricName}`,
+            details: 'リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。',
+            rawError: jsonString.substring(0, 500)
+          }));
+        }
+        
         // If we can't parse JSON and exit code is not 0, throw error
         if (output.code !== 0) {
           throw new Error(`Command failed with code ${output.code}: ${stderrString}`);

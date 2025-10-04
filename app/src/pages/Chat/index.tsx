@@ -34,7 +34,9 @@ export default function Chat({
   onBack,
 }: ChatProps) {
   const [inputValue, setInputValue] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  // Track typing state per session
+  const [typingSessionIds, setTypingSessionIds] = useState<Set<string>>(new Set());
+  const isTyping = currentSessionId ? typingSessionIds.has(currentSessionId) : false;
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState("");
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
@@ -56,6 +58,21 @@ export default function Chat({
       }
     };
   }, []);
+
+  // Cleanup all request timers on unmount
+  useEffect(() => {
+    return () => {
+      // Clear all active request intervals
+      Object.values(requestIntervalsRef.current).forEach(interval => {
+        if (interval) {
+          clearInterval(interval);
+        }
+      });
+      requestIntervalsRef.current = {};
+      requestStartTimesRef.current = {};
+    };
+  }, []);
+
   const [cursorPosition, setCursorPosition] = useState(0);
   const [elapsedTime, setElapsedTime] = useState("");
   const [textareaHeight, setTextareaHeight] = useState("auto");
@@ -64,11 +81,13 @@ export default function Chat({
   const [processingMessage, setProcessingMessage] = useState("");
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [showCompactWarning, setShowCompactWarning] = useState(false);
-  const [requestElapsedTime, setRequestElapsedTime] = useState(0);
+  // Track request elapsed time per session
+  const [requestElapsedTimes, setRequestElapsedTimes] = useState<Record<string, number>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const requestStartRef = useRef<number | null>(null);
-  const requestIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track request start time per session
+  const requestStartTimesRef = useRef<Record<string, number>>({});
+  const requestIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
   const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] =
@@ -629,22 +648,29 @@ export default function Chat({
       tokenUsage: Math.ceil(inputValue.length / 4), // Estimate tokens for user message
     };
 
-    // Mark as typing/request-in-flight immediately to prevent races
-    setIsTyping(true);
+    // Mark as typing/request-in-flight for this specific session
+    setTypingSessionIds(prev => new Set(prev).add(currentSessionId));
 
     // Send the user message so it appears in the UI immediately
     onSendMessage(currentSessionId, userMessage);
     setInputValue("");
-    // start timer for this request
-    requestStartRef.current = Date.now();
-    setRequestElapsedTime(0);
+    // start timer for this specific session
+    requestStartTimesRef.current[currentSessionId] = Date.now();
+    setRequestElapsedTimes(prev => ({ ...prev, [currentSessionId]: 0 }));
 
-    // Start elapsed time counter
-    requestIntervalRef.current = setInterval(() => {
-      if (requestStartRef.current) {
-        setRequestElapsedTime(
-          Math.floor((Date.now() - requestStartRef.current) / 1000)
-        );
+    // Clear any existing interval for this session
+    if (requestIntervalsRef.current[currentSessionId]) {
+      clearInterval(requestIntervalsRef.current[currentSessionId]);
+    }
+
+    // Start elapsed time counter for this specific session
+    requestIntervalsRef.current[currentSessionId] = setInterval(() => {
+      const startTime = requestStartTimesRef.current[currentSessionId];
+      if (startTime) {
+        setRequestElapsedTimes(prev => ({
+          ...prev,
+          [currentSessionId]: Math.floor((Date.now() - startTime) / 1000)
+        }));
       }
     }, 1000);
 
@@ -741,9 +767,9 @@ export default function Chat({
       };
       onSendMessage(currentSessionId, aiMessage);
 
-      // Reset request timer
-      if (requestStartRef.current) {
-        requestStartRef.current = null;
+      // Reset request timer for this session
+      if (requestStartTimesRef.current[currentSessionId]) {
+        delete requestStartTimesRef.current[currentSessionId];
       }
     } catch (error) {
       // Detect FatalToolExecutionError and suggest approval mode changes
@@ -753,6 +779,37 @@ export default function Chat({
         const errType = errObj?.type || errObj?.error?.type || undefined;
         const errMessage =
           errObj?.message || errObj?.error?.message || String(error);
+
+        // Try to parse JSON error messages
+        let parsedError: any = null;
+        try {
+          if (errMessage.startsWith('{')) {
+            parsedError = JSON.parse(errMessage);
+          }
+        } catch (e) {
+          // Not a JSON error, continue with string parsing
+        }
+
+        // Check for quota exceeded error (429)
+        if (
+          parsedError?.type === 'QuotaExceededError' ||
+          parsedError?.code === 429 ||
+          errMessage.includes('Quota exceeded') ||
+          errMessage.includes('429') ||
+          errMessage.includes('RATE_LIMIT_EXCEEDED')
+        ) {
+          const metric = parsedError?.metric || 'API requests';
+          const details = parsedError?.details || 'リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。';
+          
+          const quotaErrorMessage: ChatMessage = {
+            id: (Date.now() + 2).toString(),
+            role: "assistant",
+            content: `⚠️ **APIクォータ制限エラー (429)**\n\n**問題:** ${parsedError?.message || `APIクォータ制限に達しました: ${metric}`}\n\n**詳細:**\n${details}\n\n**対処方法:**\n1. ⏰ **時間をおいて再試行** - 数時間後に再度お試しください（通常は翌日にリセットされます）\n2. 🔑 **別のAPIキーを使用** - 設定画面から別のGoogle Cloud APIキーを設定してください\n3. 📊 **使用量を確認** - [Google Cloud Console](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas) でクォータの使用状況を確認できます\n4. 📈 **クォータ制限の引き上げ** - 必要に応じて[こちら](https://cloud.google.com/docs/quotas/help/request_increase)からクォータの引き上げをリクエストできます\n\n**ヒント:**\n- 💡 リクエスト数を減らすために、より簡潔なプロンプトを使用してください\n- 💡 会話履歴が長い場合は \`/compact\` コマンドで圧縮してください`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, quotaErrorMessage);
+          return; // Skip default error message
+        }
 
         // Check for geminiPath error
         if (
@@ -798,13 +855,23 @@ export default function Chat({
       };
       onSendMessage(currentSessionId, errorMessage);
     } finally {
-      setIsTyping(false);
-      // Clear the elapsed time counter
-      if (requestIntervalRef.current) {
-        clearInterval(requestIntervalRef.current);
-        requestIntervalRef.current = null;
+      // Remove typing state for this specific session
+      setTypingSessionIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentSessionId);
+        return newSet;
+      });
+      // Clear the elapsed time counter for this specific session
+      if (requestIntervalsRef.current[currentSessionId]) {
+        clearInterval(requestIntervalsRef.current[currentSessionId]);
+        delete requestIntervalsRef.current[currentSessionId];
       }
-      setRequestElapsedTime(0);
+      // Clear the elapsed time for this session
+      setRequestElapsedTimes(prev => {
+        const newTimes = { ...prev };
+        delete newTimes[currentSessionId];
+        return newTimes;
+      });
     }
   };
 
@@ -948,10 +1015,12 @@ export default function Chat({
                       {session.name}
                     </span>
                   )}
-                  {isTyping && session.id === currentSessionId ? (
+                  {typingSessionIds.has(session.id) ? (
                     <div className="request-timer">
                       <div className="timer-spinner"></div>
-                      <span className="timer-text">{requestElapsedTime}s</span>
+                      <span className="timer-text">
+                        {requestElapsedTimes[session.id] || 0}s
+                      </span>
                     </div>
                   ) : (
                     <span className="session-tokens">
@@ -1031,19 +1100,25 @@ export default function Chat({
 
                         // If it's a user message, call Gemini API with the new content
                         if (newMessage.role === "user") {
-                          setIsTyping(true);
-                          // Start timer for resend request
-                          requestStartRef.current = Date.now();
-                          setRequestElapsedTime(0);
+                          // Mark as typing for this specific session
+                          setTypingSessionIds(prev => new Set(prev).add(currentSessionId));
+                          // Start timer for resend request for this specific session
+                          requestStartTimesRef.current[currentSessionId] = Date.now();
+                          setRequestElapsedTimes(prev => ({ ...prev, [currentSessionId]: 0 }));
 
-                          // Start elapsed time counter
-                          requestIntervalRef.current = setInterval(() => {
-                            if (requestStartRef.current) {
-                              setRequestElapsedTime(
-                                Math.floor(
-                                  (Date.now() - requestStartRef.current) / 1000
-                                )
-                              );
+                          // Clear any existing interval for this session
+                          if (requestIntervalsRef.current[currentSessionId]) {
+                            clearInterval(requestIntervalsRef.current[currentSessionId]);
+                          }
+
+                          // Start elapsed time counter for this specific session
+                          requestIntervalsRef.current[currentSessionId] = setInterval(() => {
+                            const startTime = requestStartTimesRef.current[currentSessionId];
+                            if (startTime) {
+                              setRequestElapsedTimes(prev => ({
+                                ...prev,
+                                [currentSessionId]: Math.floor((Date.now() - startTime) / 1000)
+                              }));
                             }
                           }, 1000);
                           try {
@@ -1226,26 +1301,80 @@ export default function Chat({
                             }
                           } catch (error) {
                             console.error("Error calling Gemini:", error);
-                            const errorMessage: ChatMessage = {
-                              id: (Date.now() + 2).toString(),
-                              role: "assistant",
-                              content: t("chat.errors.geminiError").replace(
-                                "{error}",
-                                error instanceof Error
-                                  ? error.message
-                                  : "Unknown error"
-                              ),
-                              timestamp: new Date(),
-                            };
-                            onSendMessage(currentSessionId, errorMessage);
-                          } finally {
-                            setIsTyping(false);
-                            // Clear the elapsed time counter
-                            if (requestIntervalRef.current) {
-                              clearInterval(requestIntervalRef.current);
-                              requestIntervalRef.current = null;
+                            
+                            // Try to parse and detect quota errors
+                            let showedCustomError = false;
+                            try {
+                              const errObj = error && typeof error === "object" ? (error as any) : null;
+                              const errMessage = errObj?.message || String(error);
+                              
+                              // Try to parse JSON error messages
+                              let parsedError: any = null;
+                              try {
+                                if (errMessage.startsWith('{')) {
+                                  parsedError = JSON.parse(errMessage);
+                                }
+                              } catch (e) {
+                                // Not a JSON error, continue with string parsing
+                              }
+                              
+                              // Check for quota exceeded error (429)
+                              if (
+                                parsedError?.type === 'QuotaExceededError' ||
+                                parsedError?.code === 429 ||
+                                errMessage.includes('Quota exceeded') ||
+                                errMessage.includes('429') ||
+                                errMessage.includes('RATE_LIMIT_EXCEEDED')
+                              ) {
+                                const metric = parsedError?.metric || 'API requests';
+                                const details = parsedError?.details || 'リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。';
+                                
+                                const quotaErrorMessage: ChatMessage = {
+                                  id: (Date.now() + 3).toString(),
+                                  role: "assistant",
+                                  content: `⚠️ **APIクォータ制限エラー (429)**\n\n**問題:** ${parsedError?.message || `APIクォータ制限に達しました: ${metric}`}\n\n**詳細:**\n${details}\n\n**対処方法:**\n1. ⏰ **時間をおいて再試行** - 数時間後に再度お試しください（通常は翌日にリセットされます）\n2. 🔑 **別のAPIキーを使用** - 設定画面から別のGoogle Cloud APIキーを設定してください\n3. 📊 **使用量を確認** - [Google Cloud Console](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas) でクォータの使用状況を確認できます\n4. 📈 **クォータ制限の引き上げ** - 必要に応じて[こちら](https://cloud.google.com/docs/quotas/help/request_increase)からクォータの引き上げをリクエストできます\n\n**ヒント:**\n- 💡 リクエスト数を減らすために、より簡潔なプロンプトを使用してください\n- 💡 会話履歴が長い場合は \`/compact\` コマンドで圧縮してください`,
+                                  timestamp: new Date(),
+                                };
+                                onSendMessage(currentSessionId, quotaErrorMessage);
+                                showedCustomError = true;
+                              }
+                            } catch (parseErr) {
+                              console.error("Error parsing error for quota detection:", parseErr);
                             }
-                            setRequestElapsedTime(0);
+                            
+                            // Show default error message if no custom error was shown
+                            if (!showedCustomError) {
+                              const errorMessage: ChatMessage = {
+                                id: (Date.now() + 2).toString(),
+                                role: "assistant",
+                                content: t("chat.errors.geminiError").replace(
+                                  "{error}",
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Unknown error"
+                                ),
+                                timestamp: new Date(),
+                              };
+                              onSendMessage(currentSessionId, errorMessage);
+                            }
+                          } finally {
+                            // Remove typing state for this specific session
+                            setTypingSessionIds(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(currentSessionId);
+                              return newSet;
+                            });
+                            // Clear the elapsed time counter for this specific session
+                            if (requestIntervalsRef.current[currentSessionId]) {
+                              clearInterval(requestIntervalsRef.current[currentSessionId]);
+                              delete requestIntervalsRef.current[currentSessionId];
+                            }
+                            // Clear the elapsed time for this session
+                            setRequestElapsedTimes(prev => {
+                              const newTimes = { ...prev };
+                              delete newTimes[currentSessionId];
+                              return newTimes;
+                            });
                           }
                         }
                       }}
