@@ -469,6 +469,64 @@
   display: block;
 }
 
+/* Syntax Highlighting for Code Blocks */
+.message-bubble code[class*="language-"] {
+  color: #cdd6f4;
+}
+
+/* Keywords */
+.message-bubble code.language-python .keyword,
+.message-bubble code.language-javascript .keyword,
+.message-bubble code.language-typescript .keyword {
+  color: #f38ba8; /* Pink for keywords */
+}
+
+/* Strings */
+.message-bubble code[class*="language-"] .string {
+  color: #a6e3a1; /* Green for strings */
+}
+
+/* Comments */
+.message-bubble code[class*="language-"] .comment {
+  color: #6c7086; /* Gray for comments */
+  font-style: italic;
+}
+
+/* Functions */
+.message-bubble code[class*="language-"] .function {
+  color: #89b4fa; /* Blue for functions */
+}
+
+/* Numbers */
+.message-bubble code[class*="language-"] .number {
+  color: #fab387; /* Orange for numbers */
+}
+
+/* Operators */
+.message-bubble code[class*="language-"] .operator {
+  color: #94e2d5; /* Cyan for operators */
+}
+
+/* Language badge on code blocks */
+.message-bubble pre.code-block {
+  position: relative;
+}
+
+.message-bubble pre.code-block code[data-lang]:not([data-lang=""]):before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: rgba(137, 180, 250, 0.2);
+  color: #89b4fa;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Blockquotes */
 .message.assistant .message-bubble blockquote {
   border-left: 4px solid var(--primary);
@@ -635,6 +693,103 @@
   }
   30% {
     transform: translateY(-10px);
+  }
+}
+
+/* Streaming cursor animation */
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  animation: blink 1s infinite;
+  font-weight: bold;
+  color: var(--primary);
+}
+
+/* Streaming waiting indicator */
+.streaming-waiting {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  color: var(--text-secondary);
+}
+
+.waiting-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.waiting-dots span {
+  animation: waitingDot 1.4s infinite;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.waiting-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.waiting-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.waiting-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes waitingDot {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Streaming content styling */
+.streaming-content {
+  position: relative;
+  min-height: 20px;
+}
+
+.streaming-content .streaming-cursor {
+  vertical-align: baseline;
+  line-height: inherit;
+}
+
+/* Ensure proper whitespace and line breaks in streaming */
+.streaming-content p {
+  margin: 0.5em 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.streaming-content p:first-child {
+  margin-top: 0;
+}
+
+.streaming-content p:last-child {
+  margin-bottom: 0;
+}
+
+.streaming-content code {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.streaming-content pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0.5em 0;
+}
+
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
   }
 }
 

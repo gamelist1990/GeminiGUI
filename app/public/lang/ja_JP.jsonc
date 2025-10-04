@@ -217,6 +217,36 @@
     "save": "保存",
     "cancel": "キャンセル",
     "back": "戻る",
+    // SettingsPage カテゴリ
+    "categories": {
+      "general": {
+        "title": "一般",
+        "label": "一般設定",
+        "description": "言語とテーマの設定"
+      },
+      "ai": {
+        "title": "AI",
+        "label": "AI設定",
+        "description": "モデル、APIキー、応答モードの設定"
+      },
+      "tools": {
+        "title": "ツール",
+        "label": "ツール設定",
+        "description": "ツール実行権限と設定"
+      },
+      "appearance": {
+        "title": "外観",
+        "label": "外観設定",
+        "description": "UIと表示の設定"
+      },
+      "system": {
+        "title": "システム",
+        "label": "システム設定",
+        "description": "セットアップ確認とバックアップの推奨"
+      }
+    },
+    "unsavedChanges": "保存されていない変更があります。閉じてもよろしいですか?",
+    "closeSettings": "設定を閉じる",
     "approvalMode": "承認モード",
     "defaultApproval": "デフォルト (承認を求める)",
     "autoEditApproval": "自動編集 (編集ツールを自動承認)",
@@ -227,6 +257,7 @@
     "streamMode": "ストリームモード (今後対応予定)",
     "responseModeDescription": "AI応答の処理方法を選択します。非同期モードは完全な応答を一度に取得します。ストリームモードは将来実装予定で、リアルタイムで応答を受信します。",
     "streamNotAvailable": "⚠️ ストリームモードは現在開発中です。将来のバージョンで利用可能になります。",
+    "streamAvailableWithOpenAI": "✅ OpenAI APIを使用する場合、ストリーミングモードが利用可能です！",
     "modelSelection": "🤖 モデル選択",
     "defaultModel": "デフォルト Gemini 2.5 Pro",
     "flashModel": "Gemini 2.5 Flash (高速・節約)",
@@ -248,7 +279,23 @@
     "backupText": "このアプリケーションにはチェックポイント機能がありません。AIによるコード変更を行う前に、必ずGitやその他のバージョン管理システムで適切なバックアップを取ることを強くお勧めします。",
     "backupTip1": "✓ Gitでコミットしてから変更を開始する",
     "backupTip2": "✓ 重要なファイルは別途バックアップを作成する",
-    "backupTip3": "✓ 大きな変更の前にブランチを作成する"
+    "backupTip3": "✓ 大きな変更の前にブランチを作成する",
+    // OpenAI API Support
+    "enableOpenAI": "OpenAI API サポート",
+    "enabled": "有効",
+    "disabled": "無効",
+    "openAIDescription": "🤖 OpenAI API を有効にすると、Gemini の代わりに OpenAI のモデル (GPT-4, GPT-3.5など) を使用できます。ストリーミングも利用可能になります。",
+    "openAIApiKey": "OpenAI API キー",
+    "openAIApiKeyPlaceholder": "sk-... または xxx (プレースホルダーでも可)",
+    "openAIApiKeyDescription": "OpenAI API キーを入力してください。プレースホルダー (xxx など) でも動作します。",
+    "openAIApiKeyNote": "カスタムエンドポイントを使用する場合は、適切な API キーを設定してください。",
+    "openAIBaseURL": "OpenAI Base URL",
+    "openAIBaseURLDescription": "OpenAI API のエンドポイントを指定します。デフォルトは公式エンドポイントです。",
+    "openAIBaseURLNote": "カスタムエンドポイント (ローカルLLMなど) を使用する場合は、ここにURLを設定してください。",
+    "openAIModel": "OpenAI モデル",
+    "openAIModelDescription": "使用する OpenAI モデルを指定します (例: gpt-4, gpt-3.5-turbo, gpt-4-turbo)。",
+    "openAIModelNote": "空白の場合は gpt-3.5-turbo がデフォルトで使用されます。",
+    "openAIStreamDescription": "⚡ OpenAI API 使用時はストリームモードが利用可能です。リアルタイムで応答を受信できます。"
   },
   "common": {
     "confirm": "確認",

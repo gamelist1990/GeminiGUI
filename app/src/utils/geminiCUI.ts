@@ -2,6 +2,7 @@ import { Command } from '@tauri-apps/plugin-shell';
 import { writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { cleanupManager } from './cleanupManager';
+import { callOpenAI, callOpenAIStream, OpenAIOptions } from './openaiAPI';
 
 type LogFunction = (message: string) => void;
 
@@ -75,6 +76,8 @@ export interface GeminiOptions {
   conversationHistoryJson?: Array<{ role: string; content: string }>;
   workspaceId?: string;
   sessionId?: string;
+  toolUsageJsonPath?: string; // Path to toolUsage.json with tool definitions
+  enabledTools?: string[]; // List of enabled tool names
 }
 
 async function ensureDir(path: string) {
@@ -257,6 +260,34 @@ export async function callGemini(
       : ['@なし'];
 
     const promptSections: string[] = [`Contents: ${contentTokens.join(', ')}`];
+
+    // Add toolUsage.json if tools are enabled
+    if (options?.toolUsageJsonPath && options?.enabledTools && options.enabledTools.length > 0) {
+      const normalizedToolPath = options.toolUsageJsonPath.replace(/\\/g, '/');
+      const toolUsageToken = `@file:${normalizedToolPath}`;
+      
+      promptSections.push(`# IMPORTANT: Available Tools
+
+You have access to Python tools that can help you perform file operations and other tasks.
+
+**Tool Usage File:** ${toolUsageToken}
+
+This JSON file contains:
+- List of available tools with their capabilities
+- Usage examples and parameter schemas for each tool
+- Instructions on how to call each tool
+
+**CRITICAL INSTRUCTIONS:**
+1. Read the toolUsage.json file to understand what tools are available
+2. When the user asks you to perform file operations (create, edit, read files/directories), USE THE TOOLS
+3. Follow the exact parameter format specified in each tool's schema
+4. Tools are located in the temp directory and can be executed via Python
+5. Each tool returns JSON output with success status and results
+
+**Enabled Tools:** ${options.enabledTools.join(', ')}
+
+Please read ${toolUsageToken} before proceeding.`);
+    }
 
     if (conversationToken) {
       promptSections.push(`# CRITICAL: Read Conversation History First
@@ -588,4 +619,107 @@ export async function callGeminiStream(
   }
   
   return response;
+}
+/**
+ * Unified AI API call function
+ * Automatically selects OpenAI or Gemini based on settings
+ */
+export async function callAI(
+  prompt: string,
+  workspacePath?: string,
+  options?: GeminiOptions,
+  settings?: {
+    enableOpenAI?: boolean;
+    openAIApiKey?: string;
+    openAIBaseURL?: string;
+    openAIModel?: string;
+    responseMode?: 'async' | 'stream';
+    googleCloudProjectId?: string;
+    geminiPath?: string;
+  },
+  onChunk?: StreamCallback,
+  log?: LogFunction
+): Promise<GeminiResponse> {
+  // If OpenAI is enabled, use OpenAI API
+  if (settings?.enableOpenAI) {
+    internalLog('Using OpenAI API', log);
+    
+    const openAIOptions: OpenAIOptions = {
+      apiKey: settings.openAIApiKey || 'xxx',
+      baseURL: settings.openAIBaseURL || 'https://api.openai.com/v1',
+      model: settings.openAIModel || 'gpt-3.5-turbo',
+      conversationHistory: options?.conversationHistoryJson,
+      conversationHistoryJson: options?.conversationHistory, // Add raw JSON history
+      includes: options?.includes, // Add file attachments
+      includeDirectories: options?.includeDirectories, // Add directory attachments
+      toolUsageJsonPath: options?.toolUsageJsonPath, // Add tool support
+      enabledTools: options?.enabledTools, // Add enabled tools
+      workspacePath, // Add workspace path so AI knows where it is
+      workspaceId: options?.workspaceId, // Add workspace ID
+      sessionId: options?.sessionId, // Add session ID
+    };
+    
+    // Use streaming if enabled
+    if (settings.responseMode === 'stream' && onChunk) {
+      internalLog('Using OpenAI streaming mode', log);
+      let fullResponse = '';
+      
+      await callOpenAIStream(
+        prompt,
+        openAIOptions,
+        (chunk) => {
+          if (chunk.type === 'text' && chunk.content) {
+            fullResponse += chunk.content;
+          }
+          onChunk(chunk);
+        },
+        log
+      );
+      
+      // Return a basic response (streaming doesn't return stats the same way)
+      return {
+        response: fullResponse,
+        stats: {
+          models: {},
+          tools: {
+            totalCalls: 0,
+            totalSuccess: 0,
+            totalFail: 0,
+            totalDurationMs: 0,
+            totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
+            byName: {},
+          },
+          files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+        },
+      };
+    } else {
+      // Use non-streaming mode
+      internalLog('Using OpenAI async mode', log);
+      return await callOpenAI(prompt, openAIOptions, log);
+    }
+  } else {
+    // Use Gemini API (original behavior)
+    internalLog('Using Gemini API', log);
+    
+    if (settings?.responseMode === 'stream' && onChunk) {
+      return await callGeminiStream(
+        prompt,
+        workspacePath,
+        options,
+        settings.googleCloudProjectId,
+        settings.geminiPath,
+        onChunk,
+        log
+      );
+    } else {
+      return await callGemini(
+        prompt,
+        workspacePath,
+        options,
+        settings?.googleCloudProjectId,
+        settings?.geminiPath,
+        log
+      );
+    }
+  }
 }

@@ -217,6 +217,36 @@
     "save": "Save",
     "cancel": "Cancel",
     "back": "Back",
+    // SettingsPage categories
+    "categories": {
+      "general": {
+        "title": "General",
+        "label": "General Settings",
+        "description": "Language and theme settings"
+      },
+      "ai": {
+        "title": "AI",
+        "label": "AI Settings",
+        "description": "Model, API key, and response mode settings"
+      },
+      "tools": {
+        "title": "Tools",
+        "label": "Tool Settings",
+        "description": "Tool execution permissions and settings"
+      },
+      "appearance": {
+        "title": "Appearance",
+        "label": "Appearance",
+        "description": "UI and display settings"
+      },
+      "system": {
+        "title": "System",
+        "label": "System",
+        "description": "Setup verification and backup recommendations"
+      }
+    },
+    "unsavedChanges": "You have unsaved changes. Are you sure you want to close?",
+    "closeSettings": "Close Settings",
     "approvalMode": "Approval Mode",
     "defaultApproval": "Default (Prompt for approval)",
     "autoEditApproval": "Auto Edit (Auto-approve edit tools)",
@@ -227,6 +257,7 @@
     "streamMode": "Stream Mode (Coming Soon)",
     "responseModeDescription": "Select how AI responses are processed. Async mode retrieves complete responses at once. Stream mode is planned for future implementation and will receive responses in real-time.",
     "streamNotAvailable": "⚠️ Stream mode is currently under development. It will be available in a future version.",
+    "streamAvailableWithOpenAI": "✅ Stream mode is available when using OpenAI API!",
     "modelSelection": "🤖 Model Selection",
     "defaultModel": "Default Gemini 2.5 Pro",
     "flashModel": "Gemini 2.5 Flash (Fast & Efficient)",
@@ -248,7 +279,23 @@
     "backupText": "This application does not have checkpointing functionality. It is strongly recommended to take appropriate backups using Git or other version control systems before making code changes with AI.",
     "backupTip1": "✓ Commit to Git before starting changes",
     "backupTip2": "✓ Create separate backups of important files",
-    "backupTip3": "✓ Create branches before major changes"
+    "backupTip3": "✓ Create branches before major changes",
+    // OpenAI API Support
+    "enableOpenAI": "OpenAI API Support",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "openAIDescription": "🤖 When OpenAI API is enabled, you can use OpenAI models (GPT-4, GPT-3.5, etc.) instead of Gemini. Streaming is also available.",
+    "openAIApiKey": "OpenAI API Key",
+    "openAIApiKeyPlaceholder": "sk-... or xxx (placeholder acceptable)",
+    "openAIApiKeyDescription": "Enter your OpenAI API key. Placeholders (like xxx) are also acceptable.",
+    "openAIApiKeyNote": "If using a custom endpoint, set the appropriate API key.",
+    "openAIBaseURL": "OpenAI Base URL",
+    "openAIBaseURLDescription": "Specify the OpenAI API endpoint. Default is the official endpoint.",
+    "openAIBaseURLNote": "If using a custom endpoint (like local LLM), set the URL here.",
+    "openAIModel": "OpenAI Model",
+    "openAIModelDescription": "Specify the OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo, gpt-4-turbo).",
+    "openAIModelNote": "Defaults to gpt-3.5-turbo if left blank.",
+    "openAIStreamDescription": "⚡ Stream mode is available when using OpenAI API. Receive responses in real-time."
   },
   "common": {
     "confirm": "Confirm",

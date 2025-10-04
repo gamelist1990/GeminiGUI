@@ -1,15 +1,26 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../Chat.css";
-import { ChatMessage } from "../../types";
+import { ChatMessage, ToolDefinition } from "../../types";
 import { t } from "../../utils/i18n";
 import { formatElapsedTime, formatNumber } from "../../utils/storage";
-import { callGemini, GeminiOptions } from "../../utils/geminiCUI";
+import { callAI, GeminiOptions } from "../../utils/geminiCUI";
 import { scanWorkspace, getSuggestions, parseIncludes } from "../../utils/workspace";
 import * as fsPlugin from "@tauri-apps/plugin-fs";
 import { ChatProps } from "./types";
 import ProcessingModal from "./ProcessingModal";
 import StatsModal from "./StatsModal";
 import ChatMessageBubble from "./ChatMessageBubble";
+import { setupToolsForSession } from "../../utils/toolManager";
+import { cleanupManager } from "../../utils/cleanupManager";
+
+// Lazy load Markdown components for streaming
+const ReactMarkdown = React.lazy(
+  () => import("react-markdown")
+) as unknown as any;
+const SyntaxHighlighter = React.lazy(() =>
+  import("react-syntax-highlighter").then((mod) => ({ default: mod.Prism }))
+) as unknown as any;
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 export default function Chat({
   workspace,
@@ -24,6 +35,7 @@ export default function Chat({
   googleCloudProjectId,
   maxMessagesBeforeCompact,
   globalConfig,
+  settings,
   onCreateNewSession,
   onSwitchSession,
   onSendMessage,
@@ -34,6 +46,9 @@ export default function Chat({
   onBack,
 }: ChatProps) {
   const [inputValue, setInputValue] = useState("");
+  // State for streaming message
+  const [streamingMessage, setStreamingMessage] = useState<string>("");
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
   // Track typing state per session
   const [typingSessionIds, setTypingSessionIds] = useState<Set<string>>(new Set());
   const isTyping = currentSessionId ? typingSessionIds.has(currentSessionId) : false;
@@ -299,6 +314,23 @@ export default function Chat({
       }, 1000);
 
       try {
+        // Setup tools for compact command
+        let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
+          tools: [], 
+          tempDir: '', 
+          toolUsageJsonPath: '' 
+        };
+        try {
+          toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
+          if (toolsSetup.tools.length > 0) {
+            console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for /compact command`);
+            cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
+            cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
+          }
+        } catch (toolError) {
+          console.warn('[Tools] Failed to setup tools for /compact:', toolError);
+        }
+
         // Build conversation history (exclude system messages)
         const historyMessages = currentSession.messages.filter(
           (msg) => msg.role !== "system"
@@ -337,7 +369,7 @@ export default function Chat({
         // large history directly in the command line.
         const summaryPrompt = t("chat.stats.processing.compactPrompt");
 
-        const summaryResponse = await callGemini(
+        const summaryResponse = await callAI(
           summaryPrompt,
           workspace.path,
           {
@@ -348,13 +380,30 @@ export default function Chat({
             conversationHistoryJson: historyJson,
             workspaceId: workspace.id,
             sessionId: currentSessionId,
+            toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
+            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
           },
-          googleCloudProjectId,
-          geminiPath
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: 'async', // Always use async for summary
+            googleCloudProjectId: googleCloudProjectId,
+            geminiPath: geminiPath,
+          }
         );
 
         clearInterval(interval);
         setShowProcessingModal(false);
+        
+        // Cleanup tools after compact
+        try {
+          await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+          console.log(`[Tools] Cleaned up tools after /compact`);
+        } catch (cleanupError) {
+          console.warn('[Tools] Failed to cleanup after /compact:', cleanupError);
+        }
 
         // Validate response
         if (
@@ -425,6 +474,23 @@ export default function Chat({
       }, 1000);
 
       try {
+        // Setup tools for init command
+        let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
+          tools: [], 
+          tempDir: '', 
+          toolUsageJsonPath: '' 
+        };
+        try {
+          toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
+          if (toolsSetup.tools.length > 0) {
+            console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for /init command`);
+            cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
+            cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
+          }
+        } catch (toolError) {
+          console.warn('[Tools] Failed to setup tools for /init:', toolError);
+        }
+
         const geminiFilePath = `${workspace.path}/Gemini.md`;
         const hadExistingGemini = await fsPlugin.exists(geminiFilePath);
 
@@ -450,7 +516,7 @@ export default function Chat({
           initPrompt = `${basePrompt}\n\nNo Gemini.md file exists yet. Explore the workspace with the available tools and create a comprehensive Gemini.md from scratch.`;
         }
 
-        const initResponse = await callGemini(
+        const initResponse = await callAI(
           initPrompt,
           workspace.path,
           {
@@ -458,13 +524,30 @@ export default function Chat({
             model: "gemini-2.5-flash",
             customApiKey: customApiKey,
             includeDirectories: ["."], // Allow the model to inspect the workspace structure via tools
+            toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
+            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
           },
-          googleCloudProjectId,
-          geminiPath
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: 'async',
+            googleCloudProjectId: googleCloudProjectId,
+            geminiPath: geminiPath,
+          }
         );
 
         clearInterval(interval);
         setShowProcessingModal(false);
+        
+        // Cleanup tools after init
+        try {
+          await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+          console.log(`[Tools] Cleaned up tools after /init`);
+        } catch (cleanupError) {
+          console.warn('[Tools] Failed to cleanup after /init:', cleanupError);
+        }
 
         // Check if AI actually created or updated the file using tools
         const fileExists = await fsPlugin.exists(geminiFilePath);
@@ -531,22 +614,56 @@ export default function Chat({
       }, 1000);
 
       try {
+        // Setup tools for fixchat command
+        let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
+          tools: [], 
+          tempDir: '', 
+          toolUsageJsonPath: '' 
+        };
+        try {
+          toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
+          if (toolsSetup.tools.length > 0) {
+            console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for /fixchat command`);
+            cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
+            cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
+          }
+        } catch (toolError) {
+          console.warn('[Tools] Failed to setup tools for /fixchat:', toolError);
+        }
+
         const improvementPrompt = `以下のユーザーメッセージを、AIが理解しやすく、より具体的で明確な表現に改善してください。改善後のメッセージのみを返してください。余計な説明や前置きは不要です:\n\n${args}`;
 
-        const improvedResponse = await callGemini(
+        const improvedResponse = await callAI(
           improvementPrompt,
           workspace.path,
           {
             approvalMode: approvalMode,
             model: "gemini-2.5-flash", // Use fast model
             customApiKey: customApiKey,
+            toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
+            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
           },
-          googleCloudProjectId,
-          geminiPath
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: 'async',
+            googleCloudProjectId: googleCloudProjectId,
+            geminiPath: geminiPath,
+          }
         );
 
         clearInterval(interval);
         setShowProcessingModal(false);
+        
+        // Cleanup tools after fixchat
+        try {
+          await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+          console.log(`[Tools] Cleaned up tools after /fixchat`);
+        } catch (cleanupError) {
+          console.warn('[Tools] Failed to cleanup after /fixchat:', cleanupError);
+        }
 
         // Set the improved message directly to the input field
         const improvedText = improvedResponse.response.trim();
@@ -675,6 +792,25 @@ export default function Chat({
     }, 1000);
 
     try {
+      // Setup tools for this session (if not already done)
+      let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
+        tools: [], 
+        tempDir: '', 
+        toolUsageJsonPath: '' 
+      };
+      try {
+        toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
+        if (toolsSetup.tools.length > 0) {
+          console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for session`);
+          // Register temp directory for cleanup
+          cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
+          cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
+        }
+      } catch (toolError) {
+        console.warn('[Tools] Failed to setup tools:', toolError);
+        // Continue without tools
+      }
+
       // Parse includes from input with workspace items for directory verification
       const { includes, directories } = parseIncludes(
         inputValue,
@@ -713,6 +849,9 @@ export default function Chat({
             : undefined,
         workspaceId: workspace.id,
         sessionId: currentSessionId,
+        // Add tool support
+        toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
+        enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
       };
 
       console.log(
@@ -720,29 +859,69 @@ export default function Chat({
         conversationHistory ? "Yes" : "No"
       );
       
-      // Response mode handling: async (current) vs stream (future)
-      // Currently, only async mode is fully implemented
-      // Stream mode will be implemented in future updates
+      // Response mode handling: async vs stream
       let geminiResponse;
       if (responseMode === 'stream') {
-        // TODO: Future implementation - Stream mode
-        // For now, fallback to async mode
-        console.warn('Stream mode is not yet implemented, using async mode');
-        geminiResponse = await callGemini(
+        // Stream mode - real-time response streaming
+        console.log('Using stream mode with real-time updates');
+        
+        // Initialize streaming state
+        setStreamingMessage("");
+        setIsStreaming(true);
+        let hasReceivedFirstChunk = false;
+        
+        // Call AI with streaming callback
+        geminiResponse = await callAI(
           inputValue,
           workspace.path,
           options,
-          googleCloudProjectId,
-          geminiPath
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: responseMode,
+            googleCloudProjectId: googleCloudProjectId,
+            geminiPath: geminiPath,
+          },
+          // onChunk callback for streaming updates
+          (chunk) => {
+            if (chunk.type === 'text' && chunk.content) {
+              // Mark that we've received first chunk
+              if (!hasReceivedFirstChunk) {
+                hasReceivedFirstChunk = true;
+                console.log('First chunk received, starting stream display');
+              }
+              // Append chunk to streaming message
+              setStreamingMessage(prev => prev + chunk.content);
+            } else if (chunk.type === 'done') {
+              console.log('Stream completed');
+              setIsStreaming(false);
+            } else if (chunk.type === 'error') {
+              console.error('Stream error:', chunk.error);
+              setIsStreaming(false);
+            }
+          }
         );
+        
+        // Clear streaming state after completion
+        setStreamingMessage("");
+        setIsStreaming(false);
       } else {
         // Async mode (default)
-        geminiResponse = await callGemini(
+        geminiResponse = await callAI(
           inputValue,
           workspace.path,
           options,
-          googleCloudProjectId,
-          geminiPath
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: responseMode,
+            googleCloudProjectId: googleCloudProjectId,
+            geminiPath: geminiPath,
+          }
         );
       }
 
@@ -766,6 +945,14 @@ export default function Chat({
         stats: geminiResponse.stats,
       };
       onSendMessage(currentSessionId, aiMessage);
+
+      // Cleanup tools for this session after AI response completes
+      try {
+        await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+        console.log(`[Tools] Cleaned up tools for session ${currentSessionId}`);
+      } catch (cleanupError) {
+        console.warn('[Tools] Failed to cleanup tools:', cleanupError);
+      }
 
       // Reset request timer for this session
       if (requestStartTimesRef.current[currentSessionId]) {
@@ -1122,6 +1309,25 @@ export default function Chat({
                             }
                           }, 1000);
                           try {
+                            // Setup tools for resend as well
+                            let toolsSetup: { tools: ToolDefinition[]; tempDir: string; toolUsageJsonPath: string } = { 
+                              tools: [], 
+                              tempDir: '', 
+                              toolUsageJsonPath: '' 
+                            };
+                            try {
+                              toolsSetup = await setupToolsForSession(workspace.id, currentSessionId, settings.enabledTools, workspace.path);
+                              if (toolsSetup.tools.length > 0) {
+                                console.log(`[Tools] Setup ${toolsSetup.tools.length} tools for resend`);
+                                // Register temp directory for cleanup
+                                cleanupManager.register(toolsSetup.tempDir, workspace.id, currentSessionId, 'directory');
+                                cleanupManager.register(toolsSetup.toolUsageJsonPath, workspace.id, currentSessionId, 'file');
+                              }
+                            } catch (toolError) {
+                              console.warn('[Tools] Failed to setup tools for resend:', toolError);
+                              // Continue without tools
+                            }
+
                             const { includes, directories } = parseIncludes(
                               newMessage.content,
                               workspaceItems
@@ -1170,19 +1376,80 @@ export default function Chat({
                                   : undefined,
                               workspaceId: workspace.id,
                               sessionId: currentSessionId,
+                              // Add tool support for resend
+                              toolUsageJsonPath: toolsSetup.toolUsageJsonPath || undefined,
+                              enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
                             };
 
                             console.log(
                               "Resending message with conversation history:",
                               conversationHistory ? "Yes" : "No"
                             );
-                            const geminiResponse = await callGemini(
-                              newMessage.content,
-                              workspace.path,
-                              options,
-                              googleCloudProjectId,
-                              geminiPath
-                            );
+                            
+                            let geminiResponse;
+                            
+                            // Use streaming mode if enabled
+                            if (responseMode === 'stream') {
+                              console.log('Resending with stream mode');
+                              
+                              // Initialize streaming state
+                              setStreamingMessage("");
+                              setIsStreaming(true);
+                              let hasReceivedFirstChunk = false;
+                              
+                              // Call AI with streaming callback
+                              geminiResponse = await callAI(
+                                newMessage.content,
+                                workspace.path,
+                                options,
+                                {
+                                  enableOpenAI: settings.enableOpenAI,
+                                  openAIApiKey: settings.openAIApiKey,
+                                  openAIBaseURL: settings.openAIBaseURL,
+                                  openAIModel: settings.openAIModel,
+                                  responseMode: responseMode,
+                                  googleCloudProjectId: googleCloudProjectId,
+                                  geminiPath: geminiPath,
+                                },
+                                // onChunk callback for streaming updates
+                                (chunk) => {
+                                  if (chunk.type === 'text' && chunk.content) {
+                                    // Mark that we've received first chunk
+                                    if (!hasReceivedFirstChunk) {
+                                      hasReceivedFirstChunk = true;
+                                      console.log('Resend: First chunk received');
+                                    }
+                                    setStreamingMessage(prev => prev + chunk.content);
+                                  } else if (chunk.type === 'done') {
+                                    console.log('Resend stream completed');
+                                    setIsStreaming(false);
+                                  } else if (chunk.type === 'error') {
+                                    console.error('Resend stream error:', chunk.error);
+                                    setIsStreaming(false);
+                                  }
+                                }
+                              );
+                              
+                              // Clear streaming state
+                              setStreamingMessage("");
+                              setIsStreaming(false);
+                            } else {
+                              // Async mode
+                              geminiResponse = await callAI(
+                                newMessage.content,
+                                workspace.path,
+                                options,
+                                {
+                                  enableOpenAI: settings.enableOpenAI,
+                                  openAIApiKey: settings.openAIApiKey,
+                                  openAIBaseURL: settings.openAIBaseURL,
+                                  openAIModel: settings.openAIModel,
+                                  responseMode: responseMode,
+                                  googleCloudProjectId: googleCloudProjectId,
+                                  geminiPath: geminiPath,
+                                }
+                              );
+                            }
 
                             // Check if the response contains a FatalToolExecutionError
                             let responseContent = geminiResponse.response;
@@ -1299,6 +1566,14 @@ export default function Chat({
                               };
                               onSendMessage(currentSessionId, aiMessage);
                             }
+                            
+                            // Cleanup tools for resend
+                            try {
+                              await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+                              console.log(`[Tools] Cleaned up tools after resend for session ${currentSessionId}`);
+                            } catch (cleanupError) {
+                              console.warn('[Tools] Failed to cleanup tools after resend:', cleanupError);
+                            }
                           } catch (error) {
                             console.error("Error calling Gemini:", error);
                             
@@ -1382,13 +1657,70 @@ export default function Chat({
                   ))
               );
             })()}
-            {isTyping && (
+            {isTyping && !isStreaming && (
               <div className="message assistant">
                 <div className="message-bubble">
                   <div className="typing-indicator">
                     <span></span>
                     <span></span>
                     <span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {isStreaming && (
+              <div className="message assistant">
+                <div className="message-bubble">
+                  <div className="message-content streaming-content">
+                    {streamingMessage ? (
+                      // Show streaming content with Markdown rendering
+                      <>
+                        <React.Suspense fallback={<div>Loading...</div>}>
+                          <ReactMarkdown
+                            components={{
+                              code({ node, inline, className, children, ...props }: any) {
+                                const match = /language-(\w+)/.exec(className || "");
+                                if (!inline && match) {
+                                  return (
+                                    <React.Suspense fallback={<pre className="code-loading">Loading code…</pre>}>
+                                      <SyntaxHighlighter
+                                        style={oneDark}
+                                        language={match[1]}
+                                        PreTag="div"
+                                        {...props}
+                                      >
+                                        {String(children).replace(/\n$/, "")}
+                                      </SyntaxHighlighter>
+                                    </React.Suspense>
+                                  );
+                                } else {
+                                  return (
+                                    <code className={className} {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                              },
+                              p({ children, ...props }: any) {
+                                return <p {...props}>{children}</p>;
+                              },
+                            }}
+                          >
+                            {streamingMessage}
+                          </ReactMarkdown>
+                        </React.Suspense>
+                        <span className="streaming-cursor">▊</span>
+                      </>
+                    ) : (
+                      // Show loading indicator while waiting for first chunk
+                      <div className="streaming-waiting">
+                        <span className="waiting-dots">
+                          <span>.</span>
+                          <span>.</span>
+                          <span>.</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

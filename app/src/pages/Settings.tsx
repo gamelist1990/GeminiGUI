@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Settings as SettingsType } from '../types';
+import { Settings as SettingsType, ToolConfig } from '../types';
 import { t } from '../utils/i18n';
 import SetupModal from './Setup';
 import { detectGlobalNpmPath } from '../utils/setupAPI';
 import { Config } from '../utils/configAPI';
-import './Settings.css';
+import ToolSettingsPanel from '../components/ToolSettingsPanel';
 
 interface SettingsProps {
   settings: SettingsType;
@@ -159,13 +159,14 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
               onChange={(e) =>
                 setLocalSettings({ ...localSettings, responseMode: e.target.value as 'async' | 'stream' })
               }
+              disabled={!localSettings.enableOpenAI}
             >
               <option value="async">{t('settings.asyncMode')}</option>
-              <option value="stream" disabled>{t('settings.streamMode')}</option>
+              <option value="stream">{t('settings.streamMode')}</option>
             </select>
             <p className="setting-description">
               {t('settings.responseModeDescription')}
-              {localSettings.responseMode === 'stream' && (
+              {!localSettings.enableOpenAI && (
                 <>
                   <br />
                   <span style={{ color: 'var(--vscode-charts-orange)' }}>
@@ -234,6 +235,118 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
               <small>※ 環境変数にPATHが設定済みの場合は不要です</small>
             </p>
           </div>
+
+          {/* OpenAI API Support Section */}
+          <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">🤖</span>
+              {t('settings.enableOpenAI')}
+            </label>
+            <div className="theme-options">
+              <button
+                className={`theme-option ${!localSettings.enableOpenAI ? 'active' : ''}`}
+                onClick={() => setLocalSettings({ ...localSettings, enableOpenAI: false })}
+              >
+                ❌ {t('settings.disabled')}
+              </button>
+              <button
+                className={`theme-option ${localSettings.enableOpenAI ? 'active' : ''}`}
+                onClick={() => setLocalSettings({ ...localSettings, enableOpenAI: true })}
+              >
+                ✅ {t('settings.enabled')}
+              </button>
+            </div>
+            <p className="setting-description">
+              {t('settings.openAIDescription')}
+            </p>
+          </div>
+
+          {localSettings.enableOpenAI && (
+            <>
+              <div className="setting-group api-key-group">
+                <label className="setting-label">
+                  <span className="label-icon">🔑</span>
+                  {t('settings.openAIApiKey')}
+                </label>
+                <input
+                  type="password"
+                  className="setting-input"
+                  placeholder={t('settings.openAIApiKeyPlaceholder')}
+                  value={localSettings.openAIApiKey || ''}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, openAIApiKey: e.target.value })
+                  }
+                />
+                <p className="setting-description">
+                  {t('settings.openAIApiKeyDescription')}
+                  <br />
+                  <small>{t('settings.openAIApiKeyNote')}</small>
+                </p>
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-label">
+                  <span className="label-icon">🌐</span>
+                  {t('settings.openAIBaseURL')}
+                </label>
+                <input
+                  type="text"
+                  className="setting-input"
+                  placeholder="https://api.openai.com/v1"
+                  value={localSettings.openAIBaseURL || ''}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, openAIBaseURL: e.target.value })
+                  }
+                />
+                <p className="setting-description">
+                  {t('settings.openAIBaseURLDescription')}
+                  <br />
+                  <small>{t('settings.openAIBaseURLNote')}</small>
+                </p>
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-label">
+                  <span className="label-icon">🎯</span>
+                  {t('settings.openAIModel')}
+                </label>
+                <input
+                  type="text"
+                  className="setting-input"
+                  placeholder="gpt-3.5-turbo"
+                  value={localSettings.openAIModel || ''}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, openAIModel: e.target.value })
+                  }
+                />
+                <p className="setting-description">
+                  {t('settings.openAIModelDescription')}
+                  <br />
+                  <small>{t('settings.openAIModelNote')}</small>
+                </p>
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-label">
+                  <span className="label-icon">⚡</span>
+                  {t('settings.responseMode')}
+                </label>
+                <select
+                  className="setting-select"
+                  value={localSettings.responseMode || 'async'}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, responseMode: e.target.value as 'async' | 'stream' })
+                  }
+                >
+                  <option value="async">{t('settings.asyncMode')}</option>
+                  <option value="stream">{t('settings.streamMode')}</option>
+                </select>
+                <p className="setting-description">
+                  {t('settings.openAIStreamDescription')}
+                </p>
+              </div>
+            </>
+          )}
 
           <div className="setting-group compact-group">
             <label className="setting-label">
@@ -332,6 +445,25 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
                 </>
               )}
             </p>
+          </div>
+
+          {/* Tool Settings Section */}
+          <div className="setting-group">
+            <label className="setting-label">🛠️ Tool Settings</label>
+            <p className="setting-description">
+              Manage AI tools that extend capabilities during chat sessions. 
+              Tools are Python scripts located in <code>public/tools/</code>.
+            </p>
+            <ToolSettingsPanel
+              enabledTools={localSettings.enabledTools || []}
+              tools={localSettings.tools || []}
+              onUpdateEnabledTools={(enabledTools) => 
+                setLocalSettings({ ...localSettings, enabledTools })
+              }
+              onUpdateTools={(tools: ToolConfig[]) =>
+                setLocalSettings({ ...localSettings, tools })
+              }
+            />
           </div>
 
           <div className="setting-group">

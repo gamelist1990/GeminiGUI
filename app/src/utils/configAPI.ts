@@ -1,6 +1,6 @@
 import { readTextFile, writeTextFile, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
 import { locale } from '@tauri-apps/plugin-os';
-import { Settings, ChatSession, Workspace, Language } from '../types';
+import { Settings, ChatSession, Workspace, Language, ToolConfig } from '../types';
 
 // Session metadata type (without messages for efficient loading)
 interface SessionMetadata {
@@ -60,10 +60,46 @@ export class Config {
       theme: 'light',
       approvalMode: 'default',
       model: 'default',
+      responseMode: 'async', // Default to async mode
       maxMessagesBeforeCompact: 25,
       geminiAuth: false,
       googleCloudProjectId: undefined, // Google Cloud Project IDのデフォルト値
+      tools: [], // Empty tools array by default
     };
+  }
+
+  /**
+   * Validate tools array and remove non-existent tools
+   * @param configTools Tools from config.json
+   * @returns Validated and cleaned tools array
+   */
+  private async validateAndCleanupTools(configTools: ToolConfig[]): Promise<ToolConfig[]> {
+    try {
+      // Import loadToolsFromPublic dynamically to avoid circular dependency
+      const { loadToolsFromPublic } = await import('./toolManager');
+      const availableTools = await loadToolsFromPublic();
+      const availableToolNames = new Set(availableTools.map(t => t.name));
+      
+      // Filter out tools that no longer exist
+      const validatedTools = configTools.filter(tool => {
+        const exists = availableToolNames.has(tool.name);
+        if (!exists) {
+          console.log(`[Config] Removing non-existent tool from config: ${tool.name}`);
+        }
+        return exists;
+      });
+      
+      // Add lastChecked timestamp to validated tools
+      const now = new Date().toISOString();
+      return validatedTools.map(tool => ({
+        ...tool,
+        lastChecked: now
+      }));
+    } catch (error) {
+      console.error('[Config] Error validating tools:', error);
+      // Return original tools on error to prevent data loss
+      return configTools;
+    }
   }
 
   // Ensure directory exists
@@ -101,6 +137,12 @@ export class Config {
       // デフォルト設定と読み込んだ設定をmerge (既存フィールドは上書き保持)
       const defaultSettings = await this.buildDefaultSettings();
       const finalSettings = { ...defaultSettings, ...parsedSettings };
+      
+      // Validate and clean up tools array
+      if (finalSettings.tools) {
+        finalSettings.tools = await this.validateAndCleanupTools(finalSettings.tools);
+      }
+      
       return finalSettings;
     } catch (error: any) {
       console.error('Failed to load config:', error);

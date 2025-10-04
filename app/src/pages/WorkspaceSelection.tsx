@@ -40,6 +40,16 @@ export default function WorkspaceSelection({
 
     const preCheckSetup = async () => {
       try {
+        // If geminiAuth is true, skip all setup checks completely
+        if (settings.geminiAuth) {
+          console.log('[Setup] geminiAuth is true, skipping all setup checks');
+          if (isComponentMounted) {
+            setIsCheckingSetup(false);
+            onSetupCheckCompleted();
+          }
+          return;
+        }
+
         // Quick pre-check: see if we already have auth complete status
         if (setupCheckCompleted) {
           console.log('[Setup] Already completed, skipping load');
@@ -48,7 +58,7 @@ export default function WorkspaceSelection({
         }
 
         // If we have config and auth settings, do a quick validation
-        if (settings.geminiAuth && globalConfig) {
+        if (globalConfig) {
           try {
             const config = await globalConfig.loadConfig();
             if (config?.googleCloudProjectId) {
@@ -73,6 +83,14 @@ export default function WorkspaceSelection({
     const checkGeminiSetup = async () => {
       const logCallback = (msg: string) => console.log('[Setup]', msg);
 
+      // geminiAuth が true の場合は完全にスキップ
+      if (settings.geminiAuth) {
+        logCallback('geminiAuth is true, skipping all setup checks');
+        setIsCheckingSetup(false);
+        onSetupCheckCompleted();
+        return;
+      }
+
       // 既にチェック済みの場合はスキップ
       if (setupCheckCompleted) {
         logCallback('認証は既に完了しています。セットアップチェックをスキップします');
@@ -83,8 +101,8 @@ export default function WorkspaceSelection({
       // 事前チェック: 設定から認証状態を確認
       logCallback('Gemini CLI のチェックを開始しています...');
       try {
-        // settings.geminiAuth が true で googleCloudProjectId が設定されている場合のみスキップ
-        if (settings.geminiAuth && globalConfig) {
+        // googleCloudProjectId が設定されている場合のみスキップ
+        if (globalConfig) {
           try {
             const config = await globalConfig.loadConfig();
             if (config?.googleCloudProjectId) {

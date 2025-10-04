@@ -1,0 +1,128 @@
+/* AppearanceSettings.css - 外観設定タブのスタイル */
+
+/* Theme Preview Cards - テーマプレビュー */
+.theme-preview-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.theme-preview-card {
+  position: relative;
+  padding: 1rem;
+  background: #f9fafb;
+  border: 3px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.theme-preview-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+  background: #ffffff;
+}
+
+.theme-preview-card.selected {
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.theme-preview-card.selected::after {
+  content: '✓';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 24px;
+  height: 24px;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+/* Theme Visual Representation */
+.theme-preview-visual {
+  height: 80px;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+.theme-preview-visual.light {
+  background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+}
+
+.theme-preview-visual.dark {
+  background: linear-gradient(135deg, #1e1e2e 0%, #11111b 100%);
+}
+
+.theme-preview-label {
+  text-align: center;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Placeholder Message - 将来の機能追加用 */
+.placeholder-message {
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.placeholder-message::before {
+  content: '🎨';
+  display: block;
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+/* Future Settings List */
+.future-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-left: 1.5rem;
+}
+
+.future-settings-list li {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  position: relative;
+}
+
+.future-settings-list li::before {
+  content: '▸';
+  position: absolute;
+  left: -1.5rem;
+  color: var(--primary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .theme-preview-group {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-preview-visual {
+    height: 60px;
+  }
+}

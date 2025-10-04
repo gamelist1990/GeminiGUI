@@ -3,7 +3,7 @@ import "./styles/theme.css";
 import "./App.css";
 const WorkspaceSelection = React.lazy(() => import('./pages/WorkspaceSelection')) as any;
 const Chat = React.lazy(() => import('./pages/Chat')) as any;
-const Settings = React.lazy(() => import('./pages/Settings')) as any;
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage')) as any;
 import { useSettings } from "./hooks/useSettings";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useChatSessions } from "./hooks/useChatSessions";
@@ -151,6 +151,7 @@ function App() {
           googleCloudProjectId={settings.googleCloudProjectId}
           maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
           globalConfig={globalConfig}
+          settings={settings}
           onCreateNewSession={createNewSession}
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}
@@ -165,7 +166,7 @@ function App() {
 
       {currentView === 'settings' && (
         <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading settings…</div></div>}>
-          <Settings
+          <SettingsPage
           settings={settings}
           onUpdateSettings={updateSettings}
           onClose={handleCloseSettings}

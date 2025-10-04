@@ -1,4 +1,4 @@
-import { ChatSession, ChatMessage, Workspace } from "../../types";
+import { ChatSession, ChatMessage, Workspace, Settings } from "../../types";
 
 export interface ChatProps {
   workspace: Workspace;
@@ -13,6 +13,7 @@ export interface ChatProps {
   googleCloudProjectId?: string;
   maxMessagesBeforeCompact: number;
   globalConfig: any; // Config instance from configAPI
+  settings: Settings; // Full settings object for AI provider selection
   onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
