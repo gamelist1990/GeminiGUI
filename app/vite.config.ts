@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -28,5 +27,32 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+  },
+  // Build options to control chunking and reduce large single chunks
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+
+          // Split core react into its own chunk
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'react-vendor';
+          }
+
+          // Heavy markdown and syntax highlighter libs
+          if (id.includes('node_modules/react-markdown')) return 'react-markdown';
+          if (id.includes('node_modules/react-syntax-highlighter')) return 'syntax-highlighter';
+
+          // Tauri plugins separate chunk
+          if (id.includes('@tauri-apps')) return 'tauri-plugins';
+
+          // Fallback vendor chunk
+          return 'vendor';
+        },
+      },
+    },
+    // Increase the warning threshold if you want to suppress the >500kb warning
+    chunkSizeWarningLimit: 600,
   },
 }));

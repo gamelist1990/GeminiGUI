@@ -1,5 +1,7 @@
 import { Command } from '@tauri-apps/plugin-shell';
 import * as opener from '@tauri-apps/plugin-opener';
+import { hasCloudProject } from './cloudSetup';
+import { Config } from './configAPI';
 import { t } from './i18n';
 
 type LogFunction = (message: string) => void;
@@ -28,6 +30,67 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
   };
 
   try {
+    // config.jsonから既存の認証状態を確認
+    try {
+      const baseDir = await import('@tauri-apps/api/path').then(m => m.documentDir());
+      const configPath = `${baseDir}\\PEXData\\GeminiGUI`;
+      const config = new Config(configPath);
+      const settings = await config.loadConfig();
+      if (settings?.geminiAuth === true) {
+        log('✓ config.jsonで既に認証済みと記録されています');
+        result.isAuthenticated = true;
+        // 認証済みの場合はファイルシステムチェックをスキップ
+        log(t('setup.logs.nodeCheck'));
+        const nodeCheck = await Command.create('powershell.exe', [
+          '-Command',
+          'node --version',
+        ]).execute();
+
+        if (nodeCheck.code === 0) {
+          result.nodeExists = true;
+          log(`${t('setup.logs.nodeFound')} ${nodeCheck.stdout.trim()}`);
+        } else {
+          log(t('setup.logs.nodeNotFound'));
+          return result;
+        }
+
+        // Gemini CLI の存在確認
+        log(t('setup.logs.geminiCheck'));
+        const geminiCheck = await Command.create('powershell.exe', [
+          '-Command',
+          'Get-Command gemini -ErrorAction SilentlyContinue',
+        ]).execute();
+
+        if (geminiCheck.code === 0 && geminiCheck.stdout.trim()) {
+          result.geminiExists = true;
+          log(t('setup.logs.geminiFound'));
+          
+          // Google Cloud Projectの存在チェック
+          log('Google Cloud Projectの存在を確認しています...');
+          try {
+            const hasProject = await hasCloudProject(log);
+            result.hasProject = hasProject;
+            
+            if (hasProject) {
+              log('✓ Google Cloud Projectが見つかりました');
+            } else {
+              log('⚠️ Google Cloud Projectが見つかりません');
+            }
+          } catch (error) {
+            log(`⚠️ プロジェクトチェックエラー: ${error}`);
+            result.hasProject = false;
+          }
+        } else {
+          log(t('setup.logs.geminiNotFound'));
+        }
+        
+        log(`${t('setup.logs.checkComplete')} ${result.geminiExists}, nodeExists: ${result.nodeExists}, isAuthenticated: ${result.isAuthenticated}`);
+        return result;
+      }
+    } catch (configError) {
+      log(`⚠️ config.jsonの読み込みに失敗しました。ファイルシステムチェックを続行します: ${configError}`);
+    }
+
     // Node.js の存在確認
     log(t('setup.logs.nodeCheck'));
     const nodeCheck = await Command.create('powershell.exe', [
@@ -71,7 +134,6 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
           // 認証済みの場合、Google Cloud Projectの存在もチェック
           log('Google Cloud Projectの存在を確認しています...');
           try {
-            const { hasCloudProject } = await import('./cloudSetup');
             const hasProject = await hasCloudProject(log);
             result.hasProject = hasProject;
             
@@ -236,92 +298,68 @@ export const setupGemini = {
 
       log(`[VerifyAuth] google_accounts.json check result: code=${authCheckCommand.code}, stdout="${authCheckCommand.stdout.trim()}"`);
 
-      if (authCheckCommand.code === 0) {
-        const testResult = authCheckCommand.stdout.trim();
-        
-        if (testResult === 'True') {
-          log('[VerifyAuth] google_accounts.json exists, checking OAuth credentials');
-          
-          // OAuth認証情報（oauth_creds.json）の存在も確認
-          const oauthCheckCommand = await Command.create('powershell.exe', [
-            '-Command',
-            'Test-Path "$env:USERPROFILE\\.gemini\\oauth_creds.json"',
-          ]).execute();
-
-          log(`[VerifyAuth] oauth_creds.json check result: code=${oauthCheckCommand.code}, stdout="${oauthCheckCommand.stdout.trim()}"`);
-
-          if (oauthCheckCommand.code !== 0 || oauthCheckCommand.stdout.trim() !== 'True') {
-            log('⚠️ OAuth認証情報が見つかりません');
-            log('Gemini CLIで再度認証を実行してください');
-            return { success: false, needsCloudSetup: false };
-          }
-
-          // 認証ファイルが存在する場合、Gemini CLIを実行して確認
-          log('[VerifyAuth] Step 2: Testing with Gemini CLI');
-          
-          const geminiTestCommand = await Command.create('powershell.exe', [
-            '-Command',
-            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; gemini "test" 2>&1',
-          ]).execute();
-
-          const output = geminiTestCommand.stdout + geminiTestCommand.stderr;
-          log(`[VerifyAuth] Gemini CLI test output length: ${output.length} chars`);
-          
-          // GOOGLE_CLOUD_PROJECT エラーをチェック
-          if (output.includes('GOOGLE_CLOUD_PROJECT')) {
-            log('⚠️ Google Cloud Project の設定が必要です');
-            
-            // プロジェクト存在チェックを実行
-            log('[VerifyAuth] Step 3: Checking for existing Cloud Projects');
-            const { hasCloudProject } = await import('./cloudSetup');
-            const hasProject = await hasCloudProject(log);
-            log(`[VerifyAuth] hasProject result: ${hasProject}`);
-            
-            if (hasProject) {
-              // プロジェクトがあれば、環境変数を設定すればOK
-              log('✓ Google Cloud Projectが見つかりました');
-              log(t('setup.logs.authSetupComplete'));
-              return { success: true, needsCloudSetup: false, hasProject: true };
-            } else {
-              // プロジェクトがないので作成が必要
-              log('[VerifyAuth] No projects found, need to create one');
-              return { 
-                success: false, 
-                needsCloudSetup: true,
-                hasProject: false
-              };
-            }
-          }
-          
-          log(t('setup.logs.authVerifyComplete'));
-          
-          // 認証成功時もプロジェクト存在チェック
-          log('[VerifyAuth] Step 3: Checking for Cloud Projects (success case)');
-          const { hasCloudProject } = await import('./cloudSetup');
-          const hasProject = await hasCloudProject(log);
-          log(`[VerifyAuth] hasProject result: ${hasProject}`);
-          
-          if (hasProject) {
-            log('✓ Google Cloud環境の設定が完了しています');
-            log(t('setup.logs.authSetupComplete'));
-            return { success: true, needsCloudSetup: false, hasProject: true };
-          } else {
-            log('⚠️ Google Cloud Projectが見つかりません');
-            log('プロジェクトを作成する必要があります');
-            return { success: false, needsCloudSetup: true, hasProject: false };
-          }
-        } else {
-          log('[VerifyAuth] google_accounts.json does not exist');
-          log(t('setup.logs.authFileNotFound'));
-          log(t('setup.logs.authNotComplete'));
-          log(t('setup.logs.authHint'));
-          return { success: false, needsCloudSetup: false };
-        }
-      } else {
+      if (authCheckCommand.code !== 0) {
         log('[VerifyAuth] Failed to check google_accounts.json');
         log(t('setup.logs.authVerifyFailed'));
         return { success: false, needsCloudSetup: false };
       }
+
+      const testResult = authCheckCommand.stdout.trim();
+      if (testResult !== 'True') {
+        log('[VerifyAuth] google_accounts.json does not exist');
+        log(t('setup.logs.authFileNotFound'));
+        log(t('setup.logs.authNotComplete'));
+        log(t('setup.logs.authHint'));
+        return { success: false, needsCloudSetup: false };
+      }
+
+      // oauth_creds.json の存在も確認
+      log('[VerifyAuth] google_accounts.json exists, checking OAuth credentials');
+      const oauthCheckCommand = await Command.create('powershell.exe', [
+        '-Command',
+        'Test-Path "$env:USERPROFILE\\.gemini\\oauth_creds.json"',
+      ]).execute();
+
+      log(`[VerifyAuth] oauth_creds.json check result: code=${oauthCheckCommand.code}, stdout="${oauthCheckCommand.stdout.trim()}"`);
+
+      if (oauthCheckCommand.code !== 0 || oauthCheckCommand.stdout.trim() !== 'True') {
+        log('⚠️ OAuth認証情報が見つかりません');
+        log('Gemini CLIで再度認証を実行してください');
+        return { success: false, needsCloudSetup: false };
+      }
+
+      // Gemini CLIを実行してテスト
+      log('[VerifyAuth] Step 2: Testing with Gemini CLI');
+      const geminiTestCommand = await Command.create('powershell.exe', [
+        '-Command',
+        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; gemini "test" 2>&1',
+      ]).execute();
+
+      const output = (geminiTestCommand.stdout || '') + (geminiTestCommand.stderr || '');
+      log(`[VerifyAuth] Gemini CLI test output length: ${output.length} chars`);
+
+      // GOOGLE_CLOUD_PROJECT に関するエラーが含まれるかチェック
+      if (output.includes('GOOGLE_CLOUD_PROJECT')) {
+        log('⚠️ Google Cloud Project の設定が必要です');
+        log('[VerifyAuth] Step 3: Checking for existing Cloud Projects');
+        const hasProject = await hasCloudProject(log);
+        log(`[VerifyAuth] hasProject result: ${hasProject}`);
+
+        if (hasProject) {
+          log('✓ Google Cloud Projectが見つかりました');
+          log(t('setup.logs.authSetupComplete'));
+          return { success: true, needsCloudSetup: false, hasProject: true };
+        } else {
+          log('⚠️ Google Cloud Projectが見つかりません');
+          log('プロジェクトを作成する必要があります');
+          return { success: false, needsCloudSetup: true, hasProject: false };
+        }
+      }
+
+      // 特にエラーがなければ成功
+      log('✓ Gemini CLI のテストに成功しました');
+      log(t('setup.logs.authSetupComplete'));
+      return { success: true, needsCloudSetup: false };
     } catch (error) {
       log(`${t('setup.logs.authVerifyError')} ${error}`);
       log(`[VerifyAuth] Error details: ${error instanceof Error ? error.stack : 'Unknown'}`);

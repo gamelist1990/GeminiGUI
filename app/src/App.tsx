@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import "./styles/theme.css";
 import "./App.css";
-import WorkspaceSelection from "./pages/WorkspaceSelection";
-import Chat from "./pages/Chat";
-import Settings from "./pages/Settings";
+const WorkspaceSelection = React.lazy(() => import('./pages/WorkspaceSelection')) as any;
+const Chat = React.lazy(() => import('./pages/Chat')) as any;
+const Settings = React.lazy(() => import('./pages/Settings')) as any;
 import { useSettings } from "./hooks/useSettings";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useChatSessions } from "./hooks/useChatSessions";
@@ -124,21 +124,24 @@ function App() {
   return (
     <>
       {currentView === 'workspace' && (
-        <WorkspaceSelection
-          recentWorkspaces={recentWorkspaces}
-          favoriteWorkspaces={favoriteWorkspaces}
-          onSelectWorkspace={handleSelectWorkspace}
-          onOpenSettings={handleOpenSettings}
-          onToggleFavorite={toggleFavorite}
-          settings={settings}
-          globalConfig={globalConfig}
-          setupCheckCompleted={setupCheckCompleted}
-          onSetupCheckCompleted={() => setSetupCheckCompleted(true)}
-        />
+        <React.Suspense fallback={<div style={{padding:20}}>Loading…</div>}>
+          <WorkspaceSelection
+            recentWorkspaces={recentWorkspaces}
+            favoriteWorkspaces={favoriteWorkspaces}
+            onSelectWorkspace={handleSelectWorkspace}
+            onOpenSettings={handleOpenSettings}
+            onToggleFavorite={toggleFavorite}
+            settings={settings}
+            globalConfig={globalConfig}
+            setupCheckCompleted={setupCheckCompleted}
+            onSetupCheckCompleted={() => setSetupCheckCompleted(true)}
+          />
+        </React.Suspense>
       )}
       
       {currentView === 'chat' && currentWorkspace && (
-        <Chat
+        <React.Suspense fallback={<div style={{padding:20}}>Loading chat…</div>}>
+          <Chat
           workspace={currentWorkspace}
           sessions={sessions}
           currentSession={currentSession}
@@ -158,15 +161,18 @@ function App() {
           onRenameSession={renameSession}
           onCompactSession={handleCompactSession}
           onBack={handleBackToWorkspace}
-        />
+          />
+        </React.Suspense>
       )}
 
       {currentView === 'settings' && (
-        <Settings
+        <React.Suspense fallback={<div style={{padding:20}}>Loading settings…</div>}>
+          <Settings
           settings={settings}
           onUpdateSettings={updateSettings}
           onClose={handleCloseSettings}
-        />
+          />
+        </React.Suspense>
       )}
     </>
   );

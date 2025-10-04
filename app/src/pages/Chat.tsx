@@ -4,10 +4,13 @@ import { t } from '../utils/i18n';
 import { formatElapsedTime, formatNumber } from '../utils/storage';
 import { callGemini, GeminiOptions } from '../utils/geminiCUI';
 import { scanWorkspace, getSuggestions, parseIncludes, FileItem } from '../utils/workspace';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+const ReactMarkdown = React.lazy(() => import('react-markdown')) as unknown as any;
+const SyntaxHighlighter = React.lazy(() => import('react-syntax-highlighter').then(mod => ({ default: mod.Prism }))) as unknown as any;
+// oneDark is relatively small; keep it static import for style reference
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { openFile } from '../utils/powershellExecutor';
+import * as opener from '@tauri-apps/plugin-opener';
+import * as fsPlugin from '@tauri-apps/plugin-fs';
 import './Chat.css';
 
 // Markdown components for syntax highlighting
@@ -19,21 +22,25 @@ const markdownComponents = {
         // For markdown code blocks, render the content as markdown
         return (
           <div className="markdown-preview">
-            <ReactMarkdown>
-              {String(children)}
-            </ReactMarkdown>
+            <React.Suspense fallback={<div>Loading preview…</div>}>
+              <ReactMarkdown>
+                {String(children)}
+              </ReactMarkdown>
+            </React.Suspense>
           </div>
         );
       } else {
         return (
-          <SyntaxHighlighter
-            style={oneDark}
-            language={match[1]}
-            PreTag="div"
-            {...props}
-          >
-            {String(children).replace(/\n$/, '')}
-          </SyntaxHighlighter>
+          <React.Suspense fallback={<pre className="code-loading">Loading code…</pre>}>
+            <SyntaxHighlighter
+              style={oneDark}
+              language={match[1]}
+              PreTag="div"
+              {...props}
+            >
+              {String(children).replace(/\n$/, '')}
+            </SyntaxHighlighter>
+          </React.Suspense>
         );
       }
     } else {
@@ -90,26 +97,25 @@ const markdownComponents = {
 // Open external links using Tauri opener plugin when available, fallback to window.open
 async function openExternal(url: string) {
   try {
-    const opener = await import('@tauri-apps/plugin-opener');
     const mod: any = opener;
-    // Try common exported function names used in different versions/wrappers
-    if (typeof mod.openUrl === 'function') {
-      await mod.openUrl(url);
-      return;
-    }
-    if (typeof mod.open === 'function') {
-      await mod.open(url);
-      return;
-    }
-    // Some bundlers put exports on default
-    if (mod && mod.default) {
-      if (typeof mod.default.openUrl === 'function') {
-        await mod.default.openUrl(url);
+    if (mod) {
+      if (typeof mod.openUrl === 'function') {
+        await mod.openUrl(url);
         return;
       }
-      if (typeof mod.default.open === 'function') {
-        await mod.default.open(url);
+      if (typeof mod.open === 'function') {
+        await mod.open(url);
         return;
+      }
+      if (mod.default) {
+        if (typeof mod.default.openUrl === 'function') {
+          await mod.default.openUrl(url);
+          return;
+        }
+        if (typeof mod.default.open === 'function') {
+          await mod.default.open(url);
+          return;
+        }
       }
     }
   } catch (e) {
@@ -498,14 +504,13 @@ export default function Chat({
       }, 1000);
 
       try {
-        const fs = await import('@tauri-apps/plugin-fs');
-        const geminiFilePath = `${workspace.path}/Gemini.md`;
-        const hadExistingGemini = await fs.exists(geminiFilePath);
+  const geminiFilePath = `${workspace.path}/Gemini.md`;
+  const hadExistingGemini = await fsPlugin.exists(geminiFilePath);
 
         let existingGeminiContent = '';
         if (hadExistingGemini) {
           try {
-            existingGeminiContent = await fs.readTextFile(geminiFilePath);
+            existingGeminiContent = await fsPlugin.readTextFile(geminiFilePath);
           } catch (readError) {
             console.warn('Failed to read existing Gemini.md:', readError);
           }
@@ -588,7 +593,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         setShowProcessingModal(false);
 
         // Check if AI actually created or updated the file using tools
-        const fileExists = await fs.exists(geminiFilePath);
+  const fileExists = await fsPlugin.exists(geminiFilePath);
         const fileStats = initResponse.stats?.files;
         const hasFileChanges = fileStats ? (fileStats.totalLinesAdded > 0 || fileStats.totalLinesRemoved > 0) : false;
 
@@ -1629,8 +1634,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
 
       if (targetPath) {
         // Check if file exists before trying to open
-        const { exists } = await import('@tauri-apps/plugin-fs');
-        const fileExists = await exists(targetPath);
+  const fileExists = await fsPlugin.exists(targetPath);
         if (!fileExists) {
           alert(t('fileAccess.fileNotFound').replace('{path}', targetPath));
           return;

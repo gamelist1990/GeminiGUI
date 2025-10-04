@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./Setup.css";
 import { geminiCheck, setupGemini, detectGlobalNpmPath } from "../utils/setupAPI";
-import { autoSetupCloudProject } from "../utils/cloudSetup";
+import { autoSetupCloudProject, setupExistingProject } from "../utils/cloudSetup";
 import { Config } from "../utils/configAPI";
 import { t } from "../utils/i18n";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -252,7 +252,6 @@ const SetupModal: React.FC<SetupModalProps> = ({
         // 環境変数を設定
         try {
           addLog("環境変数を設定しています...");
-          const { setupExistingProject } = await import('../utils/cloudSetup');
           const envSetupResult = await setupExistingProject(addLog);
           
           if (envSetupResult.success && envSetupResult.projectId) {
