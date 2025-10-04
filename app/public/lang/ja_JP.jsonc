@@ -169,6 +169,10 @@
         "error": "会話履歴のエクスポートに失敗しました"
       }
     },
+    "role": {
+      "user": "ユーザー",
+      "assistant": "アシスタント"
+    },
     "messageStats": {
       "fileChanges": "ファイル変更",
       "linesAdded": "追加行数",

@@ -300,13 +300,38 @@ export async function callGemini(
   internalLog(`Setting GOOGLE_CLOUD_PROJECT environment variable: ${googleCloudProjectId}`, log);
     }
     
+    // Use a PowerShell here-string to pass the potentially large and complex
+    // prompt as a single literal argument. This avoids issues with nested
+    // quotes, newlines, backticks, parentheses, etc. The rest of the
+    // gemini arguments are quoted safely.
+    const safeWorkspace = (workspacePath || process.cwd()).replace(/'/g, "''");
+
+    // Build the remaining args (excluding the prompt) safely quoted
+    const remainingArgs = geminiArgs.slice(1).map(arg => {
+      const escaped = String(arg).replace(/'/g, "''");
+      return `'${escaped}'`;
+    }).join(' ');
+
+    // fullPrompt will be embedded in a PowerShell here-string (single-quoted)
+    const hereStringStart = "@'";
+    const hereStringEnd = "'@";
+    // Ensure the fullPrompt does not contain the here-string terminator sequence '@\n'
+    // which is extremely unlikely; if present, fall back to replacing that sequence.
+    let safeFullPrompt = fullPrompt;
+    if (safeFullPrompt.includes("'@")) {
+      safeFullPrompt = safeFullPrompt.replace(/'@/g, "'@' + " + "'@");
+    }
+
+    psCommand += `$env:GEMINI_API_KEY='${options?.customApiKey ? options.customApiKey.replace(/'/g, "''") : ''}'; `;
+    if (googleCloudProjectId) {
+      psCommand += `$env:GOOGLE_CLOUD_PROJECT='${googleCloudProjectId.replace(/'/g, "''")}'; `;
+    }
+    // Build psCommand with explicit newlines so PowerShell here-string header
+    // (@') and terminator ('@) appear on their own lines as required.
     psCommand += `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ` +
-      `Set-Location '${workspacePath || process.cwd()}'; ` +
-      `& '${geminiPathFinal}' ${geminiArgs.map(arg => {
-        // Escape quotes in arguments
-        const escaped = arg.replace(/'/g, "''");
-        return `'${escaped}'`;
-      }).join(' ')}`;
+      `Set-Location '${safeWorkspace}'; ` +
+      `\n$__g_prompt = ${hereStringStart}\n${safeFullPrompt}\n${hereStringEnd};\n` +
+      `& '${geminiPathFinal}' $__g_prompt ${remainingArgs}`;
     
   const previewLength = 600;
   const commandPreview = psCommand.length > previewLength
@@ -416,16 +441,40 @@ export async function callGemini(
     internalLog('Error calling Gemini: ' + String(error), log);
     throw error;
   } finally {
-    if (conversationFilePath) {
-      try {
-        await remove(conversationFilePath);
-        internalLog(`Conversation history removed: ${conversationFilePath}`, log);
-      } catch (cleanupError) {
-        internalLog('Failed to remove conversation history file: ' + String(cleanupError), log);
+    // Defer removal of conversation file and temp directory to avoid race
+    // conditions where downstream processes (or model-invoked tools) may
+    // still attempt to read the file. Schedule cleanup after a grace
+    // period (5 minutes). This leaves a short-lived temp file on disk but
+    // avoids intermittent "File not found" errors.
+    try {
+      const GRACE_PERIOD_MS = 5 * 60 * 1000; // 5 minutes
+
+      if (conversationFilePath) {
+        const pathToRemove = conversationFilePath;
+        setTimeout(async () => {
+          try {
+            await remove(pathToRemove);
+            internalLog(`Deferred conversation history removed: ${pathToRemove}`, log);
+          } catch (cleanupError) {
+            internalLog('Deferred remove failed: ' + String(cleanupError), log);
+          }
+        }, GRACE_PERIOD_MS);
       }
-    }
-    if (workspaceTempDir) {
-      await cleanupDir(workspaceTempDir, log);
+
+      if (workspaceTempDir) {
+        const dirToCleanup = workspaceTempDir;
+        setTimeout(async () => {
+          try {
+            await cleanupDir(dirToCleanup, log);
+            internalLog(`Deferred workspace temp directory cleanup attempted: ${dirToCleanup}`, log);
+          } catch (cleanupError) {
+            internalLog('Deferred cleanup failed: ' + String(cleanupError), log);
+          }
+        }, GRACE_PERIOD_MS);
+      }
+    } catch (e) {
+      // Non-fatal: log and continue
+      internalLog('Failed to schedule deferred cleanup: ' + String(e), log);
     }
   }
 }

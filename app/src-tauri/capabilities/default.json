@@ -12,8 +12,10 @@
     "fs:allow-resource-read",
     "fs:allow-read-text-file",
     "fs:allow-read-dir",
-    "fs:allow-mkdir",
-    "fs:allow-write-text-file",
+  "fs:allow-mkdir",
+  "fs:allow-write-text-file",
+  "fs:allow-write-file",
+  "fs:allow-write",
     "fs:scope-document-recursive",
     {
       "identifier": "fs:scope",

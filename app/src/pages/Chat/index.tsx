@@ -306,9 +306,16 @@ export default function Chat({
           )
           .join("\n\n");
 
-        const summaryPrompt = `${t(
-          "chat.stats.processing.compactPrompt"
-        )}\n\n${historyText}`;
+        const historyJson = historyMessages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+
+        // Use a concise prompt and provide the full conversation as a file via options.
+        // geminiCUI will write the conversation file under workspace/temp/GeminiTemp and
+        // pass @file:<path> to the CLI so the model can read it. This avoids embedding
+        // large history directly in the command line.
+        const summaryPrompt = t("chat.stats.processing.compactPrompt");
 
         const summaryResponse = await callGemini(
           summaryPrompt,
@@ -317,6 +324,10 @@ export default function Chat({
             approvalMode: "yolo", // Use yolo mode for summary to avoid approval
             model: "gemini-2.5-flash", // Use fast model for summary
             customApiKey: customApiKey,
+            conversationHistory: historyText,
+            conversationHistoryJson: historyJson,
+            workspaceId: workspace.id,
+            sessionId: currentSessionId,
           },
           googleCloudProjectId,
           geminiPath
@@ -791,6 +802,39 @@ export default function Chat({
   const handleCancelRename = () => {
     setEditingSessionId(null);
     setEditingSessionName("");
+  };
+
+  // Helper to safely render translations that may contain simple <strong>...</strong> markers.
+  // This converts <strong>...</strong> into React <strong> elements while leaving other text as strings.
+  const renderWithStrong = (text: string) => {
+    if (!text) return null;
+    const regex = /<strong>(.*?)<\/strong>/gi;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let idx = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+      const matchIndex = match.index;
+      if (matchIndex > lastIndex) {
+        parts.push(text.substring(lastIndex, matchIndex));
+      }
+      parts.push(
+        React.createElement(
+          "strong",
+          { key: `strong-${idx}` },
+          match[1]
+        )
+      );
+      lastIndex = regex.lastIndex;
+      idx++;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts;
   };
 
   return (
@@ -1304,7 +1348,7 @@ export default function Chat({
             <span className="warning-text">
               {t("chat.compactWarning.messageCountExceeded").replace("{maxMessagesBeforeCompact}", maxMessagesBeforeCompact.toString())}
               <br />
-              {t("chat.compactWarning.recommendCompactOrNew")}
+              {renderWithStrong(t("chat.compactWarning.recommendCompactOrNew"))}
             </span>
             <button
               className="warning-close"

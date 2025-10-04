@@ -169,6 +169,10 @@
         "error": "Failed to export conversation history"
       }
     },
+    "role": {
+      "user": "User",
+      "assistant": "Assistant"
+    },
     "messageStats": {
       "fileChanges": "File Changes",
       "linesAdded": "Lines Added",
