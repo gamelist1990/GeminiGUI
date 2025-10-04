@@ -322,18 +322,13 @@ export default function Chat({
           .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
           .join('\n\n');
 
-        console.log('Compacting conversation, history length:', historyText.length);
-
         const summaryPrompt = `${t('chat.stats.processing.compactPrompt')}\n\n${historyText}`;
 
-        console.log('Calling Gemini for summary...');
         const summaryResponse = await callGemini(summaryPrompt, workspace.path, {
           approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
           model: 'gemini-2.5-flash', // Use fast model for summary
           customApiKey: customApiKey,
         }, googleCloudProjectId, geminiPath);
-
-        console.log('Summary response received:', summaryResponse.response.substring(0, 100) + '...');
 
         clearInterval(interval);
         setShowProcessingModal(false);
@@ -562,24 +557,18 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         
         clearInterval(interval);
         setShowProcessingModal(false);
-        
-        console.log('Gemini response received:', improvedResponse);
-        console.log('Response text:', improvedResponse.response);
-        
+
         // Set the improved message directly to the input field
         const improvedText = improvedResponse.response.trim();
-        console.log('Setting input value to:', improvedText);
-        console.log('Input value length:', improvedText.length);
-        
+
         setInputValue(improvedText);
-        console.log('setInputValue called');
-        
+
         // Focus the textarea and adjust its height
         setTimeout(() => {
-          console.log('setTimeout callback executing');
           if (textareaRef.current) {
-            console.log('textareaRef.current exists');
             const textarea = textareaRef.current;
+
+            // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
             
             // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -591,6 +580,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
               nativeInputValueSetter.call(textarea, improvedText);
               const event = new Event('input', { bubbles: true });
               textarea.dispatchEvent(event);
+              console.log('Dispatched input event');
               console.log('Dispatched input event');
             }
             console.log('Textarea value set to:', textarea.value);
