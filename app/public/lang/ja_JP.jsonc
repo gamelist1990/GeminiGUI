@@ -133,6 +133,17 @@
       "totalMessages": "総メッセージ数",
       "apiStats": "API 統計",
       "diff": "差分:"
+    
+      "messageStats": {
+      "fileChanges": "ファイル変更",
+      "linesAdded": "追加行数",
+      "linesRemoved": "削除行数"
+    }
+      "processing": {
+      "compacting": "会話履歴を要約しています...",
+      "compactError": "❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。",
+      "compactPrompt": "以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:"
+    }
     },
     "messageStats": {
       "fileChanges": "ファイル変更",

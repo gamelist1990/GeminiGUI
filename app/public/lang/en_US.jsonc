@@ -133,6 +133,17 @@
       "totalMessages": "Total Messages",
       "apiStats": "API Stats",
       "diff": "Diff:"
+    
+      "messageStats": {
+      "fileChanges": "File Changes",
+      "linesAdded": "Lines Added",
+      "linesRemoved": "Lines Removed"
+    }
+      "processing": {
+      "compacting": "Summarizing conversation history...",
+      "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
+      "compactPrompt": "Please summarize the following conversation history concisely. Clearly state important points, discussed topics, and decisions. Structure and organize it so that AI can easily reference it in future conversations:"
+    }
     },
     "messageStats": {
       "fileChanges": "File Changes",
