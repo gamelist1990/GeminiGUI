@@ -129,14 +129,14 @@ export default function Chat({
         setGeminiPath(loadedGeminiPath);
 
         if (!loadedGeminiPath) {
-          setGeminiPathError('geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。');
+          setGeminiPathError(t('chat.errors.geminiPathMissing'));
         } else {
           setGeminiPathError('');
         }
       } catch (error) {
         console.error('Failed to load geminiPath from global config:', error);
         setGeminiPath(undefined);
-        setGeminiPathError('設定ファイルの読み込みに失敗しました。');
+        setGeminiPathError(t('chat.errors.configLoadFailed'));
       }
     };
 
@@ -322,25 +322,20 @@ export default function Chat({
           .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
           .join('\n\n');
 
-        console.log('Compacting conversation, history length:', historyText.length);
-
         const summaryPrompt = `${t('chat.stats.processing.compactPrompt')}\n\n${historyText}`;
 
-        console.log('Calling Gemini for summary...');
         const summaryResponse = await callGemini(summaryPrompt, workspace.path, {
           approvalMode: 'yolo', // Use yolo mode for summary to avoid approval
           model: 'gemini-2.5-flash', // Use fast model for summary
           customApiKey: customApiKey,
         }, googleCloudProjectId, geminiPath);
 
-        console.log('Summary response received:', summaryResponse.response.substring(0, 100) + '...');
-
         clearInterval(interval);
         setShowProcessingModal(false);
 
         // Validate response
         if (!summaryResponse.response || summaryResponse.response.trim() === '') {
-          throw new Error('要約レスポンスが空です');
+          throw new Error(t('chat.errors.compactEmptyHistory'));
         }
 
         // Clean up the response - remove any existing summary headers
@@ -374,7 +369,7 @@ export default function Chat({
         const finalMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: '✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。',
+          content: t('chat.errors.compactCompleted'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, finalMessage);
@@ -387,7 +382,7 @@ export default function Chat({
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `❌ 会話の要約中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: t('chat.errors.compactCommandFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -395,7 +390,7 @@ export default function Chat({
 
     } else if (command === 'init') {
       setShowProcessingModal(true);
-      setProcessingMessage('Gemini.mdを生成しています...');
+      setProcessingMessage(t('chat.errors.initGenerating'));
       const startTime = Date.now();
 
       const interval = setInterval(() => {
@@ -513,7 +508,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
           const errorMessage: ChatMessage = {
             id: Date.now().toString(),
             role: 'assistant',
-            content: `❌ Gemini.mdの作成に失敗しました。AIがファイルを作成できなかったか、ツールの実行に問題が発生しました。`,
+            content: t('chat.errors.initFailed'),
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, errorMessage);
@@ -526,7 +521,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `❌ Gemini.mdの作成中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: t('chat.errors.initFailedWithError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -536,7 +531,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: '❌ /fixchat コマンドには改善したいテキストを指定してください。\n\n使用例: /fixchat このコードを説明して',
+          content: t('chat.errors.fixchatNoText'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -544,7 +539,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
       }
       
       setShowProcessingModal(true);
-      setProcessingMessage('AIがメッセージを改善しています...');
+      setProcessingMessage(t('chat.errors.fixchatProcessing'));
       const startTime = Date.now();
       
       const interval = setInterval(() => {
@@ -562,24 +557,18 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         
         clearInterval(interval);
         setShowProcessingModal(false);
-        
-        console.log('Gemini response received:', improvedResponse);
-        console.log('Response text:', improvedResponse.response);
-        
+
         // Set the improved message directly to the input field
         const improvedText = improvedResponse.response.trim();
-        console.log('Setting input value to:', improvedText);
-        console.log('Input value length:', improvedText.length);
-        
+
         setInputValue(improvedText);
-        console.log('setInputValue called');
-        
+
         // Focus the textarea and adjust its height
         setTimeout(() => {
-          console.log('setTimeout callback executing');
           if (textareaRef.current) {
-            console.log('textareaRef.current exists');
             const textarea = textareaRef.current;
+
+            // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
             
             // 直接valueを設定し、changeイベントを発火(Reactの制御コンポーネントを更新)
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -591,6 +580,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
               nativeInputValueSetter.call(textarea, improvedText);
               const event = new Event('input', { bubbles: true });
               textarea.dispatchEvent(event);
+              console.log('Dispatched input event');
               console.log('Dispatched input event');
             }
             console.log('Textarea value set to:', textarea.value);
@@ -631,7 +621,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `❌ メッセージの改善中にエラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: t('chat.errors.fixchatCommandFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -758,7 +748,7 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: t('chat.errors.geminiError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
         timestamp: new Date(),
       };
       onSendMessage(currentSessionId, errorMessage);
@@ -1083,9 +1073,9 @@ No Gemini.md file exists yet. Explore the workspace with the available tools and
                         } catch (error) {
                           console.error('Error calling Gemini:', error);
                           const errorMessage: ChatMessage = {
-                            id: (Date.now() + 1).toString(),
+                            id: (Date.now() + 2).toString(),
                             role: 'assistant',
-                            content: `エラーが発生しました: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                            content: t('chat.errors.geminiError').replace('{error}', error instanceof Error ? error.message : 'Unknown error'),
                             timestamp: new Date(),
                           };
                           onSendMessage(currentSessionId, errorMessage);
@@ -1540,7 +1530,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
         const { exists } = await import('@tauri-apps/plugin-fs');
         const fileExists = await exists(targetPath);
         if (!fileExists) {
-          alert(`ファイルが見つかりません: ${targetPath}\n\nファイルが削除されたか、移動された可能性があります。`);
+          alert(t('fileAccess.fileNotFound').replace('{path}', targetPath));
           return;
         }
 
@@ -1549,7 +1539,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
       }
     } catch (error) {
       console.error('Failed to open target:', error);
-      alert(`ファイルを開けませんでした: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      alert(t('fileAccess.fileOpenFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'));
     }
   };  while ((match = tagRegex.exec(content)) !== null) {
     // Add text before the tag
@@ -1712,50 +1702,50 @@ function ChatMessageBubble({
             {showStats && (
               <div className="message-stats">
                 <div className="stats-section">
-                  <h4>使用モデル</h4>
+                  <h4>{t('fileAccess.modelStats')}</h4>
                   {Object.entries(message.stats.models).map(([modelName, modelData]) => (
                     <div key={modelName} className="model-info">
                       <div className="model-name">{modelName}</div>
                       <div className="model-details">
-                        <div>リクエスト数: {modelData.api.totalRequests}</div>
-                        <div>エラー数: {modelData.api.totalErrors}</div>
-                        <div>レイテンシ: {modelData.api.totalLatencyMs}ms</div>
+                        <div>{t('fileAccess.requestCount')} {modelData.api.totalRequests}</div>
+                        <div>{t('fileAccess.errorCount')} {modelData.api.totalErrors}</div>
+                        <div>{t('fileAccess.latency')} {modelData.api.totalLatencyMs}ms</div>
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="stats-section">
-                  <h4>トークン使用量</h4>
+                  <h4>{t('fileAccess.tokenStats')}</h4>
                   {Object.entries(message.stats.models).map(([modelName, modelData]) => (
                     <div key={modelName} className="token-info">
-                      <div>プロンプト: {modelData.tokens.prompt}</div>
-                      <div>応答: {modelData.tokens.candidates}</div>
-                      <div>合計: {modelData.tokens.total}</div>
-                      <div>キャッシュ: {modelData.tokens.cached}</div>
-                      <div>思考: {modelData.tokens.thoughts}</div>
-                      <div>ツール: {modelData.tokens.tool}</div>
+                      <div>{t('fileAccess.promptTokens')} {modelData.tokens.prompt}</div>
+                      <div>{t('fileAccess.responseTokens')} {modelData.tokens.candidates}</div>
+                      <div>{t('fileAccess.totalTokens')} {modelData.tokens.total}</div>
+                      <div>{t('fileAccess.cachedTokens')} {modelData.tokens.cached}</div>
+                      <div>{t('fileAccess.thoughtTokens')} {modelData.tokens.thoughts}</div>
+                      <div>{t('fileAccess.toolTokens')} {modelData.tokens.tool}</div>
                     </div>
                   ))}
                 </div>
 
                 <div className="stats-section">
-                  <h4>ツール使用状況</h4>
+                  <h4>{t('fileAccess.toolStats')}</h4>
                   <div className="tools-summary">
-                    <div>総呼び出し数: {message.stats.tools.totalCalls}</div>
-                    <div>成功: {message.stats.tools.totalSuccess}</div>
-                    <div>失敗: {message.stats.tools.totalFail}</div>
-                    <div>総実行時間: {message.stats.tools.totalDurationMs}ms</div>
+                    <div>{t('fileAccess.totalCalls')} {message.stats.tools.totalCalls}</div>
+                    <div>{t('fileAccess.successful')} {message.stats.tools.totalSuccess}</div>
+                    <div>{t('fileAccess.failed')} {message.stats.tools.totalFail}</div>
+                    <div>{t('fileAccess.totalExecutionTime')} {message.stats.tools.totalDurationMs}ms</div>
                   </div>
                   {Object.keys(message.stats.tools.byName).length > 0 && (
                     <div className="tools-details">
-                      <h5>使用ツール詳細</h5>
+                      <h5>{t('fileAccess.toolsDetailed')}</h5>
                       {Object.entries(message.stats.tools.byName).map(([toolName, toolData]) => (
                         <div key={toolName} className="tool-detail">
                           <div className="tool-name">{toolName}</div>
                           <div className="tool-stats">
-                            <div>使用回数: {toolData.count}</div>
-                            <div>実行時間: {toolData.durationMs}ms</div>
+                            <div>{t('fileAccess.usageCount')} {toolData.count}</div>
+                            <div>{t('fileAccess.executionTime')} {toolData.durationMs}ms</div>
                           </div>
                         </div>
                       ))}

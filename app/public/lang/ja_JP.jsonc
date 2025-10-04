@@ -7,7 +7,8 @@
     "favoriteWorkspaces": "お気に入りのワークスペース",
     "noRecent": "最近のワークスペースはありません",
     "noFavorites": "お気に入りのワークスペースはありません",
-    "settings": "設定"
+    "settings": "設定",
+    "checkingSetup": "Gemini CLI のセットアップを確認しています..."
   },
   "setup": {
     "checking": "Gemini CLI チェック中",
@@ -144,7 +145,25 @@
       "compactError": "❌ 要約する会話がありません。メッセージを追加してから/compactコマンドを使用してください。",
       "compactPrompt": "以下の会話履歴を簡潔に要約してください。重要なポイント、議論されたトピック、決定事項などを明確に記載してください。AIが今後の会話で参照しやすいように構造化して整理してください:"
     },
-    "overview": "概要"
+    "overview": "概要",
+    "errors": {
+      "geminiPathMissing": "geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。",
+      "configLoadFailed": "設定ファイルの読み込みに失敗しました。",
+      "compactEmptyHistory": "要約レスポンスが空です。",
+      "compactCompleted": "✅ 会話を整理しました。要約は上記のシステムメッセージに保存されています。会話を続けることができます。",
+      "initGenerating": "Gemini.mdを生成しています...",
+      "initFailed": "❌ Gemini.mdの作成に失敗しました。AIがファイルを作成できなかったか、ツールの実行に問題が発生しました。",
+      "initFailedWithError": "❌ Gemini.mdの作成中にエラーが発生しました: {error}",
+      "fixchatNoText": "❌ /fixchat コマンドには改善したいテキストを指定してください。\n\n使用例: /fixchat このコードを説明して",
+      "fixchatProcessing": "AIがメッセージを改善しています...",
+      "geminiError": "エラーが発生しました: {error}",
+      "toolExecutionError": "⚠️ ツール実行権限エラー: {message}\n\n🔧 **解決方法**:\n• この操作にはツール実行権限が必要です。承認モードを「auto_edit」または「yolo」に変更してツール権限を自動許可します。\n\n現在の承認モード: {approvalMode}\n設定で承認モードを更新してください。",
+      "fileAccessError": "⚠️ **ファイルアクセスエラー**: {message}\n\n🔧 **解決方法**:\n• 操作できるファイル/フォルダは現在のワークスペース配下のみです（現在のワークスペース: `{workspacePath}`）。\n• 対象ファイルをワークスペースフォルダの中へ移動するか、#file:... や #folder:... プレフィックスを使って明示的に指定してください。\n• 一時ファイルを扱う場合は `Documents/PEXData/GeminiGUI/Chatrequest/{workspaceId}` 配下を利用してください。",
+      "toolNameError": "⚠️ **ツール名エラー**: {message}\n\n🔧 **解決方法**: AIが間違ったツール名を使用しようとしました。\n\n**利用可能なツール**:\n• `read_file` - ファイルの内容を読み取る\n• `web_fetch` - ウェブページの内容を取得\n• `glob` - ファイル検索\n\n**考えられる原因**:\n• AIの設定やプロンプトに問題がある可能性があります\n• 必要に応じて設定画面からモデルやAPIキーを確認してください\n\n別の方法でリクエストを試すか、設定を見直してください。",
+      "toolApprovalError": "⚠️ **ツール実行エラー**: {message}\n\n🔧 **解決方法**: 承認モードが「default」のため、ツールの実行が制限されています。\n\n**以下のいずれかのモードに変更してください：**\n• **auto_edit**: 編集ツールを自動承認\n• **yolo**: すべてのツールを自動承認\n\n設定画面から承認モードを変更してください。",
+      "compactCommandFailed": "❌ 会話の要約中にエラーが発生しました: {error}",
+      "fixchatCommandFailed": "❌ メッセージの改善中にエラーが発生しました: {error}"
+    }
   },
   "settings": {
     "title": "設定",
@@ -188,6 +207,30 @@
     "cancel": "キャンセル",
     "ok": "OK",
     "error": "エラー",
-    "success": "成功"
+    "success": "成功",
+    "loading": "読み込み中..."
+  },
+  "fileAccess": {
+    "fileNotFound": "ファイルが見つかりません: {path}\n\nファイルが削除されたか、移動された可能性があります。",
+    "fileOpenFailed": "ファイルを開けませんでした: {error}",
+    "modelStats": "使用モデル",
+    "tokenStats": "トークン使用量",
+    "toolStats": "ツール使用状況",
+    "requestCount": "リクエスト数:",
+    "errorCount": "エラー数:",
+    "latency": "レイテンシ:",
+    "promptTokens": "プロンプト:",
+    "responseTokens": "応答:",
+    "totalTokens": "合計:",
+    "cachedTokens": "キャッシュ:",
+    "thoughtTokens": "思考:",
+    "toolTokens": "ツール:",
+    "totalCalls": "総呼び出し数:",
+    "successful": "成功:",
+    "failed": "失敗:",
+    "totalExecutionTime": "総実行時間:",
+    "toolsDetailed": "使用ツール詳細",
+    "usageCount": "使用回数:",
+    "executionTime": "実行時間:"
   }
 }

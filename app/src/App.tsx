@@ -10,6 +10,7 @@ import { useChatSessions } from "./hooks/useChatSessions";
 import { Workspace, ChatMessage } from "./types";
 import { Config } from "./utils/configAPI";
 import { documentDir, join } from "@tauri-apps/api/path";
+import { t } from "./utils/i18n";
 
 type View = 'workspace' | 'chat' | 'settings';
 
@@ -115,7 +116,7 @@ function App() {
         backgroundColor: 'var(--background)',
         color: 'var(--text-primary)'
       }}>
-        Loading...
+        {t('common.loading')}
       </div>
     );
   }

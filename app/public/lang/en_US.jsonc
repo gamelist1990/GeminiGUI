@@ -7,7 +7,8 @@
     "favoriteWorkspaces": "Favorite Workspaces",
     "noRecent": "No recent workspaces",
     "noFavorites": "No favorite workspaces",
-    "settings": "Settings"
+    "settings": "Settings",
+    "checkingSetup": "Checking Gemini CLI setup..."
   },
   "setup": {
     "checking": "Checking Gemini CLI",
@@ -72,13 +73,13 @@
       "installGeminiError": "Error during Gemini CLI installation:",
       "authSetupError": "Error during authentication setup:",
       "authStartError": "Error during authentication start:",
-      "authVerifyError": "Error during authentication verification:"
-      ,"statusAllComplete": "✅ Gemini CLI, authentication, and Google Cloud Project are all configured"
-      ,"statusGeminiAuthReady": "✅ Gemini CLI and Google authentication are complete"
-      ,"statusProjectMissing": "⚠️ Please configure a Google Cloud Project"
-      ,"statusGeminiAuthNeeded": "⚠️ Google account authentication is required"
-      ,"statusNodeReadyGeminiMissing": "⚠️ Node.js is ready. Please install the Gemini CLI"
-      ,"statusNodeMissing": "✗ Node.js is not installed"
+      "authVerifyError": "Error during authentication verification:",
+      "statusAllComplete": "✅ Gemini CLI, authentication, and Google Cloud Project are all configured",
+      "statusGeminiAuthReady": "✅ Gemini CLI and Google authentication are complete",
+      "statusProjectMissing": "⚠️ Please configure a Google Cloud Project",
+      "statusGeminiAuthNeeded": "⚠️ Google account authentication is required",
+      "statusNodeReadyGeminiMissing": "⚠️ Node.js is ready. Please install the Gemini CLI",
+      "statusNodeMissing": "✗ Node.js is not installed"
     }
   },
   "chat": {
@@ -144,7 +145,25 @@
       "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
       "compactPrompt": "Please summarize the following conversation history concisely. Clearly state important points, discussed topics, and decisions. Structure and organize it so that AI can easily reference it in future conversations:"
     },
-    "overview": "Overview"
+    "overview": "Overview",
+    "errors": {
+      "geminiPathMissing": "geminiPath is not configured. Run setup to configure the gemini.ps1 path.",
+      "configLoadFailed": "Failed to load configuration file.",
+      "compactEmptyHistory": "Summary response was empty.",
+      "compactCompleted": "✅ Conversation sorted. You can continue the conversation and summaries will be saved in the system message above.",
+      "initGenerating": "Generating Gemini.md...",
+      "initFailed": "❌ Failed to create Gemini.md. AI may not have created the file or there may be tool execution issues.",
+      "initFailedWithError": "❌ Error occurred while creating Gemini.md: {error}",
+      "fixchatNoText": "❌ Please provide text to improve with the /fixchat command.\n\nUsage: /fixchat This code needs to be explained",
+      "fixchatProcessing": "AI is improving your message...",
+      "geminiError": "An error occurred: {error}",
+      "toolExecutionError": "⚠️ Tool execution permission error: {message}\n\n🔧 **Solution**:\n• This operation requires tool execution permissions. Change the approval mode to 'auto_edit' or 'yolo' to automatically allow tool permissions.\n\nCurrent approval mode: {approvalMode}\nUpdate the approval mode in Settings if needed.",
+      "fileAccessError": "⚠️ **File access error**: {message}\n\n🔧 **Solution**:\n• Operations can only be performed within the current workspace directory (current workspace: `{workspacePath}`).\n• Move the target files to the workspace folder or explicitly specify with prefix #file:... or #folder:... .\n• Use `Documents/PEXData/GeminiGUI/Chatrequest/{workspaceId}` as a temporary file storage.",
+      "toolNameError": "⚠️ **Tool name error**: {message}\n\n🔧 **Solution**: AI attempted to use an incorrect tool name.\n\n**Available tools**:\n• `read_file` - Read file contents\n• `web_fetch` - Retrieve web content\n• `glob` - File search\n\n**Common causes**:\n• There may be an issue with AI settings or prompts\n• Please check model and API key settings if necessary\n\nTry the request again, or check the settings.",
+      "toolApprovalError": "⚠️ **Tool execution error**: {message}\n\n🔧 **Solution**: Approval mode is set to 'default', restricting tool executions.\n\n**Change to one of these modes:**\n• **auto_edit**: Automatically approve edit tools\n• **yolo**: Automatically approve all tools\n\nPlease update the approval mode in the Settings screen.",
+      "compactCommandFailed": "❌ Error occurred while summarizing conversation: {error}",
+      "fixchatCommandFailed": "❌ Failed to improve message: {error}"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -188,6 +207,30 @@
     "cancel": "Cancel",
     "ok": "OK",
     "error": "Error",
-    "success": "Success"
+    "success": "Success",
+    "loading": "Loading..."
+  },
+  "fileAccess": {
+    "fileNotFound": "File not found: {path}\n\nThe file may have been deleted or moved.",
+    "fileOpenFailed": "Could not open file: {error}",
+    "modelStats": "Model Usage",
+    "tokenStats": "Token Usage",
+    "toolStats": "Tool Usage",
+    "requestCount": "Requests:",
+    "errorCount": "Errors:",
+    "latency": "Latency:",
+    "promptTokens": "Prompt:",
+    "responseTokens": "Response:",
+    "totalTokens": "Total:",
+    "cachedTokens": "Cached:",
+    "thoughtTokens": "Thoughts:",
+    "toolTokens": "Tool:",
+    "totalCalls": "Total Calls:",
+    "successful": "Successful:",
+    "failed": "Failed:",
+    "totalExecutionTime": "Total Execution Time:",
+    "toolsDetailed": "Tools Detailed",
+    "usageCount": "Usage Count:",
+    "executionTime": "Execution Time:"
   }
 }
