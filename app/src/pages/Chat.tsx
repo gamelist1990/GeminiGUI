@@ -1530,7 +1530,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
         const { exists } = await import('@tauri-apps/plugin-fs');
         const fileExists = await exists(targetPath);
         if (!fileExists) {
-          alert(`ファイルが見つかりません: ${targetPath}\n\nファイルが削除されたか、移動された可能性があります。`);
+          alert(t('fileAccess.fileNotFound').replace('{path}', targetPath));
           return;
         }
 
@@ -1539,7 +1539,7 @@ function renderMessageWithTags(content: string, workspacePath: string): React.Re
       }
     } catch (error) {
       console.error('Failed to open target:', error);
-      alert(`ファイルを開けませんでした: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      alert(t('fileAccess.fileOpenFailed').replace('{error}', error instanceof Error ? error.message : 'Unknown error'));
     }
   };  while ((match = tagRegex.exec(content)) !== null) {
     // Add text before the tag
@@ -1702,50 +1702,50 @@ function ChatMessageBubble({
             {showStats && (
               <div className="message-stats">
                 <div className="stats-section">
-                  <h4>使用モデル</h4>
+                  <h4>{t('fileAccess.modelStats')}</h4>
                   {Object.entries(message.stats.models).map(([modelName, modelData]) => (
                     <div key={modelName} className="model-info">
                       <div className="model-name">{modelName}</div>
                       <div className="model-details">
-                        <div>リクエスト数: {modelData.api.totalRequests}</div>
-                        <div>エラー数: {modelData.api.totalErrors}</div>
-                        <div>レイテンシ: {modelData.api.totalLatencyMs}ms</div>
+                        <div>{t('fileAccess.requestCount')} {modelData.api.totalRequests}</div>
+                        <div>{t('fileAccess.errorCount')} {modelData.api.totalErrors}</div>
+                        <div>{t('fileAccess.latency')} {modelData.api.totalLatencyMs}ms</div>
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="stats-section">
-                  <h4>トークン使用量</h4>
+                  <h4>{t('fileAccess.tokenStats')}</h4>
                   {Object.entries(message.stats.models).map(([modelName, modelData]) => (
                     <div key={modelName} className="token-info">
-                      <div>プロンプト: {modelData.tokens.prompt}</div>
-                      <div>応答: {modelData.tokens.candidates}</div>
-                      <div>合計: {modelData.tokens.total}</div>
-                      <div>キャッシュ: {modelData.tokens.cached}</div>
-                      <div>思考: {modelData.tokens.thoughts}</div>
-                      <div>ツール: {modelData.tokens.tool}</div>
+                      <div>{t('fileAccess.promptTokens')} {modelData.tokens.prompt}</div>
+                      <div>{t('fileAccess.responseTokens')} {modelData.tokens.candidates}</div>
+                      <div>{t('fileAccess.totalTokens')} {modelData.tokens.total}</div>
+                      <div>{t('fileAccess.cachedTokens')} {modelData.tokens.cached}</div>
+                      <div>{t('fileAccess.thoughtTokens')} {modelData.tokens.thoughts}</div>
+                      <div>{t('fileAccess.toolTokens')} {modelData.tokens.tool}</div>
                     </div>
                   ))}
                 </div>
 
                 <div className="stats-section">
-                  <h4>ツール使用状況</h4>
+                  <h4>{t('fileAccess.toolStats')}</h4>
                   <div className="tools-summary">
-                    <div>総呼び出し数: {message.stats.tools.totalCalls}</div>
-                    <div>成功: {message.stats.tools.totalSuccess}</div>
-                    <div>失敗: {message.stats.tools.totalFail}</div>
-                    <div>総実行時間: {message.stats.tools.totalDurationMs}ms</div>
+                    <div>{t('fileAccess.totalCalls')} {message.stats.tools.totalCalls}</div>
+                    <div>{t('fileAccess.successful')} {message.stats.tools.totalSuccess}</div>
+                    <div>{t('fileAccess.failed')} {message.stats.tools.totalFail}</div>
+                    <div>{t('fileAccess.totalExecutionTime')} {message.stats.tools.totalDurationMs}ms</div>
                   </div>
                   {Object.keys(message.stats.tools.byName).length > 0 && (
                     <div className="tools-details">
-                      <h5>使用ツール詳細</h5>
+                      <h5>{t('fileAccess.toolsDetailed')}</h5>
                       {Object.entries(message.stats.tools.byName).map(([toolName, toolData]) => (
                         <div key={toolName} className="tool-detail">
                           <div className="tool-name">{toolName}</div>
                           <div className="tool-stats">
-                            <div>使用回数: {toolData.count}</div>
-                            <div>実行時間: {toolData.durationMs}ms</div>
+                            <div>{t('fileAccess.usageCount')} {toolData.count}</div>
+                            <div>{t('fileAccess.executionTime')} {toolData.durationMs}ms</div>
                           </div>
                         </div>
                       ))}

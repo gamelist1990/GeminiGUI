@@ -202,12 +202,27 @@
     "backupTip2": "✓ Create separate backups of important files",
     "backupTip3": "✓ Create branches before major changes"
   },
-  "common": {
-    "confirm": "Confirm",
-    "cancel": "Cancel",
-    "ok": "OK",
-    "error": "Error",
-    "success": "Success",
-    "loading": "Loading..."
+  "fileAccess": {
+    "fileNotFound": "File not found: {path}\n\nThe file may have been deleted or moved.",
+    "fileOpenFailed": "Could not open file: {error}",
+    "modelStats": "Model Usage",
+    "tokenStats": "Token Usage",
+    "toolStats": "Tool Usage",
+    "requestCount": "Requests:",
+    "errorCount": "Errors:",
+    "latency": "Latency:",
+    "promptTokens": "Prompt:",
+    "responseTokens": "Response:",
+    "totalTokens": "Total:",
+    "cachedTokens": "Cached:",
+    "thoughtTokens": "Thoughts:",
+    "toolTokens": "Tool:",
+    "totalCalls": "Total Calls:",
+    "successful": "Successful:",
+    "failed": "Failed:",
+    "totalExecutionTime": "Total Execution Time:",
+    "toolsDetailed": "Tools Detailed",
+    "usageCount": "Usage Count:",
+    "executionTime": "Execution Time:"
   }
 }

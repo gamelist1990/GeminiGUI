@@ -209,5 +209,28 @@
     "error": "エラー",
     "success": "成功",
     "loading": "読み込み中..."
+  },
+  "fileAccess": {
+    "fileNotFound": "ファイルが見つかりません: {path}\n\nファイルが削除されたか、移動された可能性があります。",
+    "fileOpenFailed": "ファイルを開けませんでした: {error}",
+    "modelStats": "使用モデル",
+    "tokenStats": "トークン使用量",
+    "toolStats": "ツール使用状況",
+    "requestCount": "リクエスト数:",
+    "errorCount": "エラー数:",
+    "latency": "レイテンシ:",
+    "promptTokens": "プロンプト:",
+    "responseTokens": "応答:",
+    "totalTokens": "合計:",
+    "cachedTokens": "キャッシュ:",
+    "thoughtTokens": "思考:",
+    "toolTokens": "ツール:",
+    "totalCalls": "総呼び出し数:",
+    "successful": "成功:",
+    "failed": "失敗:",
+    "totalExecutionTime": "総実行時間:",
+    "toolsDetailed": "使用ツール詳細",
+    "usageCount": "使用回数:",
+    "executionTime": "実行時間:"
   }
 }
