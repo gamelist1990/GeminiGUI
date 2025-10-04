@@ -7,7 +7,6 @@ import { scanWorkspace, getSuggestions, parseIncludes, FileItem } from '../utils
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Command } from '@tauri-apps/plugin-shell';
 import { openFile } from '../utils/powershellExecutor';
 import './Chat.css';
 
@@ -100,6 +99,17 @@ export default function Chat({
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
   const [workspaceSuggestions, setWorkspaceSuggestions] = useState<string[]>([]);
   const [workspaceItems, setWorkspaceItems] = useState<FileItem[]>([]);
+  const scanDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (scanDebounceRef.current) {
+        clearTimeout(scanDebounceRef.current);
+        scanDebounceRef.current = null;
+      }
+    };
+  }, []);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [elapsedTime, setElapsedTime] = useState('');
   const [textareaHeight, setTextareaHeight] = useState('auto');
@@ -213,6 +223,19 @@ export default function Chat({
     // File suggestions
     else if (lastWord.startsWith('#')) {
       const query = lastWord.substring(1).toLowerCase(); // Remove # for matching
+      // Debounced workspace rescan to refresh suggestions in real-time when typing '#'
+      if (scanDebounceRef.current) clearTimeout(scanDebounceRef.current);
+      scanDebounceRef.current = setTimeout(() => {
+        if (workspace?.path) {
+          scanWorkspace(workspace.path).then((items) => {
+            setWorkspaceItems(items);
+            const suggestions = getSuggestions(items);
+            setWorkspaceSuggestions(suggestions);
+          }).catch((error) => {
+            console.error('Failed to scan workspace (debounced):', error);
+          });
+        }
+      }, 300);
       // Filter suggestions by matching the query against the suggestion text
       // This allows #config to match #file:config.json or #folder:config
       const filtered = workspaceSuggestions.filter(suggestion => {

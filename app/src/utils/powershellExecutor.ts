@@ -112,5 +112,4 @@ export async function fileExists(path: string): Promise<boolean> {
  */
 export async function getUserProfilePath(): Promise<string> {
   return runPowerShellExpectSuccess('Write-Output $env:USERPROFILE');
-}</content>
-<parameter name="file_path">app/src/utils/powershellExecutor.ts
+}

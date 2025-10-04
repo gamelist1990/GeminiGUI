@@ -1,5 +1,4 @@
 import { readTextFile, exists } from '@tauri-apps/plugin-fs';
-import { Command } from '@tauri-apps/plugin-shell';
 import { getUserProfilePath, setEnvironmentVariable as setPowerShellEnvVar } from './powershellExecutor';
 
 type LogFunction = (message: string) => void;

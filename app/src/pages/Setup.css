@@ -259,6 +259,27 @@
   }
 }
 
+/* Three-dot processing indicator */
+.processing-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.processing-dots .dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+.processing-dots .dot:nth-child(1) { animation-delay: -0.32s; }
+.processing-dots .dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.6; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
 /* Action Buttons Container */
 .setup-actions {
   display: flex;
