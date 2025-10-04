@@ -11,6 +11,7 @@ pub mod search;
 pub mod command_operations;
 pub mod file_check;
 pub mod diff_operations;
+pub mod fetch_operations;
 
 // Re-export all tool commands for easy access
 pub use file_operations::*;
@@ -19,3 +20,4 @@ pub use search::*;
 pub use command_operations::*;
 pub use file_check::*;
 pub use diff_operations::*;
+pub use fetch_operations::*;

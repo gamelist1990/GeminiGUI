@@ -20,17 +20,26 @@ pub fn tool_run_command(
 
     let mut cmd = Command::new("powershell.exe");
     
-    // Set UTF-8 encoding
+    // Build command string from args
+    let command_str = if let Some(arg_list) = args.as_ref() {
+        if arg_list.is_empty() {
+            String::new()
+        } else {
+            // Join all args into a single command string
+            arg_list.join(" ")
+        }
+    } else {
+        String::new()
+    };
+    
+    // Set UTF-8 encoding and execute command
     cmd.args(&[
         "-NoProfile",
         "-NoLogo",
         "-NonInteractive",
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        &format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {}", 
-                 args.as_ref()
-                     .and_then(|a| a.first())
-                     .unwrap_or(&String::new()))
+        &format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {}", command_str)
     ]);
 
     // Set working directory if provided

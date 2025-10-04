@@ -2438,3 +2438,157 @@
 
  / *   T o o l   U s a g e   S t a t i s t i c s   ( O p e n A I )   * /  
  
+/* Additional Tool Usage Parameters Styles */
+.tool-usage-parameters {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background-color: rgba(99, 102, 241, 0.08);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.parameters-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.parameters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.parameter-item {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: 2px 0;
+}
+
+.parameter-key {
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 80px;
+}
+
+.parameter-value {
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  word-break: break-word;
+}
+
+.result-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+[data-theme="dark"] .tool-usage-parameters {
+  background-color: rgba(99, 102, 241, 0.12);
+}
+/* Syntax Highlighter Styles for Code Blocks */
+.message-content pre {
+  margin: var(--spacing-sm) 0;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.message-content code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Ensure syntax highlighter background is visible */
+.message-content pre > div {
+  background-color: #282c34 !important; /* oneDark background */
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md) !important;
+}
+
+/* Code block loading state */
+.code-loading {
+  background-color: #282c34;
+  color: #abb2bf;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-sm);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Inline code styling */
+.message-content :not(pre) > code {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--primary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .message-content :not(pre) > code {
+  background-color: rgba(99, 102, 241, 0.2);
+  color: #a5d6ff;
+}
+
+/* Ensure proper contrast for syntax highlighting */
+.message-content pre code {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Override any conflicting styles */
+.message-content .token.comment,
+.message-content .token.prolog,
+.message-content .token.doctype,
+.message-content .token.cdata {
+  color: #5c6370 !important;
+}
+
+.message-content .token.punctuation {
+  color: #abb2bf !important;
+}
+
+.message-content .token.property,
+.message-content .token.tag,
+.message-content .token.boolean,
+.message-content .token.number,
+.message-content .token.constant,
+.message-content .token.symbol,
+.message-content .token.deleted {
+  color: #d19a66 !important;
+}
+
+.message-content .token.selector,
+.message-content .token.attr-name,
+.message-content .token.string,
+.message-content .token.char,
+.message-content .token.builtin,
+.message-content .token.inserted {
+  color: #98c379 !important;
+}
+
+.message-content .token.operator,
+.message-content .token.entity,
+.message-content .token.url,
+.message-content .language-css .token.string,
+.message-content .style .token.string {
+  color: #56b6c2 !important;
+}
+
+.message-content .token.atrule,
+.message-content .token.attr-value,
+.message-content .token.keyword {
+  color: #c678dd !important;
+}
+
+.message-content .token.function,
+.message-content .token.class-name {
+  color: #61afef !important;
+}
+
+.message-content .token.regex,
+.message-content .token.important,
+.message-content .token.variable {
+  color: #e06c75 !important;
+}

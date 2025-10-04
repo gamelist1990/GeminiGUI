@@ -314,7 +314,7 @@ export async function callOpenAI(
     const usage = data.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     
     // Log tool calls if present
-    const toolExecutionResults: Array<{name: string; success: boolean; result?: any; error?: string; executionTime: number}> = [];
+    const toolExecutionResults: Array<{name: string; success: boolean; result?: any; error?: string; executionTime: number; parameters?: any}> = [];
     if (toolCalls.length > 0) {
       internalLog(`AI requested ${toolCalls.length} tool calls`, log);
       
@@ -324,8 +324,9 @@ export async function callOpenAI(
         internalLog(`Executing tool: ${toolName}`, log);
         
         const startTime = Date.now();
+        let args: any = {};
         try {
-          const args = JSON.parse(toolCall.function.arguments);
+          args = JSON.parse(toolCall.function.arguments);
           const workspacePath = options.workspacePath || process.cwd();
           const result = await executeModernTool(toolName, args, workspacePath);
           const executionTime = Date.now() - startTime;
@@ -335,7 +336,8 @@ export async function callOpenAI(
             success: result.success,
             result: result.result,
             error: result.error,
-            executionTime
+            executionTime,
+            parameters: args
           });
           
           if (result.success) {
@@ -351,7 +353,8 @@ export async function callOpenAI(
             name: toolName,
             success: false,
             error: String(error),
-            executionTime
+            executionTime,
+            parameters: args
           });
         }
       }
@@ -365,6 +368,7 @@ export async function callOpenAI(
         executionTime: result.executionTime,
         success: result.success,
         timestamp: new Date(),
+        parameters: result.parameters,
         result: result.result,
       })),
       stats: {
@@ -643,7 +647,7 @@ export async function callOpenAIStream(
               });
               
               // Track tool execution results
-              const streamToolResults: Array<{name: string; executionTime: number; success: boolean; result?: any}> = [];
+              const streamToolResults: Array<{name: string; executionTime: number; success: boolean; result?: any; parameters?: any}> = [];
               
               // Execute each tool call and add results as tool messages
               for (const toolCall of completedToolCalls) {
@@ -652,8 +656,9 @@ export async function callOpenAIStream(
                 
                 const startTime = Date.now();
                 let toolResult: string;
+                let args: any = {};
                 try {
-                  const args = JSON.parse(toolCall.arguments);
+                  args = JSON.parse(toolCall.arguments);
                   const workspacePath = options.workspacePath || process.cwd();
                   const result = await executeModernTool(toolName, args, workspacePath);
                   const executionTime = Date.now() - startTime;
@@ -663,6 +668,7 @@ export async function callOpenAIStream(
                     executionTime,
                     success: result.success,
                     result: result.result,
+                    parameters: args,
                   });
                   
                   if (result.success) {
@@ -679,6 +685,7 @@ export async function callOpenAIStream(
                     name: toolName,
                     executionTime,
                     success: false,
+                    parameters: args,
                   });
                   toolResult = JSON.stringify({ error: String(error) });
                 }
@@ -771,11 +778,12 @@ export async function callOpenAIStream(
     // Return GeminiResponse with estimated stats
     return {
       response: fullResponse,
-      toolUsage: streamToolResults.map((result: {name: string; executionTime: number; success: boolean; result?: any}) => ({
+      toolUsage: streamToolResults.map((result: {name: string; executionTime: number; success: boolean; result?: any; parameters?: any}) => ({
         toolName: result.name,
         executionTime: result.executionTime,
         success: result.success,
         timestamp: new Date(),
+        parameters: result.parameters,
         result: result.result,
       })),
       stats: {

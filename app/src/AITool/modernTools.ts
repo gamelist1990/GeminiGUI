@@ -259,6 +259,42 @@ export const DIFF_TOOLS: ModernToolDefinition[] = [
 ];
 
 /**
+ * Network Operations Tools
+ */
+export const FETCH_TOOLS: ModernToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'fetch',
+      description: 'Fetch content from a URL. Supports HTTP/HTTPS with customizable headers and timeout. Returns response body, status, and headers.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'URL to fetch (must be HTTP or HTTPS protocol)'
+          },
+          method: {
+            type: 'string',
+            description: 'HTTP method to use (GET, POST, PUT, DELETE, HEAD). Defaults to GET',
+            enum: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD']
+          },
+          headers: {
+            type: 'object',
+            description: 'Optional HTTP headers as key-value pairs (e.g., {"Authorization": "Bearer token"})'
+          },
+          timeout: {
+            type: 'number',
+            description: 'Request timeout in seconds (default: 30)'
+          }
+        },
+        required: ['url']
+      }
+    }
+  }
+];
+
+/**
  * All available modern tools
  */
 export const MODERN_TOOLS: ModernToolDefinition[] = [
@@ -267,7 +303,8 @@ export const MODERN_TOOLS: ModernToolDefinition[] = [
   ...SEARCH_TOOLS,
   ...COMMAND_TOOLS,
   ...FILE_CHECK_TOOLS,
-  ...DIFF_TOOLS
+  ...DIFF_TOOLS,
+  ...FETCH_TOOLS
 ];
 
 /**
@@ -279,7 +316,8 @@ export const TOOL_CATEGORIES = {
   SEARCH: 'Search & Discovery',
   COMMAND: 'Command Execution',
   FILE_CHECK: 'File Validation',
-  DIFF: 'Diff & Patches'
+  DIFF: 'Diff & Patches',
+  FETCH: 'Network & Web'
 } as const;
 
 /**
@@ -299,6 +337,8 @@ export function getToolsByCategory(category: keyof typeof TOOL_CATEGORIES): Mode
       return FILE_CHECK_TOOLS;
     case 'DIFF':
       return DIFF_TOOLS;
+    case 'FETCH':
+      return FETCH_TOOLS;
     default:
       return [];
   }

@@ -35,7 +35,9 @@ pub fn run() {
             // File check operations
             tools::tool_file_check,
             // Diff operations
-            tools::tool_apply_diff
+            tools::tool_apply_diff,
+            // Fetch operations
+            tools::tool_fetch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

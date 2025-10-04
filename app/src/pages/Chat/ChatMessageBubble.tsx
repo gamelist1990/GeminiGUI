@@ -506,8 +506,32 @@ function ChatMessageBubble({
                         <span className="tool-usage-name">{tool.toolName}</span>
                         <span className="tool-usage-time">{tool.executionTime}ms</span>
                       </div>
+                      
+                      {/* Parameters Section */}
+                      {tool.parameters && Object.keys(tool.parameters).length > 0 && (
+                        <div className="tool-usage-parameters">
+                          <div className="parameters-label">📝 Parameters:</div>
+                          <div className="parameters-content">
+                            {Object.entries(tool.parameters).map(([key, value]) => (
+                              <div key={key} className="parameter-item">
+                                <span className="parameter-key">{key}:</span>
+                                <span className="parameter-value">
+                                  {typeof value === 'string' 
+                                    ? value.length > 50 
+                                      ? `${value.substring(0, 50)}...` 
+                                      : value
+                                    : JSON.stringify(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Result Section */}
                       {tool.result && (
                         <div className="tool-usage-result">
+                          <div className="result-label">📊 Result:</div>
                           <pre>{JSON.stringify(tool.result, null, 2)}</pre>
                         </div>
                       )}
