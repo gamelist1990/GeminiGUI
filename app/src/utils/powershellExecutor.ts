@@ -106,10 +106,52 @@ export async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
- * ユーザーPROFILEパスを取得
+ * PowerShell経由でバイナリデータをファイルに書き込む（改良版）
  *
- * @returns ユーザーPROFILEパス
+ * @param filePath - 保存するファイルのパス
+ * @param data - 書き込むデータ (Uint8ArrayまたはArrayBuffer)
  */
-export async function getUserProfilePath(): Promise<string> {
-  return runPowerShellExpectSuccess('Write-Output $env:USERPROFILE');
+export async function writeBinaryFile(filePath: string, data: Uint8Array | ArrayBuffer): Promise<void> {
+  try {
+    // ArrayBufferの場合Uint8Arrayに変換
+    const uint8Array = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+
+    // 小さなファイル（1MB以下）はBase64で直接処理
+    if (uint8Array.length <= 1000000) {
+      const base64Data = btoa(String.fromCharCode(...uint8Array));
+      const safePath = filePath.replace(/'/g, "''");
+
+      const command = `
+        [System.IO.File]::WriteAllBytes('${safePath}', [System.Convert]::FromBase64String('${base64Data}'))
+      `.trim();
+
+      await runPowerShellExpectSuccess(command);
+      return;
+    }
+
+    // 大きなファイルは一時ファイル作成＆コピーの方法で処理
+    const base64Chunks: string[] = [];
+    const chunkSize = 500000; // ~500KBずつ分割
+
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      base64Chunks.push(btoa(String.fromCharCode(...chunk)));
+    }
+
+    const safePath = filePath.replace(/'/g, "''");
+
+    // PowerShellスクリプトを作成（List<byte>を使って結合）
+    const psScript = [
+      '[System.Collections.Generic.List[System.Byte]]$bytes = New-Object System.Collections.Generic.List[System.Byte]',
+      ...base64Chunks.map((chunk, index) => `$chunk${index} = '${chunk}'`),
+      ...base64Chunks.map((_, index) => `$bytes.AddRange([System.Convert]::FromBase64String($chunk${index}))`),
+      `[System.IO.File]::WriteAllBytes('${safePath}', $bytes.ToArray())`
+    ].join('; ');
+
+    await runPowerShellExpectSuccess(psScript);
+
+  } catch (error) {
+    console.error('PowerShell binary write failed:', error);
+    throw new Error(`ファイル保存に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }

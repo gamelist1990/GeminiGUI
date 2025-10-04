@@ -3,6 +3,7 @@ import { ChatMessage, ChatSession } from "../../types";
 import { t } from "../../utils/i18n";
 import { formatNumber } from "../../utils/storage";
 import { formatElapsedTime } from "../../utils/storage";
+import { writeBinaryFile } from "../../utils/powershellExecutor";
 import * as fsPlugin from "@tauri-apps/plugin-fs";
 import * as dialogPlugin from "@tauri-apps/plugin-dialog";
 import jsPDF from "jspdf";
@@ -187,6 +188,7 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
       tempDiv.style.color = "black";
       tempDiv.style.fontSize = "14px"; // Reduced font size for more content
       tempDiv.style.lineHeight = "1.4"; // Tighter line height
+      tempDiv.style.overflow = "hidden"; // Prevent scrollbars during capture
 
       // Set the limited content
       if (messagesToExport.length < visibleMessages.length) {
@@ -199,10 +201,11 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
         tempDiv.innerHTML = htmlContent;
       }
 
-      // Position temporarily
+      // Position temporarily off-screen
       tempDiv.style.position = "absolute";
       tempDiv.style.left = "-9999px";
       tempDiv.style.top = "-9999px";
+
       document.body.appendChild(tempDiv);
 
       try {
@@ -216,7 +219,13 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
           windowWidth: 1200,
           windowHeight: Math.min(tempDiv.offsetHeight, 10000),
           logging: false, // Disable html2canvas logging
+          foreignObjectRendering: false, // Simpler rendering
         });
+
+        // Force garbage collection for large images (if available)
+        if (window.gc) {
+          window.gc();
+        }
 
         const imgData = canvas.toDataURL("image/png", 0.9); // Slightly compressed quality
         const pdf = new jsPDF({
@@ -241,15 +250,47 @@ function StatsModal({ sessions, totalTokens, onClose }: StatsModalProps) {
         const yOffset = (pdfHeight - finalHeight) / 2;
 
         pdf.addImage(imgData, "PNG", xOffset, yOffset, finalWidth, finalHeight);
+
+        // Allow user to choose save location (like text export)
         const defaultName = `${selectedSession.name.replace(
           /[^a-zA-Z0-9\-_]/g,
           "_"
         )}_conversation.pdf`;
 
-        pdf.save(defaultName);
-        setExportSuccessMessage(t("chat.stats.export.successPdf"));
-        // Clear success message after 3 seconds
-        setTimeout(() => setExportSuccessMessage(""), 3000);
+        const savePath = await dialogPlugin.save({
+          title: "Save Conversation PDF",
+          filters: [
+            {
+              name: "PDF Files",
+              extensions: ["pdf"],
+            },
+          ],
+          defaultPath: defaultName,
+        });
+
+        if (savePath) {
+          // Try fsPlugin first, fall back to PowerShell if it fails
+          const pdfBlob = pdf.output('blob');
+          const arrayBuffer = await pdfBlob.arrayBuffer();
+
+          try {
+            // Try fsPlugin first (should work in most cases)
+            await fsPlugin.writeFile(savePath, new Uint8Array(arrayBuffer));
+          } catch (fsError) {
+            console.warn('fsPlugin failed, trying PowerShell fallback:', fsError);
+            try {
+              // Fall back to PowerShell method
+              await writeBinaryFile(savePath, arrayBuffer);
+            } catch (psError) {
+              console.error('PowerShell fallback also failed:', psError);
+              throw new Error(`ファイル保存に失敗しました: ${psError instanceof Error ? psError.message : 'Unknown error'}`);
+            }
+          }
+
+          setExportSuccessMessage(t("chat.stats.export.successPdf"));
+          // Clear success message after 3 seconds
+          setTimeout(() => setExportSuccessMessage(""), 3000);
+        }
       } finally {
         document.body.removeChild(tempDiv);
       }
