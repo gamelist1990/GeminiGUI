@@ -255,6 +255,26 @@ export async function executeModernTool(
         break;
       }
 
+      case 'fetch': {
+        const fetchResult = await invoke<{
+          success: boolean;
+          status: number;
+          headers: Record<string, string>;
+          contentType: string;
+          body: string;
+          bodyLength: number;
+          elapsedMs: number;
+          url: string;
+        }>('tool_fetch', {
+          url: parameters.url,
+          method: parameters.method || 'GET',
+          headers: parameters.headers || {},
+          timeout: parameters.timeout || 30
+        });
+        result = fetchResult;
+        break;
+      }
+
       default:
         throw new Error(`Unknown tool: ${actualToolName}`);
     }

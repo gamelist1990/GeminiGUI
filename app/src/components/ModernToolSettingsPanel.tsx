@@ -8,6 +8,7 @@ import {
   COMMAND_TOOLS,
   FILE_CHECK_TOOLS,
   DIFF_TOOLS,
+  FETCH_TOOLS,
   getAllToolNames 
 } from '../AITool/modernTools';
 import '../pages/Settings.css';
@@ -270,6 +271,28 @@ export default function ModernToolSettingsPanel({
         <h3 className="category-title">🔧 Diff & Patches</h3>
         <div className="tools-list">
           {DIFF_TOOLS.map(tool => (
+            <div key={tool.function.name} className="tool-item">
+              <label className="tool-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isToolEnabled(tool.function.name)}
+                  onChange={() => handleToggleTool(tool.function.name)}
+                />
+                <div className="tool-info">
+                  <span className="tool-name">{tool.function.name}</span>
+                  <span className="tool-description">{tool.function.description}</span>
+                </div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Network & Web */}
+      <div className="tool-category">
+        <h3 className="category-title">🌐 Network & Web</h3>
+        <div className="tools-list">
+          {FETCH_TOOLS.map(tool => (
             <div key={tool.function.name} className="tool-item">
               <label className="tool-checkbox">
                 <input

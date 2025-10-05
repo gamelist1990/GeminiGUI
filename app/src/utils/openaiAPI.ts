@@ -1,5 +1,6 @@
 import { GeminiResponse, StreamCallback } from './geminiCUI';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { streamingFetch } from './streamingFetch';
 import { generateModernToolDefinitions } from './modernToolSystem';
 import { executeModernTool } from '../AITool/toolExecutor';
 
@@ -526,7 +527,54 @@ export async function callOpenAIStream(
     
     internalLog(`Sending streaming request to OpenAI API (${messages.length} messages)...`, log);
     
-    // Send request
+    // Helper: process SSE lines into events
+    const processSSELine = async (
+      trimmed: string,
+      builders: Map<number, { id?: string; type?: 'function'; name?: string; arguments: string }>,
+      outToolCalls: Array<{ id: string; name: string; arguments: string }>,
+      onText: (text: string) => void
+    ): Promise<'continue' | 'stop' | 'tool_calls'> => {
+      if (!trimmed || trimmed === 'data: [DONE]') return 'stop';
+      if (!trimmed.startsWith('data: ')) return 'continue';
+      try {
+        const jsonStr = trimmed.slice(6);
+        const chunk: OpenAIStreamChunk = JSON.parse(jsonStr);
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          onText(delta.content);
+        }
+
+        if (delta?.tool_calls) {
+          for (const toolCallDelta of delta.tool_calls) {
+            const index = toolCallDelta.index;
+            if (!builders.has(index)) builders.set(index, { arguments: '' });
+            const builder = builders.get(index)!;
+            if (toolCallDelta.id) builder.id = toolCallDelta.id;
+            if (toolCallDelta.type) builder.type = toolCallDelta.type;
+            if (toolCallDelta.function?.name) builder.name = toolCallDelta.function.name;
+            if (toolCallDelta.function?.arguments) builder.arguments += toolCallDelta.function.arguments;
+          }
+        }
+
+        const finish = chunk.choices[0]?.finish_reason;
+        if (finish === 'stop') return 'stop';
+        if (finish === 'tool_calls') {
+          const completed = Array.from(builders.values())
+            .filter(tc => tc.id && tc.name)
+            .map(tc => ({ id: tc.id!, name: tc.name!, arguments: tc.arguments }));
+          if (completed.length > 0) {
+            outToolCalls.splice(0, outToolCalls.length, ...completed);
+            return 'tool_calls';
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse SSE chunk:', trimmed, e);
+      }
+      return 'continue';
+    };
+
+    // Issue the initial request
     const response = await tauriFetch(`${baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -535,239 +583,181 @@ export async function callOpenAIStream(
       },
       body: JSON.stringify(requestBody),
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
     }
 
-    // Get response text (SSE format)
-    const text = await response.text();
-    internalLog(`Received streaming response, processing...`, log);
-    
-    // Split by lines and process SSE format
-    const lines = text.split('\n');
-    
     // Track tool calls across chunks
-    let streamToolResults: Array<{name: string; executionTime: number; success: boolean; result?: any}> = [];
-    const toolCallsBuilder: Map<number, {
-      id?: string;
-      type?: 'function';
-      name?: string;
-      arguments: string;
-    }> = new Map();
-    
-    for (const line of lines) {
-      const trimmed = line.trim();
-      
-      // Skip empty lines and done marker
-      if (!trimmed || trimmed === 'data: [DONE]') {
-        continue;
-      }
-      
-      // Parse SSE data
-      if (trimmed.startsWith('data: ')) {
-        try {
-          const jsonStr = trimmed.slice(6);
-          const chunk: OpenAIStreamChunk = JSON.parse(jsonStr);
-          
-          const delta = chunk.choices[0]?.delta;
-          
-          // Handle text content
-          if (delta?.content) {
-            onChunk({
-              type: 'text',
-              content: delta.content,
-            });
-            fullResponse += delta.content;
+    const toolCallsBuilder: Map<number, { id?: string; type?: 'function'; name?: string; arguments: string }> = new Map();
+    let streamToolResults: Array<{ name: string; executionTime: number; success: boolean; result?: any; parameters?: any }> = [];
+
+    const readStreamWithReader = async (resp: Response) => {
+      const reader = (resp as any).body?.getReader?.();
+      if (!reader) return false;
+      internalLog('Using response.body.getReader() for streaming', log);
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunkText = decoder.decode(value, { stream: true });
+        buffer += chunkText;
+        // Normalize CRLF and split by newlines
+        const parts = buffer.split(/\r?\n/);
+        buffer = parts.pop() || '';
+        for (const raw of parts) {
+          const trimmed = raw.trim();
+          const result = await processSSELine(trimmed, toolCallsBuilder, toolCallsReceived, (t) => {
+            onChunk({ type: 'text', content: t });
+            fullResponse += t;
+          });
+          if (result === 'tool_calls') {
+            return 'tool_calls' as const;
           }
-          
-          // Handle tool calls (streamed incrementally)
-          if (delta?.tool_calls) {
-            for (const toolCallDelta of delta.tool_calls) {
-              const index = toolCallDelta.index;
-              
-              if (!toolCallsBuilder.has(index)) {
-                toolCallsBuilder.set(index, {
-                  arguments: '',
-                });
-              }
-              
-              const builder = toolCallsBuilder.get(index)!;
-              
-              if (toolCallDelta.id) {
-                builder.id = toolCallDelta.id;
-              }
-              if (toolCallDelta.type) {
-                builder.type = toolCallDelta.type;
-              }
-              if (toolCallDelta.function?.name) {
-                builder.name = toolCallDelta.function.name;
-              }
-              if (toolCallDelta.function?.arguments) {
-                builder.arguments += toolCallDelta.function.arguments;
-              }
-            }
-          }
-          
-          // Check for completion
-          if (chunk.choices[0]?.finish_reason === 'stop') {
-            onChunk({
-              type: 'done',
-            });
-          } else if (chunk.choices[0]?.finish_reason === 'tool_calls') {
-            // Send tool calls information
-            const completedToolCalls = Array.from(toolCallsBuilder.values())
-              .filter(tc => tc.id && tc.name)
-              .map(tc => ({
-                id: tc.id!,
-                name: tc.name!,
-                arguments: tc.arguments,
-              }));
-            
-            if (completedToolCalls.length > 0) {
-              internalLog(`Streaming completed with ${completedToolCalls.length} tool calls`, log);
-              toolCallsReceived = completedToolCalls;
-              
-              // Build messages array for second request
-              const followUpMessages: OpenAIMessage[] = [...messages];
-              
-              // Add assistant's tool calls
-              followUpMessages.push({
-                role: 'assistant',
-                content: null,
-                tool_calls: completedToolCalls.map(tc => ({
-                  id: tc.id,
-                  type: 'function' as const,
-                  function: {
-                    name: tc.name,
-                    arguments: tc.arguments,
-                  },
-                })),
-              });
-              
-              // Track tool execution results
-              const streamToolResults: Array<{name: string; executionTime: number; success: boolean; result?: any; parameters?: any}> = [];
-              
-              // Execute each tool call and add results as tool messages
-              for (const toolCall of completedToolCalls) {
-                const toolName = toolCall.name.replace(/^OriginTool_/, ''); // Remove prefix
-                internalLog(`Executing tool (streaming): ${toolName}`, log);
-                
-                const startTime = Date.now();
-                let toolResult: string;
-                let args: any = {};
-                try {
-                  args = JSON.parse(toolCall.arguments);
-                  const workspacePath = options.workspacePath || process.cwd();
-                  const result = await executeModernTool(toolName, args, workspacePath);
-                  const executionTime = Date.now() - startTime;
-                  
-                  streamToolResults.push({
-                    name: toolName,
-                    executionTime,
-                    success: result.success,
-                    result: result.result,
-                    parameters: args,
-                  });
-                  
-                  if (result.success) {
-                    internalLog(`✓ Tool ${toolName} succeeded (${executionTime}ms)`, log);
-                    toolResult = JSON.stringify(result.result);
-                  } else {
-                    internalLog(`✗ Tool ${toolName} failed: ${result.error}`, log);
-                    toolResult = JSON.stringify({ error: result.error });
-                  }
-                } catch (error) {
-                  const executionTime = Date.now() - startTime;
-                  internalLog(`✗ Tool ${toolName} execution error: ${error}`, log);
-                  streamToolResults.push({
-                    name: toolName,
-                    executionTime,
-                    success: false,
-                    parameters: args,
-                  });
-                  toolResult = JSON.stringify({ error: String(error) });
-                }
-                
-                // Add tool result as a tool message
-                followUpMessages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  content: toolResult,
-                });
-              }
-              
-              // Make a second request to get AI's final response
-              internalLog('Making follow-up request for AI final response...', log);
-              const followUpRequestBody: OpenAIRequest = {
-                model: model,
-                messages: followUpMessages,
-                stream: true,
-                temperature: 0.7,
-              };
-              
-              // Don't include tools in follow-up request to force a text response
-              // followUpRequestBody.tools = tools; // Commented out
-              
-              const followUpResponse = await tauriFetch(`${baseURL}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify(followUpRequestBody),
-              });
-              
-              if (!followUpResponse.ok) {
-                const errorText = await followUpResponse.text();
-                throw new Error(`OpenAI follow-up API error (${followUpResponse.status}): ${errorText}`);
-              }
-              
-              // Process follow-up streaming response (using text() like the initial request)
-              const followUpText = await followUpResponse.text();
-              const followUpLines = followUpText.split('\n');
-              
-              for (const line of followUpLines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (!trimmed.startsWith('data: ')) continue;
-                
-                try {
-                  const jsonStr = trimmed.slice(6);
-                  const chunk: OpenAIStreamChunk = JSON.parse(jsonStr);
-                  const delta = chunk.choices[0]?.delta;
-                  
-                  if (delta?.content) {
-                    fullResponse += delta.content;
-                    onChunk({
-                      type: 'text',
-                      content: delta.content,
-                    });
-                  }
-                } catch (parseError) {
-                  console.warn('Failed to parse follow-up SSE chunk:', trimmed, parseError);
-                }
-              }
-              
-              internalLog('Follow-up request completed', log);
-            }
-            
-            onChunk({
-              type: 'done',
-            });
-          }
-          
-          // Small delay to simulate natural streaming
-          await new Promise(resolve => setTimeout(resolve, 10));
-          
-        } catch (parseError) {
-          console.warn('Failed to parse SSE chunk:', trimmed, parseError);
         }
       }
+      // Flush remaining buffer
+      if (buffer.trim()) {
+        const result = await processSSELine(buffer.trim(), toolCallsBuilder, toolCallsReceived, (t) => {
+          onChunk({ type: 'text', content: t });
+          fullResponse += t;
+        });
+        if (result === 'tool_calls') {
+          return 'tool_calls' as const;
+        }
+      }
+      return 'done' as const;
+    };
+
+    // Try native streaming first, then fallback to curl-based streaming if unavailable
+    let initialResult: 'done' | 'tool_calls' | false = await readStreamWithReader(response as any);
+    if (initialResult === false) {
+      internalLog('Falling back to curl-based streaming via Tauri shell', log);
+      await streamingFetch(`${baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+        onChunk: async (line: string) => {
+          const trimmed = line.trim();
+          await processSSELine(trimmed, toolCallsBuilder, toolCallsReceived, (t) => {
+            onChunk({ type: 'text', content: t });
+            fullResponse += t;
+          });
+        },
+        onError: (e) => {
+          console.error('[OpenAI] streamingFetch error:', e);
+        },
+        onComplete: () => {},
+      });
+      // If tool calls were detected during curl stream, mark accordingly
+      initialResult = toolCallsReceived.length > 0 ? 'tool_calls' : 'done';
+    }
+
+    if (initialResult === 'done' && toolCallsReceived.length === 0) {
+      onChunk({ type: 'done' });
+    }
+
+    // If tool calls were requested, execute them and issue a follow-up streaming request
+    if (toolCallsReceived.length > 0) {
+      internalLog(`Streaming completed with ${toolCallsReceived.length} tool calls`, log);
+
+      const followUpMessages: OpenAIMessage[] = [...messages];
+      followUpMessages.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCallsReceived.map(tc => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      });
+
+      // Execute tools
+      const executedToolResults: Array<{ name: string; executionTime: number; success: boolean; result?: any; parameters?: any }> = [];
+      for (const toolCall of toolCallsReceived) {
+        const toolName = toolCall.name.replace(/^OriginTool_/, '');
+        internalLog(`Executing tool (streaming): ${toolName}`, log);
+        const t0 = Date.now();
+        let args: any = {};
+        try {
+          args = JSON.parse(toolCall.arguments);
+          const workspacePath = options.workspacePath || process.cwd();
+          const result = await executeModernTool(toolName, args, workspacePath);
+          const dt = Date.now() - t0;
+          executedToolResults.push({ name: toolName, executionTime: dt, success: result.success, result: result.result, parameters: args });
+        } catch (err) {
+          const dt = Date.now() - t0;
+          executedToolResults.push({ name: toolName, executionTime: dt, success: false, parameters: args });
+        }
+        // Add tool result message
+        const last = executedToolResults[executedToolResults.length - 1];
+        followUpMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: last.success ? JSON.stringify(last.result) : JSON.stringify({ error: true }),
+        });
+      }
+      streamToolResults = executedToolResults;
+
+      // Follow-up streaming request for final text
+      const followUpRequestBody: OpenAIRequest = {
+        model: model,
+        messages: followUpMessages,
+        stream: true,
+        temperature: 0.7,
+      };
+
+      const followUpResponse = await tauriFetch(`${baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(followUpRequestBody),
+      });
+
+      if (!followUpResponse.ok) {
+        const errorText = await followUpResponse.text();
+        throw new Error(`OpenAI follow-up API error (${followUpResponse.status}): ${errorText}`);
+      }
+
+      const followUpResult = await readStreamWithReader(followUpResponse as any);
+      if (followUpResult === false) {
+        // fallback to curl
+        await streamingFetch(`${baseURL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(followUpRequestBody),
+          onChunk: async (line: string) => {
+            const trimmed = line.trim();
+            // Only process text deltas for follow-up; tool calls aren't expected here
+            if (!trimmed || trimmed === 'data: [DONE]' || !trimmed.startsWith('data: ')) return;
+            try {
+              const jsonStr = trimmed.slice(6);
+              const chunk: OpenAIStreamChunk = JSON.parse(jsonStr);
+              const delta = chunk.choices[0]?.delta;
+              if (delta?.content) {
+                onChunk({ type: 'text', content: delta.content });
+                fullResponse += delta.content;
+              }
+            } catch {}
+          },
+          onError: (e) => console.error('[OpenAI] streamingFetch follow-up error:', e),
+          onComplete: () => {},
+        });
+      }
+      onChunk({ type: 'done' });
     }
     
-    const elapsedMs = Date.now() - startTime;
+  const elapsedMs = Date.now() - startTime;
     internalLog(`OpenAI streaming completed in ${elapsedMs}ms`, log);
     
     // Estimate token usage from response length
@@ -778,7 +768,7 @@ export async function callOpenAIStream(
     // Return GeminiResponse with estimated stats
     return {
       response: fullResponse,
-      toolUsage: streamToolResults.map((result: {name: string; executionTime: number; success: boolean; result?: any; parameters?: any}) => ({
+      toolUsage: (streamToolResults || []).map((result: {name: string; executionTime: number; success: boolean; result?: any; parameters?: any}) => ({
         toolName: result.name,
         executionTime: result.executionTime,
         success: result.success,
