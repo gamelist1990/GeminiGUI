@@ -360,6 +360,38 @@ export async function callOpenAI(
       }
     }
     
+    // Calculate tool statistics from execution results
+    const totalSuccess = toolExecutionResults.filter(r => r.success).length;
+    const totalFail = toolExecutionResults.filter(r => !r.success).length;
+    const totalDurationMs = toolExecutionResults.reduce((sum, r) => sum + r.executionTime, 0);
+    
+    // Build byName statistics
+    const byName: Record<string, any> = {};
+    for (const result of toolExecutionResults) {
+      if (!byName[result.name]) {
+        byName[result.name] = {
+          count: 0,
+          success: 0,
+          fail: 0,
+          durationMs: 0,
+          decisions: {
+            accept: 0,
+            reject: 0,
+            modify: 0,
+            auto_accept: 0,
+          },
+        };
+      }
+      byName[result.name].count += 1;
+      byName[result.name].durationMs += result.executionTime;
+      byName[result.name].auto_accept += 1; // OpenAI auto-accepts tool calls
+      if (result.success) {
+        byName[result.name].success += 1;
+      } else {
+        byName[result.name].fail += 1;
+      }
+    }
+    
     // Convert to GeminiResponse format
     const geminiResponse: GeminiResponse = {
       response: content,
@@ -391,16 +423,16 @@ export async function callOpenAI(
         },
         tools: {
           totalCalls: toolCalls.length,
-          totalSuccess: 0, // Will be updated after tool execution
-          totalFail: 0,
-          totalDurationMs: 0,
+          totalSuccess: totalSuccess,
+          totalFail: totalFail,
+          totalDurationMs: totalDurationMs,
           totalDecisions: {
             accept: 0,
             reject: 0,
             modify: 0,
-            auto_accept: toolCalls.length, // Auto-accept for now
+            auto_accept: toolCalls.length,
           },
-          byName: {},
+          byName: byName,
         },
         files: {
           totalLinesAdded: 0,
@@ -775,6 +807,38 @@ export async function callOpenAIStream(
     const estimatedCompletionTokens = Math.ceil(fullResponse.length / 4);
     const estimatedTotalTokens = estimatedPromptTokens + estimatedCompletionTokens;
     
+    // Calculate tool statistics from execution results
+    const totalSuccess = streamToolResults.filter(r => r.success).length;
+    const totalFail = streamToolResults.filter(r => !r.success).length;
+    const totalDurationMs = streamToolResults.reduce((sum, r) => sum + r.executionTime, 0);
+    
+    // Build byName statistics
+    const byName: Record<string, any> = {};
+    for (const result of streamToolResults) {
+      if (!byName[result.name]) {
+        byName[result.name] = {
+          count: 0,
+          success: 0,
+          fail: 0,
+          durationMs: 0,
+          decisions: {
+            accept: 0,
+            reject: 0,
+            modify: 0,
+            auto_accept: 0,
+          },
+        };
+      }
+      byName[result.name].count += 1;
+      byName[result.name].durationMs += result.executionTime;
+      byName[result.name].auto_accept += 1; // OpenAI auto-accepts tool calls
+      if (result.success) {
+        byName[result.name].success += 1;
+      } else {
+        byName[result.name].fail += 1;
+      }
+    }
+    
     // Return GeminiResponse with estimated stats
     return {
       response: fullResponse,
@@ -806,16 +870,16 @@ export async function callOpenAIStream(
         },
         tools: {
           totalCalls: toolCallsReceived.length,
-          totalSuccess: 0, // Unknown in streaming
-          totalFail: 0,
-          totalDurationMs: 0,
+          totalSuccess: totalSuccess,
+          totalFail: totalFail,
+          totalDurationMs: totalDurationMs,
           totalDecisions: {
             accept: 0,
             reject: 0,
             modify: 0,
             auto_accept: toolCallsReceived.length,
           },
-          byName: {},
+          byName: byName,
         },
         files: {
           totalLinesAdded: 0,
