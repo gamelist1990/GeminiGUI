@@ -118,7 +118,7 @@
     "sessionName": "Session Name",
     "commands": {
       "compact": "Summarize conversation",
-      "fixchat": "Improve message for AI",
+      "improve": "Improve prompt (high quality)",
       "init": "Generate Gemini.md"
     },
     "stats": {
@@ -182,7 +182,8 @@
       "compacting": "Summarizing conversation history...",
       "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
       "compactPrompt": "Create a highly detailed and structured summary of the following conversation history so that future AI can understand it perfectly.\n\n# Summary Format\n\n## 📊 Conversation Overview\n- Period: [First message time] to [Last message time]\n- Total Messages: XX (User: XX, AI: XX)\n- Main Topics: [List topics]\n- Conversation Purpose: [What the user is trying to achieve]\n\n## 📝 Chronological Detailed Records\n\nFor each topic or activity, record in the following format:\n\n### [Time] Topic: [Topic Name]\n**User's Statements/Intentions:**\n- [Specific utterances]\n- [What the user was seeking]\n\n**AI's Responses:**\n- [Information provided or actions taken by AI]\n- [Results of responses]\n\n**Status/Progress:**\n- [Task completion status]\n- [Next required actions]\n\n**Important Context:**\n- [Background information to understand from this exchange]\n\n## 🎯 Ongoing Tasks/Activities\n\nIf there are continuing activities, record them:\n- Task Name: [e.g., Shiritori game, code implementation, problem solving]\n- Current State: [How far it has progressed]\n- Next Steps: [What should be done next]\n- Important Constraints: [Game rules, technical constraints, etc.]\n\n## ⚠️ Cautions/Learning Points\n\nThings to be careful about in future conversations:\n- User Preferences: [Prefers concise responses, detailed responses, etc.]\n- Misunderstandings/Corrections: [Points AI misunderstood and their corrections]\n- Communication Style: [Patterns of interaction with user]\n\n## 💡 Important Decisions/Conclusions\n\nThings decided or agreed upon in the conversation:\n- [Specific decision content]\n- [Future policy]\n\n## 📎 Reference Information\n\n- Related Files: [Files or resources mentioned]\n- External Links: [Referenced URLs]\n- Keywords: [Keywords for search or reference]\n\n---\n\n**Summary Creation Guidelines:**\n1. Maintain chronology so conversation flow is clear\n2. Record user intentions contrasted with AI responses\n3. Clearly record status of ongoing activities (especially games/tasks)\n4. Always record misunderstandings or corrections\n5. Include sufficient detail for immediate context understanding in next conversation\n6. Format readably in Markdown\n\nPlease summarize the following conversation history in the above format:",
-      "elapsedTime": "Elapsed time: {elapsedSeconds} seconds"
+      "elapsedTime": "Elapsed time: {elapsedSeconds} seconds",
+      "cancel": "Cancel"
     },
     "compactWarning": {
       "messageCountExceeded": "The message count has exceeded {maxMessagesBeforeCompact} messages.",
@@ -197,15 +198,15 @@
       "initGenerating": "Generating Gemini.md...",
       "initFailed": "❌ Failed to create Gemini.md. AI may not have created the file or there may be tool execution issues.",
       "initFailedWithError": "❌ Error occurred while creating Gemini.md: {error}",
-      "fixchatNoText": "❌ Please provide text to improve with the /fixchat command.\n\nUsage: /fixchat This code needs to be explained",
-      "fixchatProcessing": "AI is improving your message...",
+      "improveNoText": "❌ Please provide text to improve with the /improve command.\n\nUsage: /improve Explain this code\n\nThis command improves your message to be more specific, clear, and high-quality for AI understanding.",
+      "improveProcessing": "AI is improving your prompt...",
       "geminiError": "An error occurred: {error}",
       "toolExecutionError": "⚠️ Tool execution permission error: {message}\n\n🔧 **Solution**:\n• This operation requires tool execution permissions. Change the approval mode to 'auto_edit' or 'yolo' to automatically allow tool permissions.\n\nCurrent approval mode: {approvalMode}\nUpdate the approval mode in Settings if needed.",
       "fileAccessError": "⚠️ **File access error**: {message}\n\n🔧 **Solution**:\n• Operations can only be performed within the current workspace directory (current workspace: `{workspacePath}`).\n• Move the target files to the workspace folder or explicitly specify with prefix #file:... or #folder:... .\n• Use `Documents/PEXData/GeminiGUI/Chatrequest/{workspaceId}` as a temporary file storage.",
       "toolNameError": "⚠️ **Tool name error**: {message}\n\n🔧 **Solution**: AI attempted to use an incorrect tool name.\n\n**Available tools**:\n• `read_file` - Read file contents\n• `web_fetch` - Retrieve web content\n• `glob` - File search\n\n**Common causes**:\n• There may be an issue with AI settings or prompts\n• Please check model and API key settings if necessary\n\nTry the request again, or check the settings.",
       "toolApprovalError": "⚠️ **Tool execution error**: {message}\n\n🔧 **Solution**: Approval mode is set to 'default', restricting tool executions.\n\n**Change to one of these modes:**\n• **auto_edit**: Automatically approve edit tools\n• **yolo**: Automatically approve all tools\n\nPlease update the approval mode in the Settings screen.",
       "compactCommandFailed": "❌ Error occurred while summarizing conversation: {error}",
-      "fixchatCommandFailed": "❌ Failed to improve message: {error}"
+      "improveCommandFailed": "❌ Failed to improve prompt: {error}"
     }
   },
   "settings": {

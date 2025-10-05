@@ -31,6 +31,7 @@ export interface ChatProps {
 export interface ProcessingModalProps {
   message: string;
   elapsedSeconds: number;
+  onCancel?: () => void; // Optional cancel callback
 }
 
 export interface StatsModalProps {
