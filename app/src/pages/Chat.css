@@ -146,7 +146,9 @@
 }
 
 @keyframes timer-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .timer-text {
@@ -235,7 +237,11 @@
 }
 
 .message.system .message-bubble {
-  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-variant) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--surface) 0%,
+    var(--surface-variant) 100%
+  );
   border: 1px solid var(--primary);
   border-left: 4px solid var(--primary);
 }
@@ -435,11 +441,16 @@
 /* Inline code */
 .message.assistant .message-bubble code,
 .message.system .message-bubble code {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.1) 0%,
+    rgba(168, 85, 247, 0.1) 100%
+  );
   color: #c792ea;
   padding: 3px 8px;
   border-radius: 6px;
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', 'Source Code Pro', monospace;
+  font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code",
+    "Droid Sans Mono", "Source Code Pro", monospace;
   font-size: 0.9em;
   border: 1px solid rgba(99, 102, 241, 0.2);
   font-weight: 500;
@@ -688,7 +699,9 @@
 }
 
 @keyframes typing {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
   }
   30% {
@@ -737,7 +750,9 @@
 }
 
 @keyframes waitingDot {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     opacity: 0.3;
     transform: scale(1);
   }
@@ -785,10 +800,12 @@
 }
 
 @keyframes blink {
-  0%, 49% {
+  0%,
+  49% {
     opacity: 1;
   }
-  50%, 100% {
+  50%,
+  100% {
     opacity: 0;
   }
 }
@@ -831,13 +848,23 @@
 
 @keyframes improvedHighlight {
   0% {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3), 0 4px 12px rgba(34, 197, 94, 0.2);
+    background: linear-gradient(
+      135deg,
+      rgba(34, 197, 94, 0.2) 0%,
+      rgba(16, 185, 129, 0.2) 100%
+    );
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3),
+      0 4px 12px rgba(34, 197, 94, 0.2);
     transform: scale(1.02);
   }
   50% {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%);
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2), 0 2px 8px rgba(34, 197, 94, 0.15);
+    background: linear-gradient(
+      135deg,
+      rgba(34, 197, 94, 0.15) 0%,
+      rgba(16, 185, 129, 0.15) 100%
+    );
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2),
+      0 2px 8px rgba(34, 197, 94, 0.15);
   }
   100% {
     background: var(--background);
@@ -907,20 +934,20 @@
 }
 
 .suggestion-item::before {
-  content: '📄'; /* Default file icon */
+  content: "📄"; /* Default file icon */
   font-size: 16px;
 }
 
 .suggestion-item[data-type="folder"]::before {
-  content: '📁'; /* Folder icon */
+  content: "📁"; /* Folder icon */
 }
 
 .suggestion-item[data-type="codebase"]::before {
-  content: '📦'; /* Codebase icon */
+  content: "📦"; /* Codebase icon */
 }
 
 .suggestion-item[data-type="command"]::before {
-  content: '⚡'; /* Command icon */
+  content: "⚡"; /* Command icon */
 }
 
 .suggestion-item:last-child {
@@ -949,7 +976,7 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 13px;
   font-weight: 500;
   margin: 0 2px;
@@ -1378,7 +1405,7 @@
   color: #c792ea;
   padding: 4px 10px;
   border-radius: 6px;
-  font-family: 'SF Mono', 'Monaco', monospace;
+  font-family: "SF Mono", "Monaco", monospace;
   font-size: 0.9em;
   border: 1px solid rgba(99, 102, 241, 0.25);
   font-weight: 500;
@@ -1470,7 +1497,11 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.05) 0%,
+    rgba(168, 85, 247, 0.05) 100%
+  );
   border: 2px solid var(--primary);
   border-radius: var(--radius-md);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
@@ -1507,7 +1538,8 @@
 
 .edit-textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2),
+    inset 0 2px 4px rgba(0, 0, 0, 0.1);
   background-color: var(--surface);
 }
 
@@ -1539,7 +1571,11 @@
 }
 
 .edit-buttons .edit-save {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    var(--primary-hover) 100%
+  );
   color: white;
   border-color: var(--primary);
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
@@ -1576,7 +1612,11 @@
 }
 
 .overview-section {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.1) 0%,
+    rgba(168, 85, 247, 0.1) 100%
+  );
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
 }
@@ -1655,7 +1695,7 @@
 }
 
 .model-header .model-name::before {
-  content: '🤖';
+  content: "🤖";
   font-size: 1.2em;
 }
 
@@ -1862,7 +1902,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .processing-dots {
@@ -1887,7 +1929,9 @@
 }
 
 @keyframes bounce {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     transform: scale(0);
   }
   40% {
@@ -2063,8 +2107,12 @@
   gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: linear-gradient(90deg, rgba(59,130,246,0.06), rgba(99,102,241,0.03));
-  border: 1px solid rgba(59,130,246,0.08);
+  background: linear-gradient(
+    90deg,
+    rgba(59, 130, 246, 0.06),
+    rgba(99, 102, 241, 0.03)
+  );
+  border: 1px solid rgba(59, 130, 246, 0.08);
   color: var(--primary);
   text-decoration: none;
   font-weight: 600;
@@ -2083,9 +2131,10 @@
   white-space: nowrap;
 }
 
-.message-link:hover, .message-link:focus {
+.message-link:hover,
+.message-link:focus {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.08);
 }
 
 /* Export Section for Stats Modal */
@@ -2173,138 +2222,7 @@
 .export-buttons button:nth-child(2):hover:not(:disabled) {
   box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
 }
- / *   T o o l   U s a g e   S t a t i s t i c s   ( O p e n A I )   * / 
- . t o o l - u s a g e - s e c t i o n   { 
-     m a r g i n - t o p :   v a r ( - - s p a c i n g - l g ) ; 
-     p a d d i n g :   v a r ( - - s p a c i n g - m d ) ; 
-     b a c k g r o u n d - c o l o r :   r g b a ( 9 9 ,   1 0 2 ,   2 4 1 ,   0 . 0 5 ) ; 
-     b o r d e r - r a d i u s :   v a r ( - - r a d i u s - m d ) ; 
-     b o r d e r :   1 p x   s o l i d   r g b a ( 9 9 ,   1 0 2 ,   2 4 1 ,   0 . 2 ) ; 
- } 
- 
- . t o o l - u s a g e - t i t l e   { 
-     f o n t - s i z e :   1 4 p x ; 
-     f o n t - w e i g h t :   6 0 0 ; 
-     c o l o r :   v a r ( - - t e x t - p r i m a r y ) ; 
-     m a r g i n :   0   0   v a r ( - - s p a c i n g - m d )   0 ; 
-     d i s p l a y :   f l e x ; 
-     a l i g n - i t e m s :   c e n t e r ; 
-     g a p :   v a r ( - - s p a c i n g - s m ) ; 
- } 
- 
- . t o o l - u s a g e - l i s t   { 
-     d i s p l a y :   f l e x ; 
-     f l e x - d i r e c t i o n :   c o l u m n ; 
-     g a p :   v a r ( - - s p a c i n g - s m ) ; 
-     m a r g i n - b o t t o m :   v a r ( - - s p a c i n g - m d ) ; 
- } 
- 
- . t o o l - u s a g e - i t e m   { 
-     b a c k g r o u n d - c o l o r :   v a r ( - - s u r f a c e ) ; 
-     b o r d e r - r a d i u s :   v a r ( - - r a d i u s - s m ) ; 
-     p a d d i n g :   v a r ( - - s p a c i n g - s m ) ; 
-     b o r d e r - l e f t :   3 p x   s o l i d   v a r ( - - b o r d e r ) ; 
-     t r a n s i t i o n :   a l l   0 . 2 s   e a s e ; 
- } 
- 
- . t o o l - u s a g e - i t e m . s u c c e s s   { 
-     b o r d e r - l e f t - c o l o r :   # 1 0 b 9 8 1 ; 
-     b a c k g r o u n d - c o l o r :   r g b a ( 1 6 ,   1 8 5 ,   1 2 9 ,   0 . 0 5 ) ; 
- } 
- 
- . t o o l - u s a g e - i t e m . f a i l e d   { 
-     b o r d e r - l e f t - c o l o r :   # e f 4 4 4 4 ; 
-     b a c k g r o u n d - c o l o r :   r g b a ( 2 3 9 ,   6 8 ,   6 8 ,   0 . 0 5 ) ; 
- } 
- 
- . t o o l - u s a g e - h e a d e r   { 
-     d i s p l a y :   f l e x ; 
-     a l i g n - i t e m s :   c e n t e r ; 
-     g a p :   v a r ( - - s p a c i n g - s m ) ; 
-     f o n t - s i z e :   1 3 p x ; 
- } 
- 
- . t o o l - u s a g e - i c o n   { 
-     f o n t - w e i g h t :   b o l d ; 
-     f o n t - s i z e :   1 4 p x ; 
- } 
- 
- . t o o l - u s a g e - i t e m . s u c c e s s   . t o o l - u s a g e - i c o n   { 
-     c o l o r :   # 1 0 b 9 8 1 ; 
- } 
- 
- . t o o l - u s a g e - i t e m . f a i l e d   . t o o l - u s a g e - i c o n   { 
-     c o l o r :   # e f 4 4 4 4 ; 
- } 
- 
- . t o o l - u s a g e - n a m e   { 
-     f l e x :   1 ; 
-     f o n t - w e i g h t :   5 0 0 ; 
-     c o l o r :   v a r ( - - t e x t - p r i m a r y ) ; 
-     f o n t - f a m i l y :   ' C o u r i e r   N e w ' ,   m o n o s p a c e ; 
- } 
- 
- . t o o l - u s a g e - t i m e   { 
-     f o n t - s i z e :   1 2 p x ; 
-     c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ; 
-     b a c k g r o u n d - c o l o r :   v a r ( - - b a c k g r o u n d ) ; 
-     p a d d i n g :   2 p x   6 p x ; 
-     b o r d e r - r a d i u s :   v a r ( - - r a d i u s - s m ) ; 
- } 
- 
- . t o o l - u s a g e - r e s u l t   { 
-     m a r g i n - t o p :   v a r ( - - s p a c i n g - s m ) ; 
-     p a d d i n g :   v a r ( - - s p a c i n g - s m ) ; 
-     b a c k g r o u n d - c o l o r :   v a r ( - - b a c k g r o u n d ) ; 
-     b o r d e r - r a d i u s :   v a r ( - - r a d i u s - s m ) ; 
-     f o n t - s i z e :   1 1 p x ; 
-     m a x - h e i g h t :   1 5 0 p x ; 
-     o v e r f l o w - y :   a u t o ; 
- } 
- 
- . t o o l - u s a g e - r e s u l t   p r e   { 
-     m a r g i n :   0 ; 
-     f o n t - f a m i l y :   ' C o u r i e r   N e w ' ,   m o n o s p a c e ; 
-     c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ; 
-     w h i t e - s p a c e :   p r e - w r a p ; 
-     w o r d - w r a p :   b r e a k - w o r d ; 
- } 
- 
- . t o o l - u s a g e - s u m m a r y   { 
-     d i s p l a y :   f l e x ; 
-     g a p :   v a r ( - - s p a c i n g - l g ) ; 
-     p a d d i n g :   v a r ( - - s p a c i n g - s m ) ; 
-     b a c k g r o u n d - c o l o r :   v a r ( - - b a c k g r o u n d ) ; 
-     b o r d e r - r a d i u s :   v a r ( - - r a d i u s - s m ) ; 
-     b o r d e r - t o p :   1 p x   s o l i d   v a r ( - - b o r d e r ) ; 
- } 
- 
- . t o o l - u s a g e - s t a t   { 
-     d i s p l a y :   f l e x ; 
-     a l i g n - i t e m s :   c e n t e r ; 
-     g a p :   v a r ( - - s p a c i n g - x s ) ; 
-     f o n t - s i z e :   1 2 p x ; 
- } 
- 
- . t o o l - u s a g e - s t a t   . s t a t - l a b e l   { 
-     c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ; 
-     f o n t - w e i g h t :   5 0 0 ; 
- } 
- 
- . t o o l - u s a g e - s t a t   . s t a t - v a l u e   { 
-     c o l o r :   v a r ( - - p r i m a r y ) ; 
-     f o n t - w e i g h t :   6 0 0 ; 
- } 
- 
- [ d a t a - t h e m e = " d a r k " ]   . t o o l - u s a g e - s e c t i o n   { 
-     b a c k g r o u n d - c o l o r :   r g b a ( 9 9 ,   1 0 2 ,   2 4 1 ,   0 . 1 ) ; 
-     b o r d e r - c o l o r :   r g b a ( 9 9 ,   1 0 2 ,   2 4 1 ,   0 . 3 ) ; 
- } 
- 
- [ d a t a - t h e m e = " d a r k " ]   . t o o l - u s a g e - i t e m   { 
-     b a c k g r o u n d - c o l o r :   r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 0 5 ) ; 
- }  
- /* Tool Usage Statistics (OpenAI) */
+/* Tool Usage Statistics (OpenAI) */
 .tool-usage-section {
   margin-top: var(--spacing-lg);
   padding: var(--spacing-md);
@@ -2372,7 +2290,7 @@
   flex: 1;
   font-weight: 500;
   color: var(--text-primary);
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
 }
 
 .tool-usage-time {
@@ -2395,7 +2313,7 @@
 
 .tool-usage-result pre {
   margin: 0;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -2436,8 +2354,6 @@
   background-color: rgba(255, 255, 255, 0.05);
 }
 
- / *   T o o l   U s a g e   S t a t i s t i c s   ( O p e n A I )   * /  
- 
 /* Additional Tool Usage Parameters Styles */
 .tool-usage-parameters {
   margin-top: var(--spacing-sm);
@@ -2473,7 +2389,7 @@
 
 .parameter-value {
   color: var(--text-primary);
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   word-break: break-word;
 }
 
@@ -2494,7 +2410,7 @@
 }
 
 .message-content code {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -2512,7 +2428,7 @@
   color: #abb2bf;
   padding: var(--spacing-md);
   border-radius: var(--radius-sm);
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
 }
 
 /* Inline code styling */
@@ -2521,7 +2437,7 @@
   color: var(--primary);
   padding: 2px 6px;
   border-radius: 3px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 0.9em;
 }
 
@@ -2591,4 +2507,106 @@
 .message-content .token.important,
 .message-content .token.variable {
   color: #e06c75 !important;
+}
+
+/* ==================== Streaming Styles ==================== */
+
+/* Streaming message container */
+.streaming-message {
+  animation: fadeIn 0.2s ease-in;
+}
+
+/* Streaming content area */
+.streaming-content {
+  position: relative;
+  min-height: 20px;
+}
+
+/* Blinking cursor for streaming */
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--primary);
+  font-weight: bold;
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Waiting dots animation before first chunk */
+.streaming-waiting {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--spacing-sm) 0;
+}
+
+.waiting-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.waiting-dots span {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--primary);
+  animation: wave 1.4s ease-in-out infinite;
+}
+
+.waiting-dots .dot-1 {
+  animation-delay: 0s;
+}
+
+.waiting-dots .dot-2 {
+  animation-delay: 0.2s;
+}
+
+.waiting-dots .dot-3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes wave {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+/* Smooth fade-in for new content chunks */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Stream loader */
+.stream-loader {
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: var(--spacing-sm);
+}
+
+/* Optimize rendering performance for streaming */
+.streaming-content * {
+  will-change: contents;
 }

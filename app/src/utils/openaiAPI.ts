@@ -636,12 +636,16 @@ export async function callOpenAIStream(
         if (done) break;
         const chunkText = decoder.decode(value, { stream: true });
         buffer += chunkText;
-        // Normalize CRLF and split by newlines
-        const parts = buffer.split(/\r?\n/);
-        buffer = parts.pop() || '';
-        for (const raw of parts) {
-          const trimmed = raw.trim();
-          const result = await processSSELine(trimmed, toolCallsBuilder, toolCallsReceived, (t) => {
+        
+        // Process immediately for better real-time response
+        // Split by newlines but process incrementally
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Process line immediately without blocking
+          const result = await processSSELine(line, toolCallsBuilder, toolCallsReceived, (t) => {
             onChunk({ type: 'text', content: t });
             fullResponse += t;
           });
@@ -709,11 +713,16 @@ export async function callOpenAIStream(
         })),
       });
 
-      // Execute tools
+      // Execute tools with progress notifications
       const executedToolResults: Array<{ name: string; executionTime: number; success: boolean; result?: any; parameters?: any }> = [];
-      for (const toolCall of toolCallsReceived) {
+      for (let i = 0; i < toolCallsReceived.length; i++) {
+        const toolCall = toolCallsReceived[i];
         const toolName = toolCall.name.replace(/^OriginTool_/, '');
-        internalLog(`Executing tool (streaming): ${toolName}`, log);
+        internalLog(`Executing tool (streaming): ${toolName} (${i + 1}/${toolCallsReceived.length})`, log);
+        
+        // Send progress notification to UI
+        onChunk({ type: 'text', content: `\n\n🔧 **Executing tool**: ${toolName}...` });
+        
         const t0 = Date.now();
         let args: any = {};
         try {
@@ -722,9 +731,15 @@ export async function callOpenAIStream(
           const result = await executeModernTool(toolName, args, workspacePath);
           const dt = Date.now() - t0;
           executedToolResults.push({ name: toolName, executionTime: dt, success: result.success, result: result.result, parameters: args });
+          
+          // Send completion notification
+          onChunk({ type: 'text', content: ` ✓ (${dt}ms)\n` });
         } catch (err) {
           const dt = Date.now() - t0;
           executedToolResults.push({ name: toolName, executionTime: dt, success: false, parameters: args });
+          
+          // Send error notification
+          onChunk({ type: 'text', content: ` ✗ Failed (${dt}ms)\n` });
         }
         // Add tool result message
         const last = executedToolResults[executedToolResults.length - 1];
@@ -735,6 +750,9 @@ export async function callOpenAIStream(
         });
       }
       streamToolResults = executedToolResults;
+      
+      // Notify that AI is generating response
+      onChunk({ type: 'text', content: '\n\n💭 **Generating response**...\n\n' });
 
       // Follow-up streaming request for final text
       const followUpRequestBody: OpenAIRequest = {

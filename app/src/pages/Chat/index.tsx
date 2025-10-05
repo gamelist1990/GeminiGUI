@@ -1591,26 +1591,27 @@ export default function Chat({
               </div>
             )}
             {isStreaming && (
-              <div className="message assistant">
+              <div className="message assistant streaming-message">
                 <div className="message-bubble">
                   <div className="message-content streaming-content">
                     {streamingMessage ? (
                       // Show streaming content with Markdown rendering (using shared components)
+                      // Use useMemo or key to prevent unnecessary re-renders
                       <>
-                        <React.Suspense fallback={<div>Loading...</div>}>
+                        <React.Suspense fallback={<div className="stream-loader">Loading...</div>}>
                           <ReactMarkdown components={markdownComponents}>
                             {streamingMessage}
                           </ReactMarkdown>
                         </React.Suspense>
-                        <span className="streaming-cursor">▊</span>
+                        <span className="streaming-cursor blink">▊</span>
                       </>
                     ) : (
                       // Show loading indicator while waiting for first chunk
                       <div className="streaming-waiting">
                         <span className="waiting-dots">
-                          <span>.</span>
-                          <span>.</span>
-                          <span>.</span>
+                          <span className="dot-1">.</span>
+                          <span className="dot-2">.</span>
+                          <span className="dot-3">.</span>
                         </span>
                       </div>
                     )}
