@@ -98,6 +98,9 @@ export default function Chat({
   // Track request start time per session
   const requestStartTimesRef = useRef<Record<string, number>>({});
   const requestIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  
+  // AbortController for cancelling AI requests
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
   const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] =
@@ -211,7 +214,7 @@ export default function Chat({
     // Command suggestions
     if (lastWord.startsWith("/")) {
       const query = lastWord.substring(1).toLowerCase();
-      const commands = ["compact", "fixchat", "init"];
+      const commands = ["compact", "improve", "init"];
       const filtered = commands.filter((cmd) => cmd.startsWith(query));
       setCommandSuggestions(filtered);
       setShowCommandSuggestions(filtered.length > 0);
@@ -310,6 +313,29 @@ export default function Chat({
       setShowCommandSuggestions(false);
       setShowFileSuggestions(false);
     }, 0);
+  };
+
+  // Handle cancellation of AI processing
+  const handleCancelProcessing = () => {
+    console.log('[Chat] Cancelling AI processing...');
+    
+    // Abort the ongoing request if exists
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Clear any pending intervals
+    const allIntervals = Object.values(requestIntervalsRef.current);
+    allIntervals.forEach(interval => {
+      if (interval) clearInterval(interval);
+    });
+    
+    // Reset processing state
+    setShowProcessingModal(false);
+    setProcessingElapsed(0);
+    
+    console.log('[Chat] AI processing cancelled');
   };
 
   const processCommand = async (command: string, args: string) => {
@@ -569,12 +595,12 @@ export default function Chat({
         };
         onSendMessage(currentSessionId, errorMessage);
       }
-    } else if (command === "fixchat") {
+    } else if (command === "improve") {
       if (!args.trim()) {
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: "assistant",
-          content: t("chat.errors.fixchatNoText"),
+          content: t("chat.errors.improveNoText"),
           timestamp: new Date(),
         };
         onSendMessage(currentSessionId, errorMessage);
@@ -582,7 +608,7 @@ export default function Chat({
       }
 
       setShowProcessingModal(true);
-      setProcessingMessage(t("chat.errors.fixchatProcessing"));
+      setProcessingMessage(t("chat.errors.improveProcessing"));
       const startTime = Date.now();
 
       const interval = setInterval(() => {
@@ -590,7 +616,27 @@ export default function Chat({
       }, 1000);
 
       try {
-        const improvementPrompt = `以下のユーザーメッセージを、AIが理解しやすく、より具体的で明確な表現に改善してください。改善後のメッセージのみを返してください。余計な説明や前置きは不要です:\n\n${args}`;
+        // Enhanced prompt for higher quality improvements
+        const improvementPrompt = `あなたはプロンプトエンジニアリングの専門家です。以下のユーザーメッセージを、AIが理解しやすく、より具体的で高品質な表現に改善してください。
+
+# 改善の指針
+1. **明確性**: 曖昧な表現を具体的にする
+2. **構造化**: 複雑な要求は箇条書きやセクション分けする
+3. **文脈**: 必要な背景情報を追加する
+4. **目的**: 何を達成したいのか明確にする
+5. **制約**: 重要な制約条件があれば明示する
+6. **出力形式**: 期待する回答の形式を指定する
+7. **例示**: 必要に応じて具体例を追加する
+
+# 改善例
+悪い例: 「このコード説明して」
+良い例: 「以下のTypeScriptコードについて、機能、使用されているデザインパターン、潜在的な問題点を説明してください。特にエラーハンドリングとパフォーマンスの観点から分析をお願いします。」
+
+# 元のメッセージ
+${args}
+
+# 改善後のメッセージ
+改善したメッセージのみを出力してください。説明や前置きは不要です:`;
 
         const improvedResponse = await callAI(
           improvementPrompt,
@@ -615,12 +661,12 @@ export default function Chat({
         clearInterval(interval);
         setShowProcessingModal(false);
         
-        // Cleanup tools after fixchat
+        // Cleanup tools after improve
         try {
           await cleanupManager.cleanupSession(currentSessionId, workspace.id);
-          console.log(`[Tools] Cleaned up tools after /fixchat`);
+          console.log(`[Tools] Cleaned up tools after /improve`);
         } catch (cleanupError) {
-          console.warn('[Tools] Failed to cleanup after /fixchat:', cleanupError);
+          console.warn('[Tools] Failed to cleanup after /improve:', cleanupError);
         }
 
         // Set the improved message directly to the input field
@@ -680,7 +726,7 @@ export default function Chat({
         const errorMessage: ChatMessage = {
           id: Date.now().toString(),
           role: "assistant",
-          content: t("chat.errors.fixchatCommandFailed").replace(
+          content: t("chat.errors.improveCommandFailed").replace(
             "{error}",
             error instanceof Error ? error.message : "Unknown error"
           ),
@@ -1725,6 +1771,7 @@ export default function Chat({
         <ProcessingModal
           message={processingMessage}
           elapsedSeconds={processingElapsed}
+          onCancel={handleCancelProcessing}
         />
       )}
 

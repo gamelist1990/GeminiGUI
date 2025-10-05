@@ -1,7 +1,7 @@
 import { ProcessingModalProps } from "./types";
 import { t } from "../../utils/i18n";
 
-function ProcessingModal({ message, elapsedSeconds }: ProcessingModalProps) {
+function ProcessingModal({ message, elapsedSeconds, onCancel }: ProcessingModalProps) {
   return (
     <div className="modal-overlay">
       <div className="modal-content processing-modal">
@@ -16,6 +16,15 @@ function ProcessingModal({ message, elapsedSeconds }: ProcessingModalProps) {
             <span className="dot"></span>
           </div>
           <div className="processing-elapsed">{t("chat.processing.elapsedTime").replace("{elapsedSeconds}", elapsedSeconds.toString())}</div>
+          {onCancel && (
+            <button
+              className="cancel-button secondary"
+              onClick={onCancel}
+              style={{ marginTop: "16px" }}
+            >
+              {t("chat.processing.cancel")}
+            </button>
+          )}
         </div>
       </div>
     </div>
