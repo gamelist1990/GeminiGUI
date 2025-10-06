@@ -304,6 +304,7 @@ Begin now by creating your task plan with update_task_progress.`;
       // We need to modify the callAI flow to accept agentCallbacks
       // For now, we'll store them globally and access in executeModernTool
       (window as any).__agentCallbacks = agentCallbacks;
+      (window as any).__agentSessionId = currentSessionId; // Store session ID for Rust commands
 
       const agentOptions: GeminiOptions = {
         approvalMode: 'yolo', // Full autonomy
@@ -370,8 +371,9 @@ Begin now by creating your task plan with update_task_progress.`;
     } finally {
       setIsThinking(false);
       setThinkingMessage("");
-      // Clear agent callbacks if still set
+      // Clear agent callbacks and session ID if still set
       delete (window as any).__agentCallbacks;
+      delete (window as any).__agentSessionId;
     }
   };
 
@@ -767,7 +769,7 @@ ${args}
                   key={message.id}
                   message={message}
                   workspace={workspace}
-                  onResendMessage={onResendMessage}
+                  onResendMessage={message.role === 'user' ? onResendMessage : undefined}
                 />
               ))}
 

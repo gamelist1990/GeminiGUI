@@ -294,30 +294,74 @@ export async function executeModernTool(
 
       // Agent-specific tools
       case 'update_task_progress': {
-        if (agentCallbacks?.onUpdateTaskProgress) {
-          agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
-          result = { 
-            success: true, 
+        // Try Rust command first, fallback to callbacks
+        try {
+          const rustResult = await invoke<{markdown_content: string, timestamp: number}>('agent_update_task_progress', {
+            sessionId: (window as any).__agentSessionId || 'default',
+            markdownContent: parameters.markdown_content
+          });
+          
+          // Also trigger callback if available for UI update
+          if (agentCallbacks?.onUpdateTaskProgress) {
+            agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
+          }
+          
+          result = {
+            success: true,
             message: 'Task progress updated successfully',
-            content: parameters.markdown_content
+            content: parameters.markdown_content,
+            timestamp: rustResult.timestamp
           };
-        } else {
-          throw new Error('Agent callbacks not provided for update_task_progress');
+        } catch (err) {
+          // Fallback to callback-only mode
+          if (agentCallbacks?.onUpdateTaskProgress) {
+            agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
+            result = { 
+              success: true, 
+              message: 'Task progress updated successfully (callback mode)',
+              content: parameters.markdown_content
+            };
+          } else {
+            throw new Error(`Agent tool execution failed: ${err}`);
+          }
         }
         break;
       }
 
       case 'send_user_message': {
-        if (agentCallbacks?.onSendUserMessage) {
-          agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
+        // Try Rust command first, fallback to callbacks
+        try {
+          const rustResult = await invoke<{message: string, message_type: string, timestamp: number}>('agent_send_user_message', {
+            sessionId: (window as any).__agentSessionId || 'default',
+            message: parameters.message,
+            messageType: parameters.message_type || 'info'
+          });
+          
+          // Also trigger callback if available for UI update
+          if (agentCallbacks?.onSendUserMessage) {
+            agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
+          }
+          
           result = { 
             success: true, 
             message: 'User message sent successfully',
             content: parameters.message,
-            type: parameters.message_type
+            type: parameters.message_type,
+            timestamp: rustResult.timestamp
           };
-        } else {
-          throw new Error('Agent callbacks not provided for send_user_message');
+        } catch (err) {
+          // Fallback to callback-only mode
+          if (agentCallbacks?.onSendUserMessage) {
+            agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
+            result = { 
+              success: true, 
+              message: 'User message sent successfully (callback mode)',
+              content: parameters.message,
+              type: parameters.message_type
+            };
+          } else {
+            throw new Error(`Agent tool execution failed: ${err}`);
+          }
         }
         break;
       }
