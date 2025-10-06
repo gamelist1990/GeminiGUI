@@ -1945,6 +1945,123 @@
   font-weight: 500;
 }
 
+/* Pause/Resume Processing Modal Styles */
+.processing-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.pause-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--border-radius);
+  background-color: var(--primary);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.pause-button:hover {
+  background-color: var(--primary-dark);
+}
+
+.resume-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.resume-button.primary {
+  background-color: var(--success);
+  color: white;
+}
+
+.resume-button.primary:hover {
+  background-color: #27ae60;
+}
+
+.resume-button.secondary {
+  background-color: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.resume-button.secondary:hover {
+  background-color: var(--hover);
+}
+
+.processing-paused {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.paused-icon {
+  font-size: 48px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.intervention-section {
+  width: 100%;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.intervention-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.intervention-input {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius);
+  background-color: var(--background);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.intervention-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.intervention-input::placeholder {
+  color: var(--text-secondary);
+}
+
 /* Compact Warning */
 .compact-warning {
   position: fixed;

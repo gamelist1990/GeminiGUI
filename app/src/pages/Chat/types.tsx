@@ -32,6 +32,12 @@ export interface ProcessingModalProps {
   message: string;
   elapsedSeconds: number;
   onCancel?: () => void; // Optional cancel callback
+  onPause?: () => void; // Optional pause callback
+  onResume?: () => void; // Optional resume callback
+  isPaused?: boolean; // Whether the AI is currently paused
+  interventionText?: string; // Current intervention text
+  onInterventionChange?: (text: string) => void; // Callback when intervention text changes
+  onInterventionSubmit?: () => void; // Callback to submit intervention and resume
 }
 
 export interface StatsModalProps {

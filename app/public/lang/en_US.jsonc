@@ -183,7 +183,14 @@
       "compactError": "❌ No conversation to summarize. Please add messages before using the /compact command.",
       "compactPrompt": "Create a highly detailed and structured summary of the following conversation history so that future AI can understand it perfectly.\n\n# Summary Format\n\n## 📊 Conversation Overview\n- Period: [First message time] to [Last message time]\n- Total Messages: XX (User: XX, AI: XX)\n- Main Topics: [List topics]\n- Conversation Purpose: [What the user is trying to achieve]\n\n## 📝 Chronological Detailed Records\n\nFor each topic or activity, record in the following format:\n\n### [Time] Topic: [Topic Name]\n**User's Statements/Intentions:**\n- [Specific utterances]\n- [What the user was seeking]\n\n**AI's Responses:**\n- [Information provided or actions taken by AI]\n- [Results of responses]\n\n**Status/Progress:**\n- [Task completion status]\n- [Next required actions]\n\n**Important Context:**\n- [Background information to understand from this exchange]\n\n## 🎯 Ongoing Tasks/Activities\n\nIf there are continuing activities, record them:\n- Task Name: [e.g., Shiritori game, code implementation, problem solving]\n- Current State: [How far it has progressed]\n- Next Steps: [What should be done next]\n- Important Constraints: [Game rules, technical constraints, etc.]\n\n## ⚠️ Cautions/Learning Points\n\nThings to be careful about in future conversations:\n- User Preferences: [Prefers concise responses, detailed responses, etc.]\n- Misunderstandings/Corrections: [Points AI misunderstood and their corrections]\n- Communication Style: [Patterns of interaction with user]\n\n## 💡 Important Decisions/Conclusions\n\nThings decided or agreed upon in the conversation:\n- [Specific decision content]\n- [Future policy]\n\n## 📎 Reference Information\n\n- Related Files: [Files or resources mentioned]\n- External Links: [Referenced URLs]\n- Keywords: [Keywords for search or reference]\n\n---\n\n**Summary Creation Guidelines:**\n1. Maintain chronology so conversation flow is clear\n2. Record user intentions contrasted with AI responses\n3. Clearly record status of ongoing activities (especially games/tasks)\n4. Always record misunderstandings or corrections\n5. Include sufficient detail for immediate context understanding in next conversation\n6. Format readably in Markdown\n\nPlease summarize the following conversation history in the above format:",
       "elapsedTime": "Elapsed time: {elapsedSeconds} seconds",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "pause": "Pause",
+      "resume": "Resume",
+      "paused": "Paused - AI generation suspended",
+      "intervention": "Intervention",
+      "interventionPlaceholder": "Add additional instructions or context...",
+      "interventionSubmit": "Submit & Resume",
+      "interventionCancel": "Cancel Intervention"
     },
     "compactWarning": {
       "messageCountExceeded": "The message count has exceeded {maxMessagesBeforeCompact} messages.",
