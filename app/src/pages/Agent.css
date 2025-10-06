@@ -55,6 +55,7 @@
   gap: var(--spacing-md);
 }
 
+/* Chat messages inherit styles from Chat.css */
 .agent-main .input-container {
   position: relative;
   display: flex;
@@ -184,48 +185,6 @@
   padding: var(--spacing-xl);
   color: var(--text-secondary);
   font-size: 14px;
-}
-
-/* Agent chat messages with edit capability */
-.agent-message.assistant .message-bubble {
-  cursor: pointer;
-  position: relative;
-}
-
-.agent-message.assistant .message-bubble:hover::after {
-  content: '✏️';
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  font-size: 14px;
-  opacity: 0.6;
-}
-
-.agent-message-editing {
-  background-color: var(--background);
-  padding: var(--spacing-md);
-  border-radius: var(--radius-md);
-  border: 2px solid var(--primary);
-}
-
-.agent-edit-textarea {
-  width: 100%;
-  min-height: 100px;
-  padding: var(--spacing-md);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background-color: var(--surface);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 14px;
-  resize: vertical;
-  margin-bottom: var(--spacing-md);
-}
-
-.agent-edit-buttons {
-  display: flex;
-  gap: var(--spacing-sm);
-  justify-content: flex-end;
 }
 
 .agent-thinking-indicator {

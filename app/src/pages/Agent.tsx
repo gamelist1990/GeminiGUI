@@ -60,8 +60,6 @@ export default function Agent({
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingMessage, setThinkingMessage] = useState("");
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
@@ -713,35 +711,6 @@ ${args}
     }
   };
 
-  // Handle double-click to edit assistant messages
-  const handleMessageDoubleClick = (message: ChatMessage) => {
-    if (message.role === 'assistant' && !isThinking) {
-      setEditingMessageId(message.id);
-      setEditContent(message.content);
-    }
-  };
-
-  const handleSaveEdit = () => {
-    if (!editingMessageId || !editContent.trim()) return;
-
-    const editedMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: editContent.trim(),
-      timestamp: new Date(),
-      editable: true,
-    };
-
-    onResendMessage(editedMessage);
-    setEditingMessageId(null);
-    setEditContent("");
-  };
-
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditContent("");
-  };
-
   return (
     <div className="agent-page">
       <div className="agent-header">
@@ -770,36 +739,12 @@ ${args}
             {session?.messages
               .filter(msg => !msg.hidden)
               .map((message) => (
-                <div
+                <ChatMessageBubble
                   key={message.id}
-                  className="agent-message"
-                  onDoubleClick={() => handleMessageDoubleClick(message)}
-                >
-                  {editingMessageId === message.id ? (
-                    <div className="agent-message-editing">
-                      <textarea
-                        className="agent-edit-textarea"
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        autoFocus
-                      />
-                      <div className="agent-edit-buttons">
-                        <button className="primary" onClick={handleSaveEdit}>
-                          {t("chat.agent.saveEdit")}
-                        </button>
-                        <button className="secondary" onClick={handleCancelEdit}>
-                          {t("chat.agent.cancelEdit")}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <ChatMessageBubble
-                      message={message}
-                      workspace={workspace}
-                      onResendMessage={onResendMessage}
-                    />
-                  )}
-                </div>
+                  message={message}
+                  workspace={workspace}
+                  onResendMessage={onResendMessage}
+                />
               ))}
 
             {isThinking && (
