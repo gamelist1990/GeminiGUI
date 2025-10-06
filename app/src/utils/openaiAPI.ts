@@ -361,6 +361,70 @@ export async function callOpenAI(
       }
     }
     
+    // If tool calls were executed, make a follow-up request to get AI's explanation
+    let finalContent = content;
+    let finalUsage = usage;
+    
+    if (toolCalls.length > 0) {
+      internalLog(`Making follow-up request with ${toolExecutionResults.length} tool results`, log);
+      
+      // Build follow-up messages array with tool results
+      const followUpMessages: OpenAIMessage[] = [...messages];
+      
+      // Add assistant message with tool calls
+      followUpMessages.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCalls,
+      });
+      
+      // Add tool result messages
+      for (let i = 0; i < toolCalls.length; i++) {
+        const toolCall = toolCalls[i];
+        const execResult = toolExecutionResults[i];
+        
+        followUpMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: execResult.success 
+            ? JSON.stringify(execResult.result) 
+            : JSON.stringify({ error: execResult.error || 'Tool execution failed' }),
+        });
+      }
+      
+      // Make follow-up request
+      const followUpRequestBody: OpenAIRequest = {
+        model,
+        messages: followUpMessages,
+        stream: false,
+        temperature: 0.7,
+      };
+      
+      internalLog('Sending follow-up request to OpenAI API...', log);
+      
+      const followUpResponse = await tauriFetch(`${baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(followUpRequestBody),
+      });
+      
+      if (!followUpResponse.ok) {
+        const errorText = await followUpResponse.text();
+        internalLog(`Follow-up request failed (${followUpResponse.status}): ${errorText}`, log);
+        // Continue with tool results only if follow-up fails
+      } else {
+        const followUpData: OpenAIResponse = await followUpResponse.json();
+        const followUpChoice = followUpData.choices[0];
+        finalContent = followUpChoice?.message?.content || '';
+        finalUsage = followUpData.usage || usage;
+        
+        internalLog(`Follow-up request completed, received ${finalContent.length} chars`, log);
+      }
+    }
+    
     // Calculate tool statistics from execution results
     const totalSuccess = toolExecutionResults.filter(r => r.success).length;
     const totalFail = toolExecutionResults.filter(r => !r.success).length;
@@ -395,7 +459,7 @@ export async function callOpenAI(
     
     // Convert to GeminiResponse format
     const geminiResponse: GeminiResponse = {
-      response: content,
+      response: finalContent,
       toolUsage: toolExecutionResults.map(result => ({
         toolName: result.name,
         executionTime: result.executionTime,
@@ -408,14 +472,14 @@ export async function callOpenAI(
         models: {
           [model]: {
             api: {
-              totalRequests: 1,
+              totalRequests: toolCalls.length > 0 ? 2 : 1, // 2 requests if tools were used
               totalErrors: 0,
               totalLatencyMs: 0,
             },
             tokens: {
-              prompt: usage.prompt_tokens,
-              candidates: usage.completion_tokens,
-              total: usage.total_tokens,
+              prompt: finalUsage.prompt_tokens,
+              candidates: finalUsage.completion_tokens,
+              total: finalUsage.total_tokens,
               cached: 0,
               thoughts: 0,
               tool: 0,
@@ -441,28 +505,6 @@ export async function callOpenAI(
         },
       },
     };
-    
-    // If there are tool calls, append them to the response in a structured format
-    if (toolCalls.length > 0) {
-      const toolCallsInfo = toolCalls.map(tc => ({
-        id: tc.id,
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-      }));
-      
-      // Build comprehensive response with tool results
-      let toolResultsText = '';
-      for (const execResult of toolExecutionResults) {
-        if (execResult.success) {
-          toolResultsText += `\n\n[${execResult.name}] Success:\n${JSON.stringify(execResult.result, null, 2)}`;
-        } else {
-          toolResultsText += `\n\n[${execResult.name}] Error: ${execResult.error}`;
-        }
-      }
-      
-      // Append tool call information to response
-      geminiResponse.response = content + toolResultsText + '\n\n[TOOL_CALLS]\n' + JSON.stringify(toolCallsInfo, null, 2);
-    }
     
     return geminiResponse;
   } catch (error) {
