@@ -58,6 +58,7 @@ export default function Chat({
   );
   const [workspaceItems, setWorkspaceItems] = useState<any[]>([]);
   const scanDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
 
   // Cleanup debounce timer on unmount
   useEffect(() => {
@@ -1292,11 +1293,39 @@ ${args}
   };
 
   const handleNewChat = async () => {
-    const success = await onCreateNewSession();
+    const success = await onCreateNewSession(false);
     if (!success) {
       alert(t("chat.sessionLimit"));
     }
+    setShowNewChatDropdown(false);
   };
+
+  const handleNewAgentChat = async () => {
+    const success = await onCreateNewSession(true);
+    if (!success) {
+      alert(t("chat.sessionLimit"));
+    }
+    setShowNewChatDropdown(false);
+  };
+
+  const toggleNewChatDropdown = () => {
+    setShowNewChatDropdown(!showNewChatDropdown);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.new-chat-dropdown')) {
+        setShowNewChatDropdown(false);
+      }
+    };
+
+    if (showNewChatDropdown) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showNewChatDropdown]);
 
   const handleRenameSession = (sessionId: string, currentName: string) => {
     setEditingSessionId(sessionId);
@@ -1376,13 +1405,42 @@ ${args}
         >
           {t("chat.stats.button")}
         </button>
-        <button
-          className="new-chat-button primary"
-          onClick={handleNewChat}
-          disabled={maxSessionsReached}
-        >
-          ✨ {t("chat.newChat")}
-        </button>
+        <div className="new-chat-dropdown">
+          <div className="new-chat-button-group">
+            <button
+              className="new-chat-main-button primary"
+              onClick={handleNewChat}
+              disabled={maxSessionsReached}
+            >
+              ✨ {t("chat.newChat")}
+            </button>
+            <button
+              className="new-chat-dropdown-toggle primary"
+              onClick={toggleNewChatDropdown}
+              disabled={maxSessionsReached}
+            >
+              ^
+            </button>
+          </div>
+          {showNewChatDropdown && !maxSessionsReached && (
+            <div className="new-chat-dropdown-menu">
+              <button className="new-chat-dropdown-item" onClick={handleNewChat}>
+                <div className="new-chat-dropdown-item-icon">💬</div>
+                <div className="new-chat-dropdown-item-content">
+                  <div className="new-chat-dropdown-item-title">{t("chat.newChat")}</div>
+                  <div className="new-chat-dropdown-item-description">Standard chat mode</div>
+                </div>
+              </button>
+              <button className="new-chat-dropdown-item agent" onClick={handleNewAgentChat}>
+                <div className="new-chat-dropdown-item-icon">🤖</div>
+                <div className="new-chat-dropdown-item-content">
+                  <div className="new-chat-dropdown-item-title">{t("chat.newAgentChat")}</div>
+                  <div className="new-chat-dropdown-item-description">{t("chat.agent.description")}</div>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="chat-container">

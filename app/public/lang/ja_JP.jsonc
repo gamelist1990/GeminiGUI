@@ -104,6 +104,7 @@
   "chat": {
     "title": "チャット",
     "newChat": "新しいチャット",
+    "newAgentChat": "Agent モード",
     "sessionLimit": "セッション上限に達しました（最大5件）",
     "tokenUsage": "トークン使用量",
     "currentSession": "現在のセッション",
@@ -197,6 +198,24 @@
       "recommendCompactOrNew": "<strong>/compact</strong> で会話を整理するか、新しいセッションを作成することをお勧めします。"
     },
     "overview": "概要",
+    "agent": {
+      "title": "Agent モード",
+      "description": "AIが自律的にタスクを実行します",
+      "tasks": "タスクリスト",
+      "currentTask": "現在のタスク",
+      "noTasks": "タスクはありません",
+      "taskPending": "待機中",
+      "taskInProgress": "実行中",
+      "taskCompleted": "完了",
+      "taskFailed": "失敗",
+      "thinking": "AIが考えています...",
+      "executing": "タスクを実行中...",
+      "planningTasks": "タスクを計画中...",
+      "updateProgress": "進捗を更新中...",
+      "editMessage": "メッセージを編集 (ダブルクリック)",
+      "saveEdit": "保存",
+      "cancelEdit": "キャンセル"
+    },
     "errors": {
       "geminiPathMissing": "geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。",
       "configLoadFailed": "設定ファイルの読み込みに失敗しました。",

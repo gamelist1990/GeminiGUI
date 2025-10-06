@@ -3,6 +3,7 @@ import "./styles/theme.css";
 import "./App.css";
 const WorkspaceSelection = React.lazy(() => import('./pages/WorkspaceSelection')) as any;
 const Chat = React.lazy(() => import('./pages/Chat')) as any;
+const Agent = React.lazy(() => import('./pages/Agent')) as any;
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage')) as any;
 import { useSettings } from "./hooks/useSettings";
 import { useWorkspaces } from "./hooks/useWorkspaces";
@@ -13,7 +14,7 @@ import { documentDir, join } from "@tauri-apps/api/path";
 import { t } from "./utils/i18n";
 import { cleanupManager } from "./utils/cleanupManager";
 
-type View = 'workspace' | 'chat' | 'settings';
+type View = 'workspace' | 'chat' | 'agent' | 'settings';
 
 function App() {
   const { settings, updateSettings, isLoading } = useSettings();
@@ -90,9 +91,24 @@ function App() {
 
   const handleCloseSettings = () => {
     if (currentWorkspace) {
-      setCurrentView('chat');
+      // Check if current session is agent mode
+      if (currentSession?.isAgentMode) {
+        setCurrentView('agent');
+      } else {
+        setCurrentView('chat');
+      }
     } else {
       setCurrentView('workspace');
+    }
+  };
+
+  const handleCreateNewSession = async (isAgentMode?: boolean) => {
+    await createNewSession(isAgentMode);
+    // Switch to appropriate view based on mode
+    if (isAgentMode) {
+      setCurrentView('agent');
+    } else {
+      setCurrentView('chat');
     }
   };
 
@@ -152,7 +168,35 @@ function App() {
           maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
           globalConfig={globalConfig}
           settings={settings}
-          onCreateNewSession={createNewSession}
+          onCreateNewSession={handleCreateNewSession}
+          onSwitchSession={setCurrentSessionId}
+          onSendMessage={handleSendMessage}
+          onResendMessage={handleResendMessage}
+          onDeleteSession={deleteSession}
+          onRenameSession={renameSession}
+          onCompactSession={handleCompactSession}
+          onBack={handleBackToWorkspace}
+          />
+        </React.Suspense>
+      )}
+
+      {currentView === 'agent' && currentWorkspace && currentSession && (
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading agent…</div></div>}>
+          <Agent
+          workspace={currentWorkspace}
+          session={currentSession}
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          maxSessionsReached={maxSessionsReached}
+          approvalMode={settings.approvalMode}
+          responseMode={settings.responseMode || 'async'}
+          totalTokens={getTotalTokens()}
+          customApiKey={settings.customApiKey}
+          googleCloudProjectId={settings.googleCloudProjectId}
+          maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
+          globalConfig={globalConfig}
+          settings={settings}
+          onCreateNewSession={handleCreateNewSession}
           onSwitchSession={setCurrentSessionId}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}

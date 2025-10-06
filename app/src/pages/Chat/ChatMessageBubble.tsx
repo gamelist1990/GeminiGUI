@@ -276,7 +276,8 @@ function ChatMessageBubble({
   const [editTextareaHeight, setEditTextareaHeight] = useState("auto");
 
   const handleDoubleClick = () => {
-    if (message.role === "user" && onResendMessage) {
+    // Allow editing for user messages and assistant messages that are marked as editable
+    if ((message.role === 'user' || (message.role === 'assistant' && message.editable)) && onResendMessage) {
       setIsEditing(true);
       setEditContent(message.content);
     }

@@ -12,6 +12,16 @@ export interface ChatSession {
   messages: ChatMessage[];
   tokenUsage: number;
   createdAt: Date;
+  isAgentMode?: boolean; // Whether this is an Agent mode session
+}
+
+export interface AgentTask {
+  id: string;
+  description: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'failed';
+  createdAt: Date;
+  updatedAt: Date;
+  result?: string;
 }
 
 export interface GeminiStats {
@@ -80,6 +90,7 @@ export interface ChatMessage {
   stats?: GeminiStats;
   toolUsage?: ToolUsageStats[]; // OpenAI tool usage statistics
   hidden?: boolean;
+  editable?: boolean; // Whether this message can be edited (for assistant messages)
 }
 
 export interface Settings {
