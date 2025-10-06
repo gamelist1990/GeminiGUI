@@ -72,6 +72,11 @@ export default function Agent({
   const [cursorPosition, setCursorPosition] = useState(0);
   const scanDebounceRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Session management state
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionName, setEditingSessionName] = useState("");
+  const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
+  
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
 
   // Load geminiPath from global config
@@ -119,6 +124,21 @@ export default function Agent({
       }
     };
   }, [workspace?.path]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.new-chat-dropdown')) {
+        setShowNewChatDropdown(false);
+      }
+    };
+
+    if (showNewChatDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showNewChatDropdown]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -737,6 +757,53 @@ ${args}
     }
   };
 
+  // Session management functions
+  const handleRenameSession = (sessionId: string, currentName: string) => {
+    setEditingSessionId(sessionId);
+    setEditingSessionName(currentName);
+  };
+
+  const handleSaveRename = (sessionId: string) => {
+    if (editingSessionName.trim()) {
+      _onRenameSession(sessionId, editingSessionName.trim());
+    }
+    setEditingSessionId(null);
+    setEditingSessionName("");
+  };
+
+  const handleCancelRename = () => {
+    setEditingSessionId(null);
+    setEditingSessionName("");
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    if (window.confirm(t("chat.sessionDeleteConfirm"))) {
+      _onDeleteSession(sessionId);
+    }
+  };
+
+  // Handle creating a new agent chat session
+  const handleNewAgentChat = async () => {
+    const success = await _onCreateNewSession(true);
+    if (!success) {
+      alert(t("chat.sessionLimit"));
+    }
+    setShowNewChatDropdown(false);
+  };
+
+  // Handle creating a new regular chat session
+  const handleNewChat = async () => {
+    const success = await _onCreateNewSession(false);
+    if (!success) {
+      alert(t("chat.sessionLimit"));
+    }
+    setShowNewChatDropdown(false);
+  };
+
+  const toggleNewChatDropdown = () => {
+    setShowNewChatDropdown(!showNewChatDropdown);
+  };
+
   return (
     <div className="agent-page">
       <div className="agent-header">
@@ -757,9 +824,114 @@ ${args}
             <span className="stat-value">{totalTokens.toLocaleString()}</span>
           </div>
         </div>
+        <div className="new-chat-dropdown">
+          <div className="new-chat-button-group">
+            <button
+              className="new-chat-main-button primary"
+              onClick={handleNewAgentChat}
+              disabled={_maxSessionsReached}
+            >
+              ✨ {t("chat.newChat")}
+            </button>
+            <button
+              className="new-chat-dropdown-toggle primary"
+              onClick={toggleNewChatDropdown}
+              disabled={_maxSessionsReached}
+              title={t("chat.newChatOptions")}
+            >
+              ▼
+            </button>
+          </div>
+          {showNewChatDropdown && !_maxSessionsReached && (
+            <div className="new-chat-dropdown-menu">
+              <button className="new-chat-dropdown-item" onClick={handleNewChat}>
+                <div className="new-chat-dropdown-item-icon">💬</div>
+                <div className="new-chat-dropdown-item-content">
+                  <div className="new-chat-dropdown-item-title">{t("chat.newChat")}</div>
+                  <div className="new-chat-dropdown-item-description">Standard chat mode</div>
+                </div>
+              </button>
+              <button className="new-chat-dropdown-item agent" onClick={handleNewAgentChat}>
+                <div className="new-chat-dropdown-item-icon">🤖</div>
+                <div className="new-chat-dropdown-item-content">
+                  <div className="new-chat-dropdown-item-title">{t("chat.newAgentChat")}</div>
+                  <div className="new-chat-dropdown-item-description">{t("chat.agent.description")}</div>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="agent-container">
+        <div className="agent-sidebar-sessions">
+          <div className="sessions-header">
+            <h3>{t("chat.sessions")}</h3>
+            <span className="session-count">{_sessions.length}/5</span>
+          </div>
+          <div className="sessions-list">
+            {_sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`session-item ${
+                  session.id === currentSessionId ? "active" : ""
+                }`}
+                onClick={() => _onSwitchSession(session.id)}
+              >
+                <div className="session-info">
+                  {editingSessionId === session.id ? (
+                    <input
+                      type="text"
+                      className="session-name-input"
+                      value={editingSessionName}
+                      onChange={(e) => setEditingSessionName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleSaveRename(session.id);
+                        } else if (e.key === "Escape") {
+                          handleCancelRename();
+                        }
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={() => handleSaveRename(session.id)}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      className="session-name"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        handleRenameSession(session.id, session.name);
+                      }}
+                      title="Double-click to rename"
+                    >
+                      {session.name}
+                    </span>
+                  )}
+                  {isThinking && session.id === currentSessionId && (
+                    <div className="request-timer">
+                      <div className="timer-spinner"></div>
+                      <span className="timer-text">Thinking...</span>
+                    </div>
+                  )}
+                </div>
+                <div className="session-actions">
+                  <button
+                    className="session-action-button delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSession(session.id);
+                    }}
+                    title={t("chat.sessionDelete")}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="agent-main">
           <div className="chat-messages">
             {session?.messages
