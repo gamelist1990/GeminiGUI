@@ -196,192 +196,160 @@ export default function Agent({
     setIsThinking(true);
     setThinkingMessage(t("chat.agent.planningTasks"));
 
+    // Store the task plan message ID so we can update it
+    const taskPlanMessageId = `task-plan-${Date.now()}`;
+
     try {
-      // Step 1: Ask AI to create a task list
-      const planningPrompt = `You are an autonomous AI agent similar to GitHub Copilot Agent. The user has requested: "${userRequest}"
-
-Please create a detailed task list to accomplish this request. Format your response as a markdown checklist with the following format:
-- [ ] Task description
-
-Be specific and break down complex tasks into smaller, actionable steps. Think step by step.
-
-After creating the task list, you will autonomously execute each task one by one until all are complete.`;
-
-      const planningMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: planningPrompt,
-        timestamp: new Date(),
-        hidden: true,
-      };
-      onSendMessage(currentSessionId, planningMessage);
-
-      const planningOptions: GeminiOptions = {
-        approvalMode: 'yolo', // Agent mode requires full autonomy
-        includes: ['codebase'],
-        workspaceId: workspace.id,
-        sessionId: currentSessionId,
-      };
-
-      const planningResponse = await callAI(planningPrompt, workspace.path, planningOptions, settings, globalConfig);
-      
-      // Parse tasks from response
-      const initialTasks = parseTasksFromResponse(planningResponse.response);
-      
-      if (initialTasks.length === 0) {
-        // If no tasks found, create a general task
-        initialTasks.push({
-          id: Date.now().toString(),
-          description: userRequest,
-          status: 'pending',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
-
-      setTasks(initialTasks);
-
-      // Add AI's task planning response as a message
+      // Create initial task plan message that will be updated by AI
       const taskListMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: taskPlanMessageId,
         role: 'assistant',
-        content: `📋 **Task Plan Created:**\n\n${planningResponse.response}`,
+        content: `📋 **Task Plan Created:**\n\nAnalyzing request and creating task plan...`,
         timestamp: new Date(),
         editable: true,
       };
       onSendMessage(currentSessionId, taskListMessage);
 
-      // Step 2: Execute tasks one by one
-      for (let i = 0; i < initialTasks.length; i++) {
-        const task = initialTasks[i];
-        
-        // Update task status to in-progress
-        setTasks(prevTasks => 
-          prevTasks.map(t => 
-            t.id === task.id 
-              ? { ...t, status: 'in-progress' as const, updatedAt: new Date() }
-              : t
-          )
-        );
+      // Build autonomous agent prompt with tool instructions
+      const autonomousPrompt = `You are an autonomous AI agent in Agent Mode. The user has requested:
 
-        setThinkingMessage(t("chat.agent.executing"));
+"${userRequest}"
 
-        // Execute the task
-        const taskPrompt = `Execute the following task autonomously: "${task.description}"
+**Your Mission:**
+Work autonomously to complete this task. You have full authority to:
+1. Create and manage your task plan
+2. Use file operations and other tools as needed
+3. Make decisions without asking for approval
+4. Communicate progress to the user
 
-Context: This is task ${i + 1} of ${initialTasks.length} in the overall plan to: "${userRequest}"
+**Available Tools:**
+You have access to these Agent-specific communication tools:
+- **update_task_progress**: Update your task plan to show current progress. Use markdown checklist format:
+  - [ ] for pending tasks
+  - [x] for completed tasks
+  Include a progress summary at the top.
 
-Previous tasks completed: ${i}
-Remaining tasks: ${initialTasks.length - i - 1}
+- **send_user_message**: Send important updates to the user:
+  - "info" for progress updates
+  - "success" for completion
+  - "warning" for issues
+  - "error" for failures
 
-Please execute this task and provide a detailed report of what you did. Use any tools necessary (file operations, code analysis, etc.) to complete the task.`;
+**Workflow:**
+1. IMMEDIATELY use update_task_progress to create your initial task plan
+2. Execute tasks using available file operation tools
+3. Use update_task_progress frequently to keep the user informed
+4. Use send_user_message for important milestones or issues
+5. When complete, use send_user_message with type "success" to report final results
 
-        const taskExecutionMessage: ChatMessage = {
-          id: (Date.now() + i + 2).toString(),
-          role: 'user',
-          content: taskPrompt,
-          timestamp: new Date(),
-          hidden: true,
-        };
-        onSendMessage(currentSessionId, taskExecutionMessage);
+**Important:**
+- Work independently - don't ask for approval
+- Use tools proactively
+- Update progress frequently
+- Be specific in your updates
 
-        const taskOptions: GeminiOptions = {
-          approvalMode: 'yolo',
-          includes: ['codebase'],
-          workspaceId: workspace.id,
-          sessionId: currentSessionId,
-        };
+Begin now by creating your task plan with update_task_progress.`;
 
-        try {
-          const taskResponse = await callAI(taskPrompt, workspace.path, taskOptions, settings, globalConfig);
-
-          // Update task status to completed
-          setTasks(prevTasks =>
-            prevTasks.map(t =>
-              t.id === task.id
-                ? { 
-                    ...t, 
-                    status: 'completed' as const, 
-                    updatedAt: new Date(),
-                    result: taskResponse.response.substring(0, 200) + (taskResponse.response.length > 200 ? '...' : '')
-                  }
-                : t
-            )
-          );
-
-          // Add task result as a message
-          const resultMessage: ChatMessage = {
-            id: (Date.now() + i + 3).toString(),
-            role: 'assistant',
-            content: `✅ **Task ${i + 1} Completed:** ${task.description}\n\n${taskResponse.response}`,
-            timestamp: new Date(),
-            editable: true,
-            stats: taskResponse.stats,
-          };
-          onSendMessage(currentSessionId, resultMessage);
-
-        } catch (error: any) {
-          console.error(`[Agent] Task ${i + 1} failed:`, error);
-
-          // Update task status to failed
-          setTasks(prevTasks =>
-            prevTasks.map(t =>
-              t.id === task.id
-                ? { 
-                    ...t, 
-                    status: 'failed' as const, 
-                    updatedAt: new Date(),
-                    result: error.message || 'Task execution failed'
-                  }
-                : t
-            )
-          );
-
-          // Add error message
-          const errorMessage: ChatMessage = {
-            id: (Date.now() + i + 3).toString(),
-            role: 'assistant',
-            content: `❌ **Task ${i + 1} Failed:** ${task.description}\n\nError: ${error.message || 'Unknown error'}`,
-            timestamp: new Date(),
-            editable: true,
-          };
-          onSendMessage(currentSessionId, errorMessage);
-        }
-      }
-
-      // Step 3: Final summary
-      setThinkingMessage(t("chat.agent.updateProgress"));
-      const summaryPrompt = `All tasks have been completed. Please provide a brief summary of what was accomplished.
-
-Original request: "${userRequest}"
-Tasks completed: ${initialTasks.length}`;
-
-      const summaryMessage: ChatMessage = {
-        id: (Date.now() + 1000).toString(),
+      // Send the autonomous prompt (hidden from user)
+      const agentMessage: ChatMessage = {
+        id: Date.now().toString(),
         role: 'user',
-        content: summaryPrompt,
+        content: autonomousPrompt,
         timestamp: new Date(),
         hidden: true,
       };
-      onSendMessage(currentSessionId, summaryMessage);
+      onSendMessage(currentSessionId, agentMessage);
 
-      const summaryOptions: GeminiOptions = {
-        approvalMode: 'yolo',
+      // Setup Agent tool callbacks
+      const agentCallbacks = {
+        onUpdateTaskProgress: (markdownContent: string) => {
+          console.log('[Agent] Updating task progress:', markdownContent.substring(0, 100));
+          // Update the existing task plan message
+          const updatedMessage: ChatMessage = {
+            id: taskPlanMessageId,
+            role: 'assistant',
+            content: `📋 **Task Plan:**\n\n${markdownContent}`,
+            timestamp: new Date(),
+            editable: true,
+          };
+          // Use resend to update the existing message
+          onResendMessage(updatedMessage);
+          
+          // Parse and update tasks in the sidebar
+          const parsedTasks = parseTasksFromResponse(markdownContent);
+          if (parsedTasks.length > 0) {
+            setTasks(parsedTasks);
+          }
+        },
+        onSendUserMessage: (message: string, messageType: 'info' | 'success' | 'warning' | 'error') => {
+          console.log('[Agent] Sending user message:', messageType, message.substring(0, 100));
+          const icon = {
+            info: 'ℹ️',
+            success: '✅',
+            warning: '⚠️',
+            error: '❌'
+          }[messageType];
+          
+          const userMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `${icon} ${message}`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, userMessage);
+        }
+      };
+
+      // Pass agentCallbacks through settings/options
+      // We need to modify the callAI flow to accept agentCallbacks
+      // For now, we'll store them globally and access in executeModernTool
+      (window as any).__agentCallbacks = agentCallbacks;
+
+      const agentOptions: GeminiOptions = {
+        approvalMode: 'yolo', // Full autonomy
+        includes: ['codebase'],
+        enabledTools: settings.enabledTools && settings.enabledTools.length > 0 
+          ? [...settings.enabledTools, 'update_task_progress', 'send_user_message']
+          : undefined, // Enable agent tools
         workspaceId: workspace.id,
         sessionId: currentSessionId,
       };
 
-      const summaryResponse = await callAI(summaryPrompt, workspace.path, summaryOptions, settings, globalConfig);
+      // Execute the agent with streaming to see progress
+      const agentResponse = await callAI(
+        autonomousPrompt,
+        workspace.path,
+        agentOptions,
+        {
+          ...settings,
+          ...globalConfig,
+          responseMode: 'stream'
+        },
+        (chunk: any) => {
+          // Update thinking message with chunk
+          if (chunk && chunk.type === 'text' && chunk.content) {
+            const text = String(chunk.content);
+            setThinkingMessage(text.substring(0, 100) + (text.length > 100 ? '...' : ''));
+          }
+        }
+      );
 
-      const finalMessage: ChatMessage = {
-        id: (Date.now() + 1001).toString(),
-        role: 'assistant',
-        content: `🎉 **All Tasks Completed!**\n\n${summaryResponse.response}`,
-        timestamp: new Date(),
-        editable: true,
-        stats: summaryResponse.stats,
-      };
-      onSendMessage(currentSessionId, finalMessage);
+      // Clear agent callbacks
+      delete (window as any).__agentCallbacks;
+
+      // AI should have sent completion message via send_user_message tool
+      // If not, add a fallback success message
+      if (agentResponse.response) {
+        const completionMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `🎉 **Agent Task Complete**\n\n${agentResponse.response}`,
+          timestamp: new Date(),
+          editable: true,
+          stats: agentResponse.stats,
+        };
+        onSendMessage(currentSessionId, completionMessage);
+      }
 
     } catch (error: any) {
       console.error('[Agent] Execution failed:', error);
@@ -396,6 +364,8 @@ Tasks completed: ${initialTasks.length}`;
     } finally {
       setIsThinking(false);
       setThinkingMessage("");
+      // Clear agent callbacks if still set
+      delete (window as any).__agentCallbacks;
     }
   };
 

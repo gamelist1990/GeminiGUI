@@ -7,7 +7,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import { MODERN_TOOLS, ModernToolDefinition, getAllTools } from './modernTools';
+import { getAllTools } from './modernTools';
+import type { ModernToolDefinition } from './modernTools';
 
 /**
  * Tool execution result
@@ -136,6 +137,11 @@ export async function executeModernTool(
   
   // Remove OriginTool_ prefix if present
   const actualToolName = toolName.replace(/^OriginTool_/, '');
+
+  // Get agent callbacks from window if not provided directly
+  if (!agentCallbacks && (window as any).__agentCallbacks) {
+    agentCallbacks = (window as any).__agentCallbacks;
+  }
 
   try {
     console.log(`[ModernTools] Executing ${actualToolName} with params:`, parameters);
