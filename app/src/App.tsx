@@ -102,6 +102,18 @@ function App() {
     }
   };
 
+  // Monitor current session changes and update view accordingly
+  useEffect(() => {
+    if (currentSession && currentWorkspace) {
+      // When session changes (e.g., after deletion), ensure we're on the correct view
+      if (currentView === 'chat' && currentSession.isAgentMode) {
+        setCurrentView('agent');
+      } else if (currentView === 'agent' && !currentSession.isAgentMode) {
+        setCurrentView('chat');
+      }
+    }
+  }, [currentSession?.id, currentSession?.isAgentMode, currentWorkspace, currentView]);
+
   const handleCreateNewSession = async (isAgentMode?: boolean): Promise<boolean> => {
     const success = await createNewSession(isAgentMode);
     // Switch to appropriate view based on mode only when creation succeeded

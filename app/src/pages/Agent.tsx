@@ -769,7 +769,15 @@ ${args}
                   key={message.id}
                   message={message}
                   workspace={workspace}
-                  onResendMessage={message.role === 'user' ? onResendMessage : undefined}
+                  onResendMessage={message.role === 'user' ? async (newMessage) => {
+                    // Call resend to update the session history
+                    onResendMessage(newMessage);
+                    
+                    // If it's a user message, re-execute the agent loop
+                    if (newMessage.role === 'user' && newMessage.content.trim()) {
+                      await executeAgentLoop(newMessage.content.trim());
+                    }
+                  } : undefined}
                 />
               ))}
 
