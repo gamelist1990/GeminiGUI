@@ -4,7 +4,10 @@ import "../pages/Chat.css"; // Reuse chat styles
 import { ChatMessage, AgentTask, Workspace, ChatSession } from "../types";
 import { t } from "../utils/i18n";
 import { callAI, GeminiOptions } from "../utils/geminiCUI";
+import { scanWorkspace, getSuggestions } from "../utils/workspace";
+import * as fsPlugin from "@tauri-apps/plugin-fs";
 import ChatMessageBubble from "./Chat/ChatMessageBubble";
+import { cleanupManager } from "../utils/cleanupManager";
 
 interface AgentProps {
   workspace: Workspace;
@@ -61,16 +64,104 @@ export default function Agent({
   const [editContent, setEditContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Command and file suggestions state
+  const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
+  const [showFileSuggestions, setShowFileSuggestions] = useState(false);
+  const [commandSuggestions, setCommandSuggestions] = useState<string[]>([]);
+  const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
+  const [workspaceSuggestions, setWorkspaceSuggestions] = useState<string[]>([]);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const scanDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const [geminiPath, setGeminiPath] = useState<string | undefined>();
+
+  // Load geminiPath from global config
+  useEffect(() => {
+    const loadGeminiPath = async () => {
+      try {
+        const config = await globalConfig.loadConfig();
+        const loadedGeminiPath = config?.geminiPath;
+        setGeminiPath(loadedGeminiPath);
+      } catch (error) {
+        console.error("Failed to load geminiPath from global config:", error);
+        setGeminiPath(undefined);
+      }
+    };
+
+    if (globalConfig) {
+      loadGeminiPath();
+    }
+  }, [globalConfig]);
+
+  // Scan workspace for files and folders
+  useEffect(() => {
+    if (workspace?.path) {
+      // Debounce the scan to avoid excessive operations
+      if (scanDebounceRef.current) {
+        clearTimeout(scanDebounceRef.current);
+      }
+
+      scanDebounceRef.current = setTimeout(async () => {
+        try {
+          const items = await scanWorkspace(workspace.path);
+          const suggestions = getSuggestions(items);
+          setWorkspaceSuggestions(suggestions);
+        } catch (error) {
+          console.error("[Agent] Workspace scan failed:", error);
+          setWorkspaceSuggestions([]);
+        }
+      }, 500);
+    }
+
+    return () => {
+      if (scanDebounceRef.current) {
+        clearTimeout(scanDebounceRef.current);
+        scanDebounceRef.current = null;
+      }
+    };
+  }, [workspace?.path]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages, tasks]);
 
+  // Update suggestions based on input
+  useEffect(() => {
+    const text = inputValue.substring(0, cursorPosition);
+    const lastWord = text.split(/\s/).pop() || "";
+
+    // Command suggestions
+    if (lastWord.startsWith("/")) {
+      const query = lastWord.substring(1).toLowerCase();
+      const commands = ["compact", "improve", "init"];
+      const filtered = commands.filter((cmd) => cmd.startsWith(query));
+      setCommandSuggestions(filtered);
+      setShowCommandSuggestions(filtered.length > 0);
+      setShowFileSuggestions(false);
+    }
+    // File suggestions
+    else if (lastWord.startsWith("#")) {
+      const query = lastWord.substring(1).toLowerCase();
+      const filtered = workspaceSuggestions.filter((suggestion) => {
+        const suggestionWithoutHash = suggestion.substring(1).toLowerCase();
+        return suggestionWithoutHash.includes(query);
+      });
+      setFileSuggestions(filtered);
+      setShowFileSuggestions(filtered.length > 0);
+      setShowCommandSuggestions(false);
+    } else {
+      setShowCommandSuggestions(false);
+      setShowFileSuggestions(false);
+    }
+  }, [inputValue, cursorPosition, workspaceSuggestions]);
+
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setInputValue(value);
+    setCursorPosition(e.target.selectionStart || 0);
 
     // Auto-resize
     const textarea = e.target;
@@ -310,8 +401,264 @@ Tasks completed: ${initialTasks.length}`;
     }
   };
 
+  // Process commands (similar to regular chat)
+  const processCommand = async (command: string, args: string) => {
+    if (command === "compact") {
+      // Simply delegate to the compact session handler
+      try {
+        await _onCompactSession(currentSessionId);
+        
+        // Cleanup tools after compact
+        try {
+          await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+          console.log(`[Agent] Cleaned up tools after /compact`);
+        } catch (cleanupError) {
+          console.warn('[Agent] Failed to cleanup after /compact:', cleanupError);
+        }
+
+        const successMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: t("chat.errors.compactCompleted"),
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, successMessage);
+      } catch (error) {
+        console.error("[Agent] Error compacting conversation:", error);
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: t("chat.errors.compactCommandFailed").replace(
+            "{error}",
+            error instanceof Error ? error.message : "Unknown error"
+          ),
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
+    } else if (command === "init") {
+      setIsThinking(true);
+      setThinkingMessage(t("chat.errors.initGenerating"));
+
+      try {
+        const geminiFilePath = `${workspace.path}/Gemini.md`;
+        const hadExistingGemini = await fsPlugin.exists(geminiFilePath);
+
+        let existingGeminiContent = "";
+        if (hadExistingGemini) {
+          try {
+            existingGeminiContent = await fsPlugin.readTextFile(geminiFilePath);
+          } catch (readError) {
+            console.warn("[Agent] Failed to read existing Gemini.md:", readError);
+          }
+        }
+
+        const basePrompt = `You are a project analyzer. Analyze this workspace comprehensively and deliver a detailed Gemini.md file.\n\n## Workspace Exploration\n- Use the available tools (for example, glob and read_file) to inspect directories and gather the information you need.\n- Verify important files and configuration by actually reading them.\n\n## Documentation Requirements\nProvide a complete analysis covering:\n\n### Project Overview\n- Project name and purpose\n- Technology stack and frameworks used\n- Target platform and environment\n\n### Architecture & Structure\n- Overall architecture and design patterns\n- Key components and their responsibilities\n- File organization and directory structure\n- Configuration files and their purposes\n\n### Features & Functionality\n- Complete list of implemented features\n- Available APIs and their usage\n- User interface components and workflows\n- Data models and storage solutions\n\n### Technical Details\n- Build system and deployment process\n- Dependencies and external libraries\n- Development tools and scripts\n- Security considerations and authentication\n\n### Code Quality & Standards\n- Coding conventions and style guidelines\n- Testing approach and coverage\n- Documentation standards\n- Performance considerations and optimisations\n\n### Development Workflow\n- Setup and installation instructions\n- Development environment requirements\n- Build and run commands\n- Contribution guidelines\n\n## Output Expectations\n- Return the full Gemini.md content in Markdown.\n- Ensure the result can replace the Gemini.md file entirely.\n- Highlight anything the next developer or AI assistant must know to work effectively.`;
+
+        const normalizedExistingContent = existingGeminiContent
+          .replace(/\r/g, "")
+          .trim();
+        let initPrompt = "";
+
+        if (hadExistingGemini) {
+          initPrompt = `${basePrompt}\n\nAn existing Gemini.md file is already present. Review the current content enclosed between <current_gemini_md> markers, then update it to reflect the latest project state. Preserve useful insights, expand missing sections, and correct any outdated information. Produce a full replacement for Gemini.md.\n\n<current_gemini_md>\n${normalizedExistingContent || "(The file is currently empty.)"}\n</current_gemini_md>`;
+        } else {
+          initPrompt = `${basePrompt}\n\nNo Gemini.md file exists yet. Explore the workspace with the available tools and create a comprehensive Gemini.md from scratch.`;
+        }
+
+        const initResponse = await callAI(
+          initPrompt,
+          workspace.path,
+          {
+            approvalMode: "yolo",
+            model: "gemini-2.5-flash",
+            customApiKey: _customApiKey,
+            includeDirectories: ["."],
+            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+            workspaceId: workspace.id,
+            sessionId: currentSessionId,
+          },
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: "async",
+            googleCloudProjectId: _googleCloudProjectId,
+            geminiPath: geminiPath,
+          }
+        );
+
+        setIsThinking(false);
+        
+        // Cleanup tools after init
+        try {
+          await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+          console.log(`[Agent] Cleaned up tools after /init`);
+        } catch (cleanupError) {
+          console.warn('[Agent] Failed to cleanup after /init:', cleanupError);
+        }
+
+        const fileExists = await fsPlugin.exists(geminiFilePath);
+        const fileStats = initResponse.stats?.files;
+        const hasFileChanges = fileStats
+          ? fileStats.totalLinesAdded > 0 || fileStats.totalLinesRemoved > 0
+          : false;
+
+        if (fileExists && hasFileChanges) {
+          const successMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: "system",
+            content: hadExistingGemini
+              ? `✅ Gemini.mdを更新しました。#file:Gemini.md`
+              : `✅ Gemini.mdが正常に作成されました。#file:Gemini.md`,
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, successMessage);
+        } else {
+          const errorMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: "assistant",
+            content: t("chat.errors.initFailed"),
+            timestamp: new Date(),
+          };
+          onSendMessage(currentSessionId, errorMessage);
+        }
+      } catch (error) {
+        setIsThinking(false);
+        console.error("[Agent] Error creating Gemini.md:", error);
+
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: t("chat.errors.initFailedWithError").replace(
+            "{error}",
+            error instanceof Error ? error.message : "Unknown error"
+          ),
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
+    } else if (command === "improve") {
+      if (!args.trim()) {
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: t("chat.errors.improveNoText"),
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+        return;
+      }
+
+      setIsThinking(true);
+      setThinkingMessage(t("chat.errors.improveProcessing"));
+
+      try {
+        const improvementPrompt = `あなたはプロンプトエンジニアリングの専門家です。以下のユーザーメッセージを、AIが理解しやすく、より具体的で高品質な表現に改善してください。
+
+# 改善の指針
+1. **明確性**: 曖昧な表現を具体的にする
+2. **構造化**: 複雑な要求は箇条書きやセクション分けする
+3. **文脈**: 必要な背景情報を追加する
+4. **目的**: 何を達成したいのか明確にする
+5. **制約**: 重要な制約条件があれば明示する
+6. **出力形式**: 期待する回答の形式を指定する
+7. **例示**: 必要に応じて具体例を追加する
+
+# 改善例
+悪い例: 「このコード説明して」
+良い例: 「以下のTypeScriptコードについて、機能、使用されているデザインパターン、潜在的な問題点を説明してください。特にエラーハンドリングとパフォーマンスの観点から分析をお願いします。」
+
+# 元のメッセージ
+${args}
+
+# 改善後のメッセージ
+改善したメッセージのみを出力してください。説明や前置きは不要です:`;
+
+        const improvedResponse = await callAI(
+          improvementPrompt,
+          workspace.path,
+          {
+            approvalMode: "yolo",
+            model: "gemini-2.5-flash",
+            customApiKey: _customApiKey,
+            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+            workspaceId: workspace.id,
+            sessionId: currentSessionId,
+          },
+          {
+            enableOpenAI: settings.enableOpenAI,
+            openAIApiKey: settings.openAIApiKey,
+            openAIBaseURL: settings.openAIBaseURL,
+            openAIModel: settings.openAIModel,
+            responseMode: "async",
+            googleCloudProjectId: _googleCloudProjectId,
+            geminiPath: geminiPath,
+          }
+        );
+
+        setIsThinking(false);
+        
+        // Cleanup tools after improve
+        try {
+          await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+          console.log(`[Agent] Cleaned up tools after /improve`);
+        } catch (cleanupError) {
+          console.warn('[Agent] Failed to cleanup after /improve:', cleanupError);
+        }
+
+        const improvedText = improvedResponse.response.trim();
+        setInputValue(improvedText);
+
+        // Focus and adjust textarea height
+        setTimeout(() => {
+          if (textareaRef.current) {
+            const textarea = textareaRef.current;
+            textarea.focus();
+            textarea.style.height = "auto";
+            const scrollHeight = textarea.scrollHeight;
+            textarea.style.height = `${Math.min(scrollHeight, 200)}px`;
+            textarea.setSelectionRange(improvedText.length, improvedText.length);
+          }
+        }, 100);
+      } catch (error) {
+        setIsThinking(false);
+        console.error("[Agent] Error improving message:", error);
+
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: t("chat.errors.improveCommandFailed").replace(
+            "{error}",
+            error instanceof Error ? error.message : "Unknown error"
+          ),
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, errorMessage);
+      }
+    }
+  };
+
   const handleSendMessage = () => {
     if (!inputValue.trim() || isThinking) return;
+
+    // Check if it's a command
+    const trimmedInput = inputValue.trim();
+    if (trimmedInput.startsWith("/")) {
+      const parts = trimmedInput.substring(1).split(" ");
+      const command = parts[0];
+      const args = parts.slice(1).join(" ");
+
+      processCommand(command, args);
+      setInputValue("");
+
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -337,6 +684,32 @@ Tasks completed: ${initialTasks.length}`;
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = (suggestion: string, type: "command" | "file") => {
+    if (!textareaRef.current) return;
+
+    const text = inputValue.substring(0, cursorPosition);
+    const lastWordStart = text.lastIndexOf(type === "command" ? "/" : "#");
+
+    if (lastWordStart !== -1) {
+      const before = inputValue.substring(0, lastWordStart);
+      const after = inputValue.substring(cursorPosition);
+      const newValue =
+        before + (type === "command" ? "/" : "#") + suggestion + " " + after;
+
+      setInputValue(newValue);
+      setShowCommandSuggestions(false);
+      setShowFileSuggestions(false);
+
+      // Set cursor position after the inserted suggestion
+      setTimeout(() => {
+        const newCursorPos = lastWordStart + suggestion.length + 2; // +2 for prefix and space
+        textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos);
+        textareaRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -440,6 +813,32 @@ Tasks completed: ${initialTasks.length}`;
           </div>
 
           <div className="input-container">
+            {(showCommandSuggestions || showFileSuggestions) && (
+              <div className="suggestions-popup">
+                {showCommandSuggestions &&
+                  commandSuggestions.map((cmd) => (
+                    <div
+                      key={cmd}
+                      className="suggestion-item"
+                      data-type="command"
+                      onClick={() => handleSelectSuggestion(cmd, "command")}
+                    >
+                      /{cmd}
+                    </div>
+                  ))}
+                {showFileSuggestions &&
+                  fileSuggestions.map((file) => (
+                    <div
+                      key={file}
+                      className="suggestion-item"
+                      data-type={file === "codebase" ? "codebase" : "file"}
+                      onClick={() => handleSelectSuggestion(file, "file")}
+                    >
+                      {file}
+                    </div>
+                  ))}
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               className="chat-input"
