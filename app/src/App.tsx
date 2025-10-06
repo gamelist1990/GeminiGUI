@@ -102,14 +102,17 @@ function App() {
     }
   };
 
-  const handleCreateNewSession = async (isAgentMode?: boolean) => {
-    await createNewSession(isAgentMode);
-    // Switch to appropriate view based on mode
-    if (isAgentMode) {
-      setCurrentView('agent');
-    } else {
-      setCurrentView('chat');
+  const handleCreateNewSession = async (isAgentMode?: boolean): Promise<boolean> => {
+    const success = await createNewSession(isAgentMode);
+    // Switch to appropriate view based on mode only when creation succeeded
+    if (success) {
+      if (isAgentMode) {
+        setCurrentView('agent');
+      } else {
+        setCurrentView('chat');
+      }
     }
+    return success;
   };
 
   const handleSendMessage = (sessionId: string, message: ChatMessage) => {
@@ -123,6 +126,18 @@ function App() {
   const handleCompactSession = async (sessionId: string) => {
     // Compact the session by keeping only system messages
     await compactSession(sessionId);
+  };
+
+  const handleSwitchSession = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    
+    // Check if the selected session is agent mode and switch view accordingly
+    const selectedSession = sessions.find(s => s.id === sessionId);
+    if (selectedSession?.isAgentMode) {
+      setCurrentView('agent');
+    } else {
+      setCurrentView('chat');
+    }
   };
 
   if (isLoading || !globalConfig) {
@@ -169,7 +184,7 @@ function App() {
           globalConfig={globalConfig}
           settings={settings}
           onCreateNewSession={handleCreateNewSession}
-          onSwitchSession={setCurrentSessionId}
+          onSwitchSession={handleSwitchSession}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
           onDeleteSession={deleteSession}
@@ -197,7 +212,7 @@ function App() {
           globalConfig={globalConfig}
           settings={settings}
           onCreateNewSession={handleCreateNewSession}
-          onSwitchSession={setCurrentSessionId}
+          onSwitchSession={handleSwitchSession}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
           onDeleteSession={deleteSession}

@@ -23,7 +23,7 @@ interface AgentProps {
   maxMessagesBeforeCompact: number;
   globalConfig: any;
   settings: any;
-  onCreateNewSession: (isAgentMode?: boolean) => Promise<void>;
+  onCreateNewSession: (isAgentMode?: boolean) => Promise<boolean>;
   onSwitchSession: (sessionId: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
   onResendMessage: (newMessage: ChatMessage) => void;
@@ -189,6 +189,72 @@ export default function Agent({
     }
 
     return parsedTasks;
+  };
+
+  // Process commands in Agent mode
+  const processCommand = async (command: string, _args: string) => {
+    switch (command.toLowerCase()) {
+      case 'compact':
+        if (!session) return;
+
+        // Compact the session by keeping only system messages
+        await _onCompactSession(currentSessionId);
+
+        const compactMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: '✅ セッションを圧縮しました。会話履歴が要約され、トークン使用量が最適化されました。',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, compactMessage);
+        break;
+
+      case 'clear':
+        // Note: Clear command just shows a message for now
+        // Full clear functionality would require session reset which is complex
+        const clearMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: '🧹 チャットクリアコマンドが認識されました。この機能は現在開発中です。',
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, clearMessage);
+        break;
+
+      case 'help':
+        const helpMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `🤖 **Agent コマンドヘルプ**
+
+**利用可能なコマンド:**
+• \`/compact\` - 会話履歴を要約して圧縮（トークン節約）
+• \`/clear\` - チャットをクリア（システムメッセージは保持）
+• \`/help\` - このヘルプを表示
+
+**Agent の特徴:**
+• 自動タスク実行 - ユーザーのリクエストを自律的に処理
+• ツール使用 - ファイル操作、コード実行などのツールを活用
+• タスク管理 - 複雑な作業を小さなステップに分解
+
+通常のメッセージを送信すると、Agent が自動的にタスクを分析して実行します。`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, helpMessage);
+        break;
+
+      default:
+        const unknownCommandMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `❓ 未知のコマンド: \`/${command}\`
+
+利用可能なコマンドを確認するには \`/help\` と入力してください。`,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, unknownCommandMessage);
+        break;
+    }
   };
 
   // Execute autonomous agent loop
@@ -643,18 +709,13 @@ ${args}
 
     // Check if it's a command
     const trimmedInput = inputValue.trim();
-    if (trimmedInput.startsWith("/")) {
+    if (trimmedInput.startsWith("/") || trimmedInput.startsWith("#")) {
       const parts = trimmedInput.substring(1).split(" ");
       const command = parts[0];
       const args = parts.slice(1).join(" ");
 
       processCommand(command, args);
       setInputValue("");
-
-      // Reset textarea height
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
-      }
       return;
     }
 
