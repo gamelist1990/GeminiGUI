@@ -308,9 +308,15 @@ Begin now by creating your task plan with update_task_progress.`;
       const agentOptions: GeminiOptions = {
         approvalMode: 'yolo', // Full autonomy
         includes: ['codebase'],
-        enabledTools: settings.enabledTools && settings.enabledTools.length > 0 
-          ? [...settings.enabledTools, 'update_task_progress', 'send_user_message']
-          : undefined, // Enable agent tools
+        enabledTools: [
+          // Always enable Agent tools
+          'update_task_progress', 
+          'send_user_message',
+          // Add user-configured tools if any
+          ...(settings.enabledTools && settings.enabledTools.length > 0 
+            ? settings.enabledTools 
+            : [])
+        ],
         workspaceId: workspace.id,
         sessionId: currentSessionId,
       };
@@ -711,8 +717,10 @@ ${args}
     if (lastWordStart !== -1) {
       const before = inputValue.substring(0, lastWordStart);
       const after = inputValue.substring(cursorPosition);
-      const newValue =
-        before + (type === "command" ? "/" : "#") + suggestion + " " + after;
+      
+      // For commands, add the / prefix. For files, suggestion already has # prefix
+      const completeSuggestion = type === "command" ? `/${suggestion}` : suggestion;
+      const newValue = before + completeSuggestion + " " + after;
 
       setInputValue(newValue);
       setShowCommandSuggestions(false);
@@ -720,7 +728,7 @@ ${args}
 
       // Set cursor position after the inserted suggestion
       setTimeout(() => {
-        const newCursorPos = lastWordStart + suggestion.length + 2; // +2 for prefix and space
+        const newCursorPos = lastWordStart + completeSuggestion.length + 1; // +1 for space
         textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos);
         textareaRef.current?.focus();
       }, 0);
