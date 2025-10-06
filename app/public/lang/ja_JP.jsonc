@@ -104,6 +104,7 @@
   "chat": {
     "title": "チャット",
     "newChat": "新しいチャット",
+    "newChatOptions": "その他のオプション",
     "newAgentChat": "Agent モード",
     "sessionLimit": "セッション上限に達しました（最大5件）",
     "tokenUsage": "トークン使用量",

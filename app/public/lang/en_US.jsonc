@@ -105,6 +105,7 @@
   "chat": {
     "title": "Chat",
     "newChat": "New Chat",
+    "newChatOptions": "More options",
     "newAgentChat": "Agent Mode",
     "sessionLimit": "Session limit reached (max 5)",
     "tokenUsage": "Token Usage",

@@ -24,6 +24,52 @@ export interface ModernToolDefinition {
 }
 
 /**
+ * Agent-Specific Tools
+ * Tools that are only available in Agent mode for autonomous operation
+ */
+export const AGENT_TOOLS: ModernToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'update_task_progress',
+      description: 'Update the task plan message with current progress. Use this to show users what you are working on and what has been completed. The updated message will replace the original task plan in the UI.',
+      parameters: {
+        type: 'object',
+        properties: {
+          markdown_content: {
+            type: 'string',
+            description: 'Updated task plan in markdown format with checkboxes. Use - [ ] for pending tasks, - [x] for completed tasks. Include progress summary at the top.'
+          }
+        },
+        required: ['markdown_content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_user_message',
+      description: 'Send a message to the user to provide updates, ask questions, or report completion. This creates a visible message in the chat that the user can see.',
+      parameters: {
+        type: 'object',
+        properties: {
+          message: {
+            type: 'string',
+            description: 'Message to send to the user. Use clear, concise language. Can include markdown formatting.'
+          },
+          message_type: {
+            type: 'string',
+            description: 'Type of message: "info" for general updates, "success" for completion, "warning" for issues, "error" for failures',
+            enum: ['info', 'success', 'warning', 'error']
+          }
+        },
+        required: ['message', 'message_type']
+      }
+    }
+  }
+];
+
+/**
  * File Operations Tools
  */
 export const FILE_OPERATION_TOOLS: ModernToolDefinition[] = [
@@ -295,7 +341,7 @@ export const FETCH_TOOLS: ModernToolDefinition[] = [
 ];
 
 /**
- * All available modern tools
+ * All available modern tools (excluding agent-specific tools)
  */
 export const MODERN_TOOLS: ModernToolDefinition[] = [
   ...FILE_OPERATION_TOOLS,
@@ -308,6 +354,16 @@ export const MODERN_TOOLS: ModernToolDefinition[] = [
 ];
 
 /**
+ * Get all tools including agent-specific tools
+ */
+export function getAllTools(includeAgentTools: boolean = false): ModernToolDefinition[] {
+  if (includeAgentTools) {
+    return [...MODERN_TOOLS, ...AGENT_TOOLS];
+  }
+  return MODERN_TOOLS;
+}
+
+/**
  * Tool categories for UI organization
  */
 export const TOOL_CATEGORIES = {
@@ -317,7 +373,8 @@ export const TOOL_CATEGORIES = {
   COMMAND: 'Command Execution',
   FILE_CHECK: 'File Validation',
   DIFF: 'Diff & Patches',
-  FETCH: 'Network & Web'
+  FETCH: 'Network & Web',
+  AGENT: 'Agent Communication'
 } as const;
 
 /**
@@ -339,6 +396,8 @@ export function getToolsByCategory(category: keyof typeof TOOL_CATEGORIES): Mode
       return DIFF_TOOLS;
     case 'FETCH':
       return FETCH_TOOLS;
+    case 'AGENT':
+      return AGENT_TOOLS;
     default:
       return [];
   }
@@ -347,6 +406,7 @@ export function getToolsByCategory(category: keyof typeof TOOL_CATEGORIES): Mode
 /**
  * Get all tool names
  */
-export function getAllToolNames(): string[] {
-  return MODERN_TOOLS.map(tool => tool.function.name);
+export function getAllToolNames(includeAgentTools: boolean = false): string[] {
+  const tools = getAllTools(includeAgentTools);
+  return tools.map(tool => tool.function.name);
 }

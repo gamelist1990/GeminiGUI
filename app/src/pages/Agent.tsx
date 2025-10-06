@@ -720,6 +720,15 @@ ${args}
       e.preventDefault();
       handleSendMessage();
     }
+    // Handle suggestion selection with Enter/Tab
+    if ((e.key === 'Enter' || e.key === 'Tab') && (showCommandSuggestions || showFileSuggestions)) {
+      e.preventDefault();
+      const suggestions = showCommandSuggestions ? commandSuggestions : fileSuggestions;
+      if (suggestions.length > 0) {
+        const suggestion = showCommandSuggestions ? suggestions[0] : fileSuggestions[0];
+        handleSelectSuggestion(suggestion, showCommandSuggestions ? "command" : "file");
+      }
+    }
   };
 
   // Handle suggestion selection
