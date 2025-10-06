@@ -162,22 +162,64 @@ export async function executeModernTool(
     switch (actualToolName) {
       case 'read_file': {
         const filePath = resolvePath(parameters.path);
-        const content = await invoke<string>('tool_read_file', { path: filePath });
-        result = { content, path: filePath, size: content.length };
+        try {
+          const content = await invoke<string>('tool_read_file', { path: filePath });
+          result = { 
+            content, 
+            path: filePath, 
+            size: content.length,
+            success: true,
+            message: `File successfully read from ${filePath} (${content.length} bytes)`
+          };
+        } catch (readError) {
+          const errorMsg = String(readError);
+          let helpfulMessage = `Failed to read file from ${filePath}. `;
+          
+          if (errorMsg.includes('not found') || errorMsg.includes('No such file')) {
+            helpfulMessage += 'File does not exist - verify the path is correct or create it first using write_file tool.';
+          } else if (errorMsg.includes('permission') || errorMsg.includes('Access is denied')) {
+            helpfulMessage += 'Permission denied - check if the file is readable.';
+          } else if (errorMsg.includes('workspace')) {
+            helpfulMessage += `Path must be within workspace: ${workspacePath}`;
+          } else {
+            helpfulMessage += `Error: ${errorMsg}`;
+          }
+          
+          throw new Error(helpfulMessage);
+        }
         break;
       }
 
       case 'write_file': {
         const filePath = resolvePath(parameters.path);
-        await invoke('tool_write_file', { 
-          path: filePath, 
-          content: parameters.content 
-        });
-        result = { 
-          path: filePath, 
-          bytes_written: parameters.content.length,
-          success: true 
-        };
+        try {
+          await invoke('tool_write_file', { 
+            path: filePath, 
+            content: parameters.content 
+          });
+          result = { 
+            path: filePath, 
+            bytes_written: parameters.content.length,
+            success: true,
+            message: `File successfully written to ${filePath} (${parameters.content.length} bytes)`
+          };
+        } catch (writeError) {
+          // Provide detailed error feedback for write failures
+          const errorMsg = String(writeError);
+          let helpfulMessage = `Failed to write file to ${filePath}. `;
+          
+          if (errorMsg.includes('permission') || errorMsg.includes('Access is denied')) {
+            helpfulMessage += 'Permission denied - check if the directory is writable or if the file is locked by another process.';
+          } else if (errorMsg.includes('not found') || errorMsg.includes('No such file')) {
+            helpfulMessage += 'Directory does not exist - try creating the parent directory first using create_directory tool.';
+          } else if (errorMsg.includes('workspace')) {
+            helpfulMessage += `Path must be within workspace: ${workspacePath}`;
+          } else {
+            helpfulMessage += `Error: ${errorMsg}`;
+          }
+          
+          throw new Error(helpfulMessage);
+        }
         break;
       }
 
@@ -193,8 +235,39 @@ export async function executeModernTool(
 
       case 'create_directory': {
         const dirPath = resolvePath(parameters.path);
-        await invoke('tool_create_directory', { path: dirPath });
-        result = { path: dirPath, created: true };
+        try {
+          await invoke('tool_create_directory', { path: dirPath });
+          result = { 
+            path: dirPath, 
+            created: true,
+            success: true,
+            message: `Directory successfully created at ${dirPath}`
+          };
+        } catch (createError) {
+          const errorMsg = String(createError);
+          let helpfulMessage = `Failed to create directory at ${dirPath}. `;
+          
+          if (errorMsg.includes('permission') || errorMsg.includes('Access is denied')) {
+            helpfulMessage += 'Permission denied - check if parent directory is writable.';
+          } else if (errorMsg.includes('exists')) {
+            helpfulMessage += 'Directory already exists - you can proceed to write files there.';
+            // Return success if directory already exists
+            result = { 
+              path: dirPath, 
+              created: false, 
+              already_exists: true,
+              success: true,
+              message: `Directory already exists at ${dirPath}`
+            };
+            break;
+          } else if (errorMsg.includes('workspace')) {
+            helpfulMessage += `Path must be within workspace: ${workspacePath}`;
+          } else {
+            helpfulMessage += `Error: ${errorMsg}`;
+          }
+          
+          throw new Error(helpfulMessage);
+        }
         break;
       }
 
@@ -486,11 +559,17 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[], incl
     '2. 各ツールの説明とパラメータスキーマに従って正確に呼び出してください',
     '3. すべてのパスはワークスペースルートからの相対パスまたは絶対パスです',
     '4. ツールは Tauri の安全な環境で実行されます',
+    '5. **複数のツールを同時に呼び出すことができます** - 効率を上げるため、関連する操作は一度に実行してください',
+    '6. **ツールの実行結果を必ず確認してください** - success フィールドで成功/失敗を判断し、失敗時は別の方法を試してください',
+    '7. **エラーが発生した場合は代替手段を検討してください** - 例: ディレクトリが存在しない場合はまず create_directory を実行',
     '',
     '1. When users ask you to perform file operations (create, edit, read, delete), USE THESE TOOLS',
     '2. Follow the exact parameter format specified in each tool\'s schema',
     '3. All paths are relative to workspace root or absolute paths',
     '4. Tools are executed in a secure Tauri environment',
+    '5. **YOU CAN CALL MULTIPLE TOOLS AT ONCE** - For efficiency, execute related operations together',
+    '6. **ALWAYS CHECK TOOL EXECUTION RESULTS** - Use the success field to determine if operations succeeded, and try alternatives on failure',
+    '7. **HANDLE ERRORS GRACEFULLY** - Example: If directory doesn\'t exist, create it first with create_directory',
     '',
   ];
   
@@ -501,6 +580,10 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[], incl
     instructions.push('- Use send_user_message tool to communicate with users');
     instructions.push('- Work independently and make decisions without asking for approval');
     instructions.push('- Use tools proactively to accomplish tasks');
+    instructions.push('- **EFFICIENCY: Call multiple tools at once when possible** (e.g., update_task_progress + write_file)');
+    instructions.push('- **ERROR HANDLING: If a tool fails, check the error message and try a different approach**');
+    instructions.push('- **VERIFY SUCCESS: Always check tool results before proceeding to the next step**');
+    instructions.push('- **CONTINUATION: Each response counts - make maximum progress by using multiple tools together**');
     instructions.push('');
   }
   

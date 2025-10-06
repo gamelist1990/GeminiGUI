@@ -101,6 +101,7 @@ export interface Settings {
   responseMode: 'async' | 'stream'; // Response processing mode
   customApiKey?: string;
   maxMessagesBeforeCompact: number;
+  maxContinuations?: number; // Maximum continuation attempts for agent mode (default: 15)
   geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
   googleCloudProjectId?: string; // Google Cloud Project ID
   geminiPath?: string; // Path to gemini.ps1 script detected from npm -g

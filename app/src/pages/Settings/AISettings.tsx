@@ -188,6 +188,28 @@ export const AISettings: React.FC<AISettingsProps> = ({ settings, onUpdateSettin
           <p className="setting-description">{t('settings.cleanupReason')}</p>
         </div>
       </div>
+
+      {/* Agent Max Continuations */}
+      <div className="setting-card">
+        <div className="card-header">
+          <h3>{t('settings.maxContinuations')}</h3>
+        </div>
+        <div className="card-content">
+          <div className="input-with-suffix">
+            <input 
+              type="number" 
+              value={settings.maxContinuations || 15} 
+              onChange={(e) => onUpdateSettings({ maxContinuations: parseInt(e.target.value) || 15 })}
+              min="5"
+              max="30"
+              className="setting-input-number"
+            />
+            <span className="input-suffix">{t('settings.attempts')}</span>
+          </div>
+          <p className="setting-description">{t('settings.maxContinuationsDescription')}</p>
+          <p className="setting-description highlight">{t('settings.maxContinuationsNote')}</p>
+        </div>
+      </div>
     </div>
   );
 };
