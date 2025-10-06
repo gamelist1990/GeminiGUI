@@ -111,15 +111,20 @@ const tracker = new ToolExecutionTracker();
  * Get enabled tools based on user settings
  */
 export function getEnabledModernTools(enabledToolNames?: string[], includeAgentTools: boolean = false): ModernToolDefinition[] {
-  const allTools = getAllTools(includeAgentTools);
+  const normalizedEnabledNames = enabledToolNames?.map(name => name.replace(/^OriginTool_/, ''));
+  const hasAgentTools = normalizedEnabledNames?.some(name =>
+    name === 'update_task_progress' || name === 'send_user_message'
+  );
+
+  const effectiveIncludeAgentTools = includeAgentTools || Boolean(hasAgentTools);
+  const allTools = getAllTools(effectiveIncludeAgentTools);
   
-  if (!enabledToolNames || enabledToolNames.length === 0) {
+  if (!normalizedEnabledNames || normalizedEnabledNames.length === 0) {
     return allTools;
   }
 
   return allTools.filter(tool => 
-    enabledToolNames.includes(tool.function.name) ||
-    enabledToolNames.includes(`OriginTool_${tool.function.name}`)
+    normalizedEnabledNames.includes(tool.function.name)
   );
 }
 

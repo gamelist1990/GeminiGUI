@@ -1,0 +1,87 @@
+{
+  "id": "d4bdaa7b-c75b-468a-8eb9-771845f8c448",
+  "name": "Agent 2",
+  "messages": [
+    {
+      "id": "1759740585149",
+      "role": "user",
+      "content": "ディレクトリ構造を教えて下さい",
+      "timestamp": "2025-10-06T08:49:45.149Z",
+      "tokenUsage": 4
+    },
+    {
+      "id": "task-plan-1759740585150",
+      "role": "assistant",
+      "content": "📋 **Task Plan Created:**\n\nAnalyzing request and creating task plan...",
+      "timestamp": "2025-10-06T08:49:45.150Z",
+      "editable": true
+    },
+    {
+      "id": "1759740585151",
+      "role": "user",
+      "content": "You are an autonomous AI agent in Agent Mode. The user has requested:\n\n\"ディレクトリ構造を教えて下さい\"\n\n**Your Mission:**\nWork autonomously to complete this task. You have full authority to:\n1. Create and manage your task plan\n2. Use file operations and other tools as needed\n3. Make decisions without asking for approval\n4. Communicate progress to the user\n\n**Available Tools:**\nYou have access to these Agent-specific communication tools:\n- **update_task_progress**: Update your task plan to show current progress. Use markdown checklist format:\n  - [ ] for pending tasks\n  - [x] for completed tasks\n  Include a progress summary at the top.\n\n- **send_user_message**: Send important updates to the user:\n  - \"info\" for progress updates\n  - \"success\" for completion\n  - \"warning\" for issues\n  - \"error\" for failures\n\n**Workflow:**\n1. IMMEDIATELY use update_task_progress to create your initial task plan\n2. Execute tasks using available file operation tools\n3. Use update_task_progress frequently to keep the user informed\n4. Use send_user_message for important milestones or issues\n5. When complete, use send_user_message with type \"success\" to report final results\n\n**Important:**\n- Work independently - don't ask for approval\n- Use tools proactively\n- Update progress frequently\n- Be specific in your updates\n\nBegin now by creating your task plan with update_task_progress.",
+      "timestamp": "2025-10-06T08:49:45.151Z",
+      "hidden": true
+    },
+    {
+      "id": "1759740605814",
+      "role": "assistant",
+      "content": "🎉 **Agent Task Complete**\n\n[update_task_progress]\n- Progress summary: ディレクトリ構造を取得して表示します。\n- タスク:\n  - [ ] 作業計画作成\n  - [ ] ワークスペースのディレクトリ一覧取得\n  - [ ] ディレクトリ構造の生成\n  - [ ] 結果の提示\n  - [ ] 完了報告",
+      "timestamp": "2025-10-06T08:50:05.814Z",
+      "editable": true,
+      "stats": {
+        "models": {
+          "vscode-lm-proxy": {
+            "api": {
+              "totalRequests": 1,
+              "totalErrors": 0,
+              "totalLatencyMs": 20662
+            },
+            "tokens": {
+              "prompt": 341,
+              "candidates": 40,
+              "total": 381,
+              "cached": 0,
+              "thoughts": 0,
+              "tool": 0
+            }
+          }
+        },
+        "tools": {
+          "totalCalls": 1,
+          "totalSuccess": 1,
+          "totalFail": 0,
+          "totalDurationMs": 10,
+          "totalDecisions": {
+            "accept": 0,
+            "reject": 0,
+            "modify": 0,
+            "auto_accept": 1
+          },
+          "byName": {
+            "list_directory": {
+              "count": 1,
+              "success": 1,
+              "fail": 0,
+              "durationMs": 10,
+              "decisions": {
+                "accept": 0,
+                "reject": 0,
+                "modify": 0,
+                "auto_accept": 0
+              },
+              "auto_accept": null
+            }
+          }
+        },
+        "files": {
+          "totalLinesAdded": 0,
+          "totalLinesRemoved": 0
+        }
+      }
+    }
+  ],
+  "tokenUsage": 410,
+  "createdAt": "2025-10-06T08:49:35.679Z",
+  "isAgentMode": true
+}

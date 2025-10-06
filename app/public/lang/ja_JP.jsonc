@@ -215,7 +215,11 @@
       "updateProgress": "進捗を更新中...",
       "editMessage": "メッセージを編集 (ダブルクリック)",
       "saveEdit": "保存",
-      "cancelEdit": "キャンセル"
+      "cancelEdit": "キャンセル",
+      "openAIRequired": "OpenAI未設定",
+      "openAIWarning": "⚠️ **警告: OpenAIが有効になっていません**\n\nAgentモードはOpenAIのFunction Calling APIで最適に動作します。Geminiサポートは限定的で、ツールが正常に実行されない場合があります。\n\n**推奨アクション:**\n1. 設定 → AI設定へ移動\n2. OpenAI統合を有効化\n3. OpenAI APIキーを設定\n\nGeminiで続行します（ツール実行が失敗する可能性があります）...",
+      "toolExecutionFailed": "ツール実行エラー",
+      "modelNotSupported": "使用中のAIモデルがツール実行をサポートしていない可能性があります。OpenAI公式APIの使用を推奨します。"
     },
     "errors": {
       "geminiPathMissing": "geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。",

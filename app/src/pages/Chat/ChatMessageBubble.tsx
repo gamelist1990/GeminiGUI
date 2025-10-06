@@ -160,14 +160,14 @@ function renderMessageWithTags(
 
   // helper: linkify plain text into nodes with clickable anchors
   const urlRegex = /(https?:\/\/[^\s<>\"'`]+)/g;
-  const linkifyText = (text: string) => {
+  const linkifyText = (text: string, keyPrefix: string = '') => {
     const nodes: React.ReactElement[] = [];
     let lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = urlRegex.exec(text)) !== null) {
       if (m.index > lastIndex) {
         nodes.push(
-          <span key={`t-${lastIndex}`}>
+          <span key={`${keyPrefix}t-${lastIndex}`}>
             {text.substring(lastIndex, m.index)}
           </span>
         );
@@ -175,7 +175,7 @@ function renderMessageWithTags(
       const url = m[0];
       nodes.push(
         <a
-          key={`u-${m.index}`}
+          key={`${keyPrefix}u-${m.index}`}
           href={url}
           className="message-link"
           onClick={(e) => {
@@ -192,7 +192,7 @@ function renderMessageWithTags(
     }
     if (lastIndex < text.length) {
       nodes.push(
-        <span key={`t-last-${lastIndex}`}>{text.substring(lastIndex)}</span>
+        <span key={`${keyPrefix}t-last-${lastIndex}`}>{text.substring(lastIndex)}</span>
       );
     }
     return nodes;
@@ -215,7 +215,7 @@ function renderMessageWithTags(
     if (tagStartIndex > lastIndex) {
       const textBefore = content.substring(lastIndex, tagStartIndex);
       // linkify text before tag
-      parts.push(...linkifyText(textBefore));
+      parts.push(...linkifyText(textBefore, `pre-${tagStartIndex}-`));
     }
 
     // Add the tag with appropriate styling
@@ -259,7 +259,7 @@ function renderMessageWithTags(
   // Add remaining text
   if (lastIndex < content.length) {
     const remaining = content.substring(lastIndex);
-    parts.push(...linkifyText(remaining));
+    parts.push(...linkifyText(remaining, `rem-${lastIndex}-`));
   }
 
   return <p>{parts}</p>;

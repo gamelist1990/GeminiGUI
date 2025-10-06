@@ -215,7 +215,11 @@
       "updateProgress": "Updating progress...",
       "editMessage": "Edit message (double-click)",
       "saveEdit": "Save",
-      "cancelEdit": "Cancel"
+      "cancelEdit": "Cancel",
+      "openAIRequired": "OpenAI Not Configured",
+      "openAIWarning": "⚠️ **Warning: OpenAI Not Enabled**\n\nAgent mode works best with OpenAI's Function Calling API. Gemini support is limited and tools may not execute properly.\n\n**Recommended Action:**\n1. Go to Settings → AI Settings\n2. Enable OpenAI integration\n3. Configure your OpenAI API key\n\nContinuing with Gemini (tool execution may fail)...",
+      "toolExecutionFailed": "Tool Execution Error",
+      "modelNotSupported": "The AI model you're using may not support tool execution. We recommend using OpenAI's official API."
     },
     "errors": {
       "geminiPathMissing": "geminiPath is not configured. Run setup to configure the gemini.ps1 path.",
