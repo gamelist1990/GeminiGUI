@@ -2753,6 +2753,38 @@
   }
 }
 
+/* Streaming controls */
+.streaming-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.stream-pause-button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius);
+  background-color: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.stream-pause-button:hover {
+  background-color: var(--hover);
+  border-color: var(--primary);
+}
+
+.stream-pause-button:active {
+  transform: scale(0.95);
+}
+
 /* Stream loader */
 .stream-loader {
   color: var(--text-secondary);

@@ -364,6 +364,7 @@ export default function Chat({
     // Store current streaming content
     if (isStreaming) {
       setPausedStreamContent(streamingMessage);
+      setIsStreaming(false); // Stop streaming display
       console.log('[Chat] Stored streaming content:', streamingMessage.substring(0, 100) + '...');
     }
     
@@ -373,7 +374,12 @@ export default function Chat({
       abortControllerRef.current = null;
     }
     
-    // Keep the processing modal open but show pause state
+    // Show processing modal for intervention if not already shown
+    if (!showProcessingModal) {
+      setShowProcessingModal(true);
+      setProcessingMessage(t("chat.processing.paused"));
+    }
+    
     console.log('[Chat] AI processing paused');
   };
   
@@ -1899,6 +1905,17 @@ ${args}
                       </div>
                     )}
                   </div>
+                  {!isPaused && (
+                    <div className="streaming-controls">
+                      <button
+                        className="stream-pause-button secondary"
+                        onClick={handlePauseProcessing}
+                        title={t("chat.processing.pause")}
+                      >
+                        ⏸️
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
