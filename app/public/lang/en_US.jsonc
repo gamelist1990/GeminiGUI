@@ -105,6 +105,7 @@
   "chat": {
     "title": "Chat",
     "newChat": "New Chat",
+    "newAgentChat": "Agent Mode",
     "sessionLimit": "Session limit reached (max 5)",
     "tokenUsage": "Token Usage",
     "currentSession": "Current Session",
@@ -197,6 +198,24 @@
       "recommendCompactOrNew": "It is recommended to organize the conversation with <strong>/compact</strong> or create a new session."
     },
     "overview": "Overview",
+    "agent": {
+      "title": "Agent Mode",
+      "description": "AI will autonomously execute tasks",
+      "tasks": "Task List",
+      "currentTask": "Current Task",
+      "noTasks": "No tasks",
+      "taskPending": "Pending",
+      "taskInProgress": "In Progress",
+      "taskCompleted": "Completed",
+      "taskFailed": "Failed",
+      "thinking": "AI is thinking...",
+      "executing": "Executing task...",
+      "planningTasks": "Planning tasks...",
+      "updateProgress": "Updating progress...",
+      "editMessage": "Edit message (double-click)",
+      "saveEdit": "Save",
+      "cancelEdit": "Cancel"
+    },
     "errors": {
       "geminiPathMissing": "geminiPath is not configured. Run setup to configure the gemini.ps1 path.",
       "configLoadFailed": "Failed to load configuration file.",

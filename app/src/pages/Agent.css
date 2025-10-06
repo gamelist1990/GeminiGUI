@@ -1,0 +1,327 @@
+/* Agent Mode Specific Styles */
+.agent-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--background);
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: var(--spacing-md);
+}
+
+.agent-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.agent-badge {
+  padding: 4px 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.agent-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.agent-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-sidebar {
+  width: 300px;
+  background-color: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-tasks-header {
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+}
+
+.agent-tasks-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.agent-tasks-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+}
+
+.agent-task-item {
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.agent-task-item:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.agent-task-item.pending {
+  border-left: 3px solid #6c757d;
+}
+
+.agent-task-item.in-progress {
+  border-left: 3px solid var(--primary);
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.05) 0%, var(--background) 100%);
+}
+
+.agent-task-item.completed {
+  border-left: 3px solid #28a745;
+  opacity: 0.7;
+}
+
+.agent-task-item.failed {
+  border-left: 3px solid #dc3545;
+}
+
+.agent-task-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: var(--spacing-xs);
+}
+
+.agent-task-status.pending {
+  background-color: #6c757d;
+  color: white;
+}
+
+.agent-task-status.in-progress {
+  background-color: var(--primary);
+  color: white;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.agent-task-status.completed {
+  background-color: #28a745;
+  color: white;
+}
+
+.agent-task-status.failed {
+  background-color: #dc3545;
+  color: white;
+}
+
+.agent-task-description {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  line-height: 1.4;
+}
+
+.agent-task-result {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+  padding-top: var(--spacing-xs);
+  border-top: 1px solid var(--border);
+}
+
+.agent-task-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+.agent-no-tasks {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Agent chat messages with edit capability */
+.agent-message.assistant .message-bubble {
+  cursor: pointer;
+  position: relative;
+}
+
+.agent-message.assistant .message-bubble:hover::after {
+  content: '✏️';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.agent-message-editing {
+  background-color: var(--background);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--primary);
+}
+
+.agent-edit-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: var(--spacing-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  margin-bottom: var(--spacing-md);
+}
+
+.agent-edit-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+.agent-thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-radius: var(--radius-md);
+  margin: var(--spacing-md);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.agent-thinking-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(102, 126, 234, 0.3);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* New Chat Button with dropdown */
+.new-chat-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.new-chat-button-group {
+  display: flex;
+  gap: 0;
+}
+
+.new-chat-main-button {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.new-chat-dropdown-toggle {
+  padding: 8px 10px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  min-width: auto;
+}
+
+.new-chat-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.new-chat-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.new-chat-dropdown-item:hover {
+  background-color: var(--background);
+}
+
+.new-chat-dropdown-item.agent {
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+}
+
+.new-chat-dropdown-item.agent:hover {
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+}
+
+.new-chat-dropdown-item-icon {
+  font-size: 18px;
+}
+
+.new-chat-dropdown-item-content {
+  flex: 1;
+}
+
+.new-chat-dropdown-item-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.new-chat-dropdown-item-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

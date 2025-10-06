@@ -69,17 +69,22 @@ export function useChatSessions(workspaceId?: string) {
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  const createNewSession = async (): Promise<boolean> => {
+  const createNewSession = async (isAgentMode: boolean = false): Promise<boolean> => {
     if (sessions.length >= MAX_SESSIONS || !workspaceId || !config) {
       return false; // Cannot create more sessions
     }
     
+    const sessionName = isAgentMode 
+      ? `Agent ${sessions.length + 1}`
+      : `Session ${sessions.length + 1}`;
+    
     const newSession: ChatSession = {
       id: uuidv4(),
-      name: `Session ${sessions.length + 1}`,
+      name: sessionName,
       messages: [],
       tokenUsage: 0,
       createdAt: new Date(),
+      isAgentMode,
     };
     
     const updated = [...sessions, newSession];
