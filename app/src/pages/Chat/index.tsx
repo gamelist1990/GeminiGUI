@@ -1418,8 +1418,9 @@ ${args}
               className="new-chat-dropdown-toggle primary"
               onClick={toggleNewChatDropdown}
               disabled={maxSessionsReached}
+              title={t("chat.newChatOptions")}
             >
-              ^
+              ▼
             </button>
           </div>
           {showNewChatDropdown && !maxSessionsReached && (

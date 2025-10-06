@@ -7,7 +7,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import { MODERN_TOOLS, ModernToolDefinition } from './modernTools';
+import { getAllTools } from './modernTools';
+import type { ModernToolDefinition } from './modernTools';
 
 /**
  * Tool execution result
@@ -18,6 +19,14 @@ export interface ToolExecutionResult {
   error?: string;
   executionTime?: number;
   toolName?: string;
+}
+
+/**
+ * Agent tool callbacks for UI updates
+ */
+export interface AgentToolCallbacks {
+  onUpdateTaskProgress?: (markdownContent: string) => void;
+  onSendUserMessage?: (message: string, messageType: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 /**
@@ -101,14 +110,21 @@ const tracker = new ToolExecutionTracker();
 /**
  * Get enabled tools based on user settings
  */
-export function getEnabledModernTools(enabledToolNames?: string[]): ModernToolDefinition[] {
-  if (!enabledToolNames || enabledToolNames.length === 0) {
-    return MODERN_TOOLS;
+export function getEnabledModernTools(enabledToolNames?: string[], includeAgentTools: boolean = false): ModernToolDefinition[] {
+  const normalizedEnabledNames = enabledToolNames?.map(name => name.replace(/^OriginTool_/, ''));
+  const hasAgentTools = normalizedEnabledNames?.some(name =>
+    name === 'update_task_progress' || name === 'send_user_message'
+  );
+
+  const effectiveIncludeAgentTools = includeAgentTools || Boolean(hasAgentTools);
+  const allTools = getAllTools(effectiveIncludeAgentTools);
+  
+  if (!normalizedEnabledNames || normalizedEnabledNames.length === 0) {
+    return allTools;
   }
 
-  return MODERN_TOOLS.filter(tool => 
-    enabledToolNames.includes(tool.function.name) ||
-    enabledToolNames.includes(`OriginTool_${tool.function.name}`)
+  return allTools.filter(tool => 
+    normalizedEnabledNames.includes(tool.function.name)
   );
 }
 
@@ -119,12 +135,18 @@ export function getEnabledModernTools(enabledToolNames?: string[]): ModernToolDe
 export async function executeModernTool(
   toolName: string,
   parameters: Record<string, any>,
-  workspacePath: string
+  workspacePath: string,
+  agentCallbacks?: AgentToolCallbacks
 ): Promise<ToolExecutionResult> {
   const startTime = Date.now();
   
   // Remove OriginTool_ prefix if present
   const actualToolName = toolName.replace(/^OriginTool_/, '');
+
+  // Get agent callbacks from window if not provided directly
+  if (!agentCallbacks && (window as any).__agentCallbacks) {
+    agentCallbacks = (window as any).__agentCallbacks;
+  }
 
   try {
     console.log(`[ModernTools] Executing ${actualToolName} with params:`, parameters);
@@ -145,22 +167,64 @@ export async function executeModernTool(
     switch (actualToolName) {
       case 'read_file': {
         const filePath = resolvePath(parameters.path);
-        const content = await invoke<string>('tool_read_file', { path: filePath });
-        result = { content, path: filePath, size: content.length };
+        try {
+          const content = await invoke<string>('tool_read_file', { path: filePath });
+          result = { 
+            content, 
+            path: filePath, 
+            size: content.length,
+            success: true,
+            message: `File successfully read from ${filePath} (${content.length} bytes)`
+          };
+        } catch (readError) {
+          const errorMsg = String(readError);
+          let helpfulMessage = `Failed to read file from ${filePath}. `;
+          
+          if (errorMsg.includes('not found') || errorMsg.includes('No such file')) {
+            helpfulMessage += 'File does not exist - verify the path is correct or create it first using write_file tool.';
+          } else if (errorMsg.includes('permission') || errorMsg.includes('Access is denied')) {
+            helpfulMessage += 'Permission denied - check if the file is readable.';
+          } else if (errorMsg.includes('workspace')) {
+            helpfulMessage += `Path must be within workspace: ${workspacePath}`;
+          } else {
+            helpfulMessage += `Error: ${errorMsg}`;
+          }
+          
+          throw new Error(helpfulMessage);
+        }
         break;
       }
 
       case 'write_file': {
         const filePath = resolvePath(parameters.path);
-        await invoke('tool_write_file', { 
-          path: filePath, 
-          content: parameters.content 
-        });
-        result = { 
-          path: filePath, 
-          bytes_written: parameters.content.length,
-          success: true 
-        };
+        try {
+          await invoke('tool_write_file', { 
+            path: filePath, 
+            content: parameters.content 
+          });
+          result = { 
+            path: filePath, 
+            bytes_written: parameters.content.length,
+            success: true,
+            message: `File successfully written to ${filePath} (${parameters.content.length} bytes)`
+          };
+        } catch (writeError) {
+          // Provide detailed error feedback for write failures
+          const errorMsg = String(writeError);
+          let helpfulMessage = `Failed to write file to ${filePath}. `;
+          
+          if (errorMsg.includes('permission') || errorMsg.includes('Access is denied')) {
+            helpfulMessage += 'Permission denied - check if the directory is writable or if the file is locked by another process.';
+          } else if (errorMsg.includes('not found') || errorMsg.includes('No such file')) {
+            helpfulMessage += 'Directory does not exist - try creating the parent directory first using create_directory tool.';
+          } else if (errorMsg.includes('workspace')) {
+            helpfulMessage += `Path must be within workspace: ${workspacePath}`;
+          } else {
+            helpfulMessage += `Error: ${errorMsg}`;
+          }
+          
+          throw new Error(helpfulMessage);
+        }
         break;
       }
 
@@ -176,8 +240,39 @@ export async function executeModernTool(
 
       case 'create_directory': {
         const dirPath = resolvePath(parameters.path);
-        await invoke('tool_create_directory', { path: dirPath });
-        result = { path: dirPath, created: true };
+        try {
+          await invoke('tool_create_directory', { path: dirPath });
+          result = { 
+            path: dirPath, 
+            created: true,
+            success: true,
+            message: `Directory successfully created at ${dirPath}`
+          };
+        } catch (createError) {
+          const errorMsg = String(createError);
+          let helpfulMessage = `Failed to create directory at ${dirPath}. `;
+          
+          if (errorMsg.includes('permission') || errorMsg.includes('Access is denied')) {
+            helpfulMessage += 'Permission denied - check if parent directory is writable.';
+          } else if (errorMsg.includes('exists')) {
+            helpfulMessage += 'Directory already exists - you can proceed to write files there.';
+            // Return success if directory already exists
+            result = { 
+              path: dirPath, 
+              created: false, 
+              already_exists: true,
+              success: true,
+              message: `Directory already exists at ${dirPath}`
+            };
+            break;
+          } else if (errorMsg.includes('workspace')) {
+            helpfulMessage += `Path must be within workspace: ${workspacePath}`;
+          } else {
+            helpfulMessage += `Error: ${errorMsg}`;
+          }
+          
+          throw new Error(helpfulMessage);
+        }
         break;
       }
 
@@ -275,6 +370,80 @@ export async function executeModernTool(
         break;
       }
 
+      // Agent-specific tools
+      case 'update_task_progress': {
+        // Try Rust command first, fallback to callbacks
+        try {
+          const rustResult = await invoke<{markdown_content: string, timestamp: number}>('agent_update_task_progress', {
+            sessionId: (window as any).__agentSessionId || 'default',
+            markdownContent: parameters.markdown_content
+          });
+          
+          // Also trigger callback if available for UI update
+          if (agentCallbacks?.onUpdateTaskProgress) {
+            agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
+          }
+          
+          result = {
+            success: true,
+            message: 'Task progress updated successfully',
+            content: parameters.markdown_content,
+            timestamp: rustResult.timestamp
+          };
+        } catch (err) {
+          // Fallback to callback-only mode
+          if (agentCallbacks?.onUpdateTaskProgress) {
+            agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
+            result = { 
+              success: true, 
+              message: 'Task progress updated successfully (callback mode)',
+              content: parameters.markdown_content
+            };
+          } else {
+            throw new Error(`Agent tool execution failed: ${err}`);
+          }
+        }
+        break;
+      }
+
+      case 'send_user_message': {
+        // Try Rust command first, fallback to callbacks
+        try {
+          const rustResult = await invoke<{message: string, message_type: string, timestamp: number}>('agent_send_user_message', {
+            sessionId: (window as any).__agentSessionId || 'default',
+            message: parameters.message,
+            messageType: parameters.message_type || 'info'
+          });
+          
+          // Also trigger callback if available for UI update
+          if (agentCallbacks?.onSendUserMessage) {
+            agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
+          }
+          
+          result = { 
+            success: true, 
+            message: 'User message sent successfully',
+            content: parameters.message,
+            type: parameters.message_type,
+            timestamp: rustResult.timestamp
+          };
+        } catch (err) {
+          // Fallback to callback-only mode
+          if (agentCallbacks?.onSendUserMessage) {
+            agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
+            result = { 
+              success: true, 
+              message: 'User message sent successfully (callback mode)',
+              content: parameters.message,
+              type: parameters.message_type
+            };
+          } else {
+            throw new Error(`Agent tool execution failed: ${err}`);
+          }
+        }
+        break;
+      }
+
       default:
         throw new Error(`Unknown tool: ${actualToolName}`);
     }
@@ -312,8 +481,8 @@ export async function executeModernTool(
  * Generate tool definitions for AI consumption
  * Compatible with OpenAI, Anthropic, and Gemini APIs
  */
-export function generateModernToolDefinitions(enabledToolNames?: string[]): ModernToolDefinition[] {
-  const tools = getEnabledModernTools(enabledToolNames);
+export function generateModernToolDefinitions(enabledToolNames?: string[], includeAgentTools: boolean = false): ModernToolDefinition[] {
+  const tools = getEnabledModernTools(enabledToolNames, includeAgentTools);
   
   // Add OriginTool prefix
   return tools.map(tool => ({
@@ -331,9 +500,10 @@ export function generateModernToolDefinitions(enabledToolNames?: string[]): Mode
  */
 export async function writeModernToolsJson(
   outputPath: string,
-  enabledToolNames?: string[]
+  enabledToolNames?: string[],
+  includeAgentTools: boolean = false
 ): Promise<void> {
-  const tools = generateModernToolDefinitions(enabledToolNames);
+  const tools = generateModernToolDefinitions(enabledToolNames, includeAgentTools);
   
   const toolsJson = {
     version: '2.0',
@@ -371,10 +541,11 @@ export function resetToolExecutionStats(): void {
  * This creates a system prompt-like message explaining available tools to Gemini
  * 
  * @param enabledToolNames - Optional list of enabled tool names
+ * @param includeAgentTools - Whether to include agent-specific tools
  * @returns Markdown-formatted tool instruction text for Gemini's contents
  */
-export function generateGeminiToolInstructions(enabledToolNames?: string[]): string {
-  const tools = getEnabledModernTools(enabledToolNames);
+export function generateGeminiToolInstructions(enabledToolNames?: string[], includeAgentTools: boolean = false): string {
+  const tools = getEnabledModernTools(enabledToolNames, includeAgentTools);
   
   if (tools.length === 0) {
     return '';
@@ -393,15 +564,35 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[]): str
     '2. 各ツールの説明とパラメータスキーマに従って正確に呼び出してください',
     '3. すべてのパスはワークスペースルートからの相対パスまたは絶対パスです',
     '4. ツールは Tauri の安全な環境で実行されます',
+    '5. **複数のツールを同時に呼び出すことができます** - 効率を上げるため、関連する操作は一度に実行してください',
+    '6. **ツールの実行結果を必ず確認してください** - success フィールドで成功/失敗を判断し、失敗時は別の方法を試してください',
+    '7. **エラーが発生した場合は代替手段を検討してください** - 例: ディレクトリが存在しない場合はまず create_directory を実行',
     '',
     '1. When users ask you to perform file operations (create, edit, read, delete), USE THESE TOOLS',
     '2. Follow the exact parameter format specified in each tool\'s schema',
     '3. All paths are relative to workspace root or absolute paths',
     '4. Tools are executed in a secure Tauri environment',
+    '5. **YOU CAN CALL MULTIPLE TOOLS AT ONCE** - For efficiency, execute related operations together',
+    '6. **ALWAYS CHECK TOOL EXECUTION RESULTS** - Use the success field to determine if operations succeeded, and try alternatives on failure',
+    '7. **HANDLE ERRORS GRACEFULLY** - Example: If directory doesn\'t exist, create it first with create_directory',
     '',
-    '---',
-    ''
   ];
+  
+  if (includeAgentTools) {
+    instructions.push('**Agent Mode Instructions:**');
+    instructions.push('- You are in AUTONOMOUS Agent mode');
+    instructions.push('- Use update_task_progress tool to keep users informed of your progress');
+    instructions.push('- Use send_user_message tool to communicate with users');
+    instructions.push('- Work independently and make decisions without asking for approval');
+    instructions.push('- Use tools proactively to accomplish tasks');
+    instructions.push('- **EFFICIENCY: Call multiple tools at once when possible** (e.g., update_task_progress + write_file)');
+    instructions.push('- **ERROR HANDLING: If a tool fails, check the error message and try a different approach**');
+    instructions.push('- **VERIFY SUCCESS: Always check tool results before proceeding to the next step**');
+    instructions.push('- **CONTINUATION: Each response counts - make maximum progress by using multiple tools together**');
+    instructions.push('');
+  }
+  
+  instructions.push('---', '');
 
   // Group tools by category
   const fileTools = tools.filter(t => t.function.name.startsWith('read_file') || 
@@ -411,6 +602,8 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[]): str
   const dirTools = tools.filter(t => t.function.name.startsWith('list_directory') || 
                                       t.function.name.startsWith('create_directory'));
   const searchTools = tools.filter(t => t.function.name.startsWith('search_'));
+  const agentTools = tools.filter(t => t.function.name.startsWith('update_task_progress') || 
+                                        t.function.name.startsWith('send_user_message'));
 
   // Add file operation tools
   if (fileTools.length > 0) {
@@ -444,6 +637,20 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[]): str
   if (searchTools.length > 0) {
     instructions.push('## 🔍 検索ツール (Search Tools)', '');
     searchTools.forEach(tool => {
+      instructions.push(`### \`${tool.function.name}\``);
+      instructions.push(`**説明:** ${tool.function.description}`);
+      instructions.push('**パラメータ:**');
+      instructions.push('```json');
+      instructions.push(JSON.stringify(tool.function.parameters, null, 2));
+      instructions.push('```');
+      instructions.push('');
+    });
+  }
+
+  // Add agent communication tools
+  if (agentTools.length > 0) {
+    instructions.push('## 🤖 Agent コミュニケーションツール (Agent Communication Tools)', '');
+    agentTools.forEach(tool => {
       instructions.push(`### \`${tool.function.name}\``);
       instructions.push(`**説明:** ${tool.function.description}`);
       instructions.push('**パラメータ:**');

@@ -7,10 +7,19 @@ fn greet(name: &str) -> String {
 // Modern Tool System - Modular Architecture
 mod tools;
 
+// Agent System - Autonomous AI operation
+mod agent;
+
+use std::sync::Arc;
+
 //本プロジェクトでは主にRustを一切(登録以外)使わず, Tsxとtsのみで完結させます。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize agent state manager
+    let agent_state = Arc::new(agent::AgentStateManager::new());
+
     tauri::Builder::default()
+        .manage(agent_state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
@@ -37,7 +46,13 @@ pub fn run() {
             // Diff operations
             tools::tool_apply_diff,
             // Fetch operations
-            tools::tool_fetch
+            tools::tool_fetch,
+            // Agent operations
+            agent::agent_update_task_progress,
+            agent::agent_send_user_message,
+            agent::agent_get_task_progress,
+            agent::agent_get_user_messages,
+            agent::agent_clear_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

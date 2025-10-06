@@ -104,6 +104,7 @@
   "chat": {
     "title": "チャット",
     "newChat": "新しいチャット",
+    "newChatOptions": "その他のオプション",
     "newAgentChat": "Agent モード",
     "sessionLimit": "セッション上限に達しました（最大5件）",
     "tokenUsage": "トークン使用量",
@@ -214,7 +215,11 @@
       "updateProgress": "進捗を更新中...",
       "editMessage": "メッセージを編集 (ダブルクリック)",
       "saveEdit": "保存",
-      "cancelEdit": "キャンセル"
+      "cancelEdit": "キャンセル",
+      "openAIRequired": "OpenAI未設定",
+      "openAIWarning": "⚠️ **警告: OpenAIが有効になっていません**\n\nAgentモードはOpenAIのFunction Calling APIで最適に動作します。Geminiサポートは限定的で、ツールが正常に実行されない場合があります。\n\n**推奨アクション:**\n1. 設定 → AI設定へ移動\n2. OpenAI統合を有効化\n3. OpenAI APIキーを設定\n\nGeminiで続行します（ツール実行が失敗する可能性があります）...",
+      "toolExecutionFailed": "ツール実行エラー",
+      "modelNotSupported": "使用中のAIモデルがツール実行をサポートしていない可能性があります。OpenAI公式APIの使用を推奨します。"
     },
     "errors": {
       "geminiPathMissing": "geminiPath が設定されていません。セットアップを実行して gemini.ps1 のパスを設定してください。",
@@ -295,8 +300,12 @@
     "apiKeyDefaultNote": "空白のままにすると、システムのデフォルトAPIキーが使用されます。",
     "conversationCleanup": "会話整理の推奨タイミング",
     "messages": "メッセージ",
+    "attempts": "回",
     "cleanupDescription": "📊 このメッセージ数に達すると、/compactコマンドまたは新セッション作成を推奨します。",
     "cleanupReason": "会話が長くなるとトークン消費が増加するため、定期的な整理を推奨します。",
+    "maxContinuations": "エージェント最大継続試行回数",
+    "maxContinuationsDescription": "🔄 エージェントモードでのタスク継続の最大試行回数。高い値は複雑なタスクに対応できますが、API呼び出しが増えます。",
+    "maxContinuationsNote": "💡 推奨: 複雑なタスクには15〜20回。最適化により、少ない試行回数でタスクが完了するようになりました。",
     "geminiSetupCheck": "🤖 Gemini CLI セットアップ確認",
     "checkSetup": "🔍 セットアップを確認",
     "setupCheckDescription": "Gemini CLI と Google アカウント認証の状態を確認します。セットアップが必要な場合は自動的にセットアップウィザードが開始されます。",

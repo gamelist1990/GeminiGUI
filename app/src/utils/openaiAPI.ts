@@ -361,6 +361,121 @@ export async function callOpenAI(
       }
     }
     
+    // If tool calls were executed, make a follow-up request to get AI's explanation
+    let finalContent = content;
+    let finalUsage = usage;
+    
+    if (toolCalls.length > 0) {
+      internalLog(`Making follow-up request with ${toolExecutionResults.length} tool results`, log);
+      
+      // Build follow-up messages array with tool results
+      const followUpMessages: OpenAIMessage[] = [...messages];
+      
+      // Add assistant message with tool calls
+      followUpMessages.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCalls,
+      });
+      
+      // Add tool result messages
+      for (let i = 0; i < toolCalls.length; i++) {
+        const toolCall = toolCalls[i];
+        const execResult = toolExecutionResults[i];
+        
+        followUpMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: execResult.success 
+            ? JSON.stringify(execResult.result) 
+            : JSON.stringify({ error: execResult.error || 'Tool execution failed' }),
+        });
+      }
+      
+      // Make follow-up request
+      const followUpRequestBody: OpenAIRequest = {
+        model,
+        messages: followUpMessages,
+        stream: false,
+        temperature: 0.7,
+      };
+      
+      internalLog('Sending follow-up request to OpenAI API...', log);
+      
+      try {
+        const followUpResponse = await tauriFetch(`${baseURL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(followUpRequestBody),
+        });
+        
+        if (!followUpResponse.ok) {
+          const errorText = await followUpResponse.text();
+          internalLog(`Follow-up request failed (${followUpResponse.status}): ${errorText}`, log);
+          throw new Error(`Follow-up request failed: ${errorText}`);
+        }
+        
+        const followUpData: OpenAIResponse = await followUpResponse.json();
+        const followUpChoice = followUpData.choices[0];
+        const followUpContent = followUpChoice?.message?.content || '';
+        
+        if (followUpContent.trim()) {
+          finalContent = followUpContent;
+          finalUsage = followUpData.usage || usage;
+          internalLog(`Follow-up request completed, received ${finalContent.length} chars`, log);
+        } else {
+          internalLog('WARNING: Follow-up request returned empty content', log);
+          throw new Error('Follow-up request returned empty content');
+        }
+      } catch (followUpError) {
+        internalLog(`Follow-up request error: ${followUpError}`, log);
+        
+        // Fallback: Check if this is Agent mode (has agent-specific tools)
+        const isAgentMode = options.enabledTools?.includes('send_user_message') || 
+                           options.enabledTools?.includes('update_task_progress');
+        
+        if (isAgentMode) {
+          // In Agent mode, don't show tool execution details
+          // The agent should have used send_user_message but didn't
+          // Return empty string so Agent.tsx doesn't show fallback message
+          finalContent = '';
+          internalLog('Agent mode: No response from follow-up, returning empty', log);
+        } else {
+          // Regular mode: Generate a human-readable summary of tool execution results
+          const successCount = toolExecutionResults.filter(r => r.success).length;
+          const failCount = toolExecutionResults.filter(r => !r.success).length;
+          
+          let summary = `I executed ${toolExecutionResults.length} tool(s) to complete your request:\n\n`;
+          
+          for (const result of toolExecutionResults) {
+            const status = result.success ? '✅' : '❌';
+            summary += `${status} **${result.name}** (${result.executionTime}ms)\n`;
+            if (result.success && result.result) {
+              // Show a brief summary of the result
+              const resultStr = typeof result.result === 'string' 
+                ? result.result 
+                : JSON.stringify(result.result, null, 2);
+              if (resultStr.length > 100) {
+                summary += `   ${resultStr.substring(0, 100)}...\n`;
+              } else {
+                summary += `   ${resultStr}\n`;
+              }
+            } else if (!result.success && result.error) {
+              summary += `   Error: ${result.error}\n`;
+            }
+            summary += '\n';
+          }
+          
+          summary += `\nSummary: ${successCount} succeeded, ${failCount} failed`;
+          finalContent = summary;
+          internalLog('Using human-readable tool summary as response', log);
+        }
+      }
+    }
+    
     // Calculate tool statistics from execution results
     const totalSuccess = toolExecutionResults.filter(r => r.success).length;
     const totalFail = toolExecutionResults.filter(r => !r.success).length;
@@ -395,7 +510,7 @@ export async function callOpenAI(
     
     // Convert to GeminiResponse format
     const geminiResponse: GeminiResponse = {
-      response: content,
+      response: finalContent,
       toolUsage: toolExecutionResults.map(result => ({
         toolName: result.name,
         executionTime: result.executionTime,
@@ -408,14 +523,14 @@ export async function callOpenAI(
         models: {
           [model]: {
             api: {
-              totalRequests: 1,
+              totalRequests: toolCalls.length > 0 ? 2 : 1, // 2 requests if tools were used
               totalErrors: 0,
               totalLatencyMs: 0,
             },
             tokens: {
-              prompt: usage.prompt_tokens,
-              candidates: usage.completion_tokens,
-              total: usage.total_tokens,
+              prompt: finalUsage.prompt_tokens,
+              candidates: finalUsage.completion_tokens,
+              total: finalUsage.total_tokens,
               cached: 0,
               thoughts: 0,
               tool: 0,
@@ -441,28 +556,6 @@ export async function callOpenAI(
         },
       },
     };
-    
-    // If there are tool calls, append them to the response in a structured format
-    if (toolCalls.length > 0) {
-      const toolCallsInfo = toolCalls.map(tc => ({
-        id: tc.id,
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-      }));
-      
-      // Build comprehensive response with tool results
-      let toolResultsText = '';
-      for (const execResult of toolExecutionResults) {
-        if (execResult.success) {
-          toolResultsText += `\n\n[${execResult.name}] Success:\n${JSON.stringify(execResult.result, null, 2)}`;
-        } else {
-          toolResultsText += `\n\n[${execResult.name}] Error: ${execResult.error}`;
-        }
-      }
-      
-      // Append tool call information to response
-      geminiResponse.response = content + toolResultsText + '\n\n[TOOL_CALLS]\n' + JSON.stringify(toolCallsInfo, null, 2);
-    }
     
     return geminiResponse;
   } catch (error) {
@@ -713,15 +806,12 @@ export async function callOpenAIStream(
         })),
       });
 
-      // Execute tools with progress notifications
+      // Execute tools silently in the background
       const executedToolResults: Array<{ name: string; executionTime: number; success: boolean; result?: any; parameters?: any }> = [];
       for (let i = 0; i < toolCallsReceived.length; i++) {
         const toolCall = toolCallsReceived[i];
         const toolName = toolCall.name.replace(/^OriginTool_/, '');
         internalLog(`Executing tool (streaming): ${toolName} (${i + 1}/${toolCallsReceived.length})`, log);
-        
-        // Send progress notification to UI
-        onChunk({ type: 'text', content: `\n\n🔧 **Executing tool**: ${toolName}...` });
         
         const t0 = Date.now();
         let args: any = {};
@@ -732,14 +822,12 @@ export async function callOpenAIStream(
           const dt = Date.now() - t0;
           executedToolResults.push({ name: toolName, executionTime: dt, success: result.success, result: result.result, parameters: args });
           
-          // Send completion notification
-          onChunk({ type: 'text', content: ` ✓ (${dt}ms)\n` });
+          internalLog(`✓ Tool ${toolName} succeeded (${dt}ms)`, log);
         } catch (err) {
           const dt = Date.now() - t0;
           executedToolResults.push({ name: toolName, executionTime: dt, success: false, parameters: args });
           
-          // Send error notification
-          onChunk({ type: 'text', content: ` ✗ Failed (${dt}ms)\n` });
+          internalLog(`✗ Tool ${toolName} failed (${dt}ms)`, log);
         }
         // Add tool result message
         const last = executedToolResults[executedToolResults.length - 1];
@@ -750,9 +838,6 @@ export async function callOpenAIStream(
         });
       }
       streamToolResults = executedToolResults;
-      
-      // Notify that AI is generating response
-      onChunk({ type: 'text', content: '\n\n💭 **Generating response**...\n\n' });
 
       // Follow-up streaming request for final text
       const followUpRequestBody: OpenAIRequest = {
@@ -776,9 +861,59 @@ export async function callOpenAIStream(
         throw new Error(`OpenAI follow-up API error (${followUpResponse.status}): ${errorText}`);
       }
 
-      const followUpResult = await readStreamWithReader(followUpResponse as any);
-      if (followUpResult === false) {
+      // Process follow-up stream response
+      const followUpReader = (followUpResponse as any).body?.getReader?.();
+      if (followUpReader) {
+        internalLog('Processing follow-up response with getReader()', log);
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        try {
+          while (true) {
+            const { value, done } = await followUpReader.read();
+            if (done) break;
+            const chunkText = decoder.decode(value, { stream: true });
+            buffer += chunkText;
+            
+            let newlineIndex;
+            while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+              const line = buffer.substring(0, newlineIndex).trim();
+              buffer = buffer.substring(newlineIndex + 1);
+              
+              if (!line || line === 'data: [DONE]' || !line.startsWith('data: ')) continue;
+              try {
+                const jsonStr = line.slice(6);
+                const chunk: OpenAIStreamChunk = JSON.parse(jsonStr);
+                const delta = chunk.choices[0]?.delta;
+                if (delta?.content) {
+                  onChunk({ type: 'text', content: delta.content });
+                  fullResponse += delta.content;
+                }
+              } catch (e) {
+                console.warn('Failed to parse follow-up SSE chunk:', line, e);
+              }
+            }
+          }
+          // Flush remaining buffer
+          if (buffer.trim()) {
+            const line = buffer.trim();
+            if (line && line !== 'data: [DONE]' && line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.slice(6);
+                const chunk: OpenAIStreamChunk = JSON.parse(jsonStr);
+                const delta = chunk.choices[0]?.delta;
+                if (delta?.content) {
+                  onChunk({ type: 'text', content: delta.content });
+                  fullResponse += delta.content;
+                }
+              } catch {}
+            }
+          }
+        } catch (e) {
+          console.error('[OpenAI] Follow-up stream error:', e);
+        }
+      } else {
         // fallback to curl
+        internalLog('Falling back to curl for follow-up response', log);
         await streamingFetch(`${baseURL}/chat/completions`, {
           method: 'POST',
           headers: {

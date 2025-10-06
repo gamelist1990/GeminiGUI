@@ -39,6 +39,14 @@
   overflow: hidden;
 }
 
+.agent-sidebar-sessions {
+  width: 280px;
+  background-color: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
 .agent-main {
   display: flex;
   flex: 1;
@@ -189,9 +197,9 @@
 
 .agent-thinking-indicator {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
   border-radius: var(--radius-md);
   margin: var(--spacing-md);
@@ -205,6 +213,51 @@
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.agent-thinking-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.agent-thinking-task {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.agent-thinking-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.agent-thinking-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 2px 8px;
+  background-color: rgba(102, 126, 234, 0.2);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.agent-thinking-time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-thinking-time::before {
+  content: '⏱️';
 }
 
 @keyframes spin {
@@ -347,6 +400,124 @@
 
 .agent-main .suggestion-item[data-type="command"]::before {
   content: '⚡';
+}
+
+/* Session Management Styles */
+.sessions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.sessions-header h3 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.session-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sessions-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-item:hover {
+  background-color: var(--surface-variant);
+}
+
+.session-item.active {
+  background-color: var(--surface-variant);
+  border-left: 3px solid var(--primary);
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+}
+
+.session-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.session-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.session-action-button {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: var(--spacing-xs);
+  transition: opacity 0.2s;
+}
+
+.session-action-button:hover {
+  opacity: 1;
+}
+
+.session-action-button.delete {
+  color: var(--error);
+}
+
+.session-name-input {
+  background: var(--surface);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 14px;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.request-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.timer-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: timer-spin 1s linear infinite;
+}
+
+@keyframes timer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.timer-text {
+  font-variant-numeric: tabular-nums;
 }
 
 .agent-main .suggestion-item:last-child {

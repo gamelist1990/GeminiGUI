@@ -105,6 +105,7 @@
   "chat": {
     "title": "Chat",
     "newChat": "New Chat",
+    "newChatOptions": "More options",
     "newAgentChat": "Agent Mode",
     "sessionLimit": "Session limit reached (max 5)",
     "tokenUsage": "Token Usage",
@@ -214,7 +215,11 @@
       "updateProgress": "Updating progress...",
       "editMessage": "Edit message (double-click)",
       "saveEdit": "Save",
-      "cancelEdit": "Cancel"
+      "cancelEdit": "Cancel",
+      "openAIRequired": "OpenAI Not Configured",
+      "openAIWarning": "⚠️ **Warning: OpenAI Not Enabled**\n\nAgent mode works best with OpenAI's Function Calling API. Gemini support is limited and tools may not execute properly.\n\n**Recommended Action:**\n1. Go to Settings → AI Settings\n2. Enable OpenAI integration\n3. Configure your OpenAI API key\n\nContinuing with Gemini (tool execution may fail)...",
+      "toolExecutionFailed": "Tool Execution Error",
+      "modelNotSupported": "The AI model you're using may not support tool execution. We recommend using OpenAI's official API."
     },
     "errors": {
       "geminiPathMissing": "geminiPath is not configured. Run setup to configure the gemini.ps1 path.",
@@ -295,8 +300,12 @@
     "apiKeyDefaultNote": "Leaving blank will use the system's default API key.",
     "conversationCleanup": "Conversation Cleanup Timing",
     "messages": "messages",
+    "attempts": "attempts",
     "cleanupDescription": "📊 When this message count is reached, /compact command or new session creation is recommended.",
     "cleanupReason": "Longer conversations increase token consumption, so regular cleanup is recommended.",
+    "maxContinuations": "Agent Max Continuation Attempts",
+    "maxContinuationsDescription": "🔄 Maximum number of continuation attempts for agent mode tasks. Higher values allow more complex tasks but consume more API calls.",
+    "maxContinuationsNote": "💡 Recommended: 15-20 attempts for complex tasks. The optimization improvements mean tasks complete faster with fewer attempts.",
     "geminiSetupCheck": "🤖 Gemini CLI Setup Check",
     "checkSetup": "🔍 Check Setup",
     "setupCheckDescription": "Check the status of Gemini CLI and Google account authentication. If setup is required, the setup wizard will start automatically.",
