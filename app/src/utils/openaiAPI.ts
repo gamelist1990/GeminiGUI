@@ -183,10 +183,14 @@ async function loadOpenAITools(
     internalLog('Loading tools from modernToolSystem', log);
     internalLog(`Enabled tools parameter: ${JSON.stringify(enabledTools)}`, log);
     
-    // Use modern tool system
-    const modernTools = generateModernToolDefinitions(enabledTools);
+    // Check if agent tools are enabled (indicates agent mode)
+    const isAgentMode = enabledTools?.includes('update_task_progress') || 
+                        enabledTools?.includes('send_user_message');
     
-    internalLog(`generateModernToolDefinitions returned ${modernTools.length} tools`, log);
+    // Use modern tool system
+    const modernTools = generateModernToolDefinitions(enabledTools, isAgentMode);
+    
+    internalLog(`generateModernToolDefinitions returned ${modernTools.length} tools (agent mode: ${isAgentMode})`, log);
     
     // Convert ModernToolDefinition to OpenAITool format
     const tools: OpenAITool[] = modernTools.map(tool => ({
