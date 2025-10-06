@@ -101,6 +101,16 @@ export default function Chat({
   
   // AbortController for cancelling AI requests
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Pause/Resume state management
+  const [isPaused, setIsPaused] = useState(false);
+  const [interventionText, setInterventionText] = useState("");
+  const [pausedStreamContent, setPausedStreamContent] = useState("");
+  const [pausedContext, setPausedContext] = useState<{
+    userPrompt: string;
+    options: any;
+    settings: any;
+  } | null>(null);
 
   const [geminiPath, setGeminiPath] = useState<string | undefined>();
   const [recentlyCompletedSuggestion, setRecentlyCompletedSuggestion] =
@@ -335,7 +345,239 @@ export default function Chat({
     setShowProcessingModal(false);
     setProcessingElapsed(0);
     
+    // Reset pause/resume state
+    setIsPaused(false);
+    setInterventionText("");
+    setPausedStreamContent("");
+    setPausedContext(null);
+    
     console.log('[Chat] AI processing cancelled');
+  };
+  
+  // Handle pause of AI processing
+  const handlePauseProcessing = () => {
+    console.log('[Chat] Pausing AI processing...');
+    
+    // Set paused state
+    setIsPaused(true);
+    
+    // Store current streaming content
+    if (isStreaming) {
+      setPausedStreamContent(streamingMessage);
+      setIsStreaming(false); // Stop streaming display
+      console.log('[Chat] Stored streaming content:', streamingMessage.substring(0, 100) + '...');
+    }
+    
+    // Abort the ongoing request to pause it
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Show processing modal for intervention if not already shown
+    if (!showProcessingModal) {
+      setShowProcessingModal(true);
+      setProcessingMessage(t("chat.processing.paused"));
+    }
+    
+    console.log('[Chat] AI processing paused');
+  };
+  
+  // Handle resume of AI processing without intervention
+  const handleResumeProcessing = () => {
+    console.log('[Chat] Resuming AI processing without intervention...');
+    
+    // Reset pause state
+    setIsPaused(false);
+    setInterventionText("");
+    
+    // For now, close the modal since we cannot truly resume the stream
+    // In a full implementation, this would require backend support for stateful streams
+    setShowProcessingModal(false);
+    setProcessingElapsed(0);
+    
+    // Restore any paused content as a partial response
+    if (pausedStreamContent && currentSessionId) {
+      const partialMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: pausedStreamContent + "\n\n_[Response was paused and could not be resumed]_",
+        timestamp: new Date(),
+      };
+      onSendMessage(currentSessionId, partialMessage);
+    }
+    
+    setPausedStreamContent("");
+    setPausedContext(null);
+    
+    console.log('[Chat] AI processing resume completed (partial)');
+  };
+  
+  // Handle intervention submission and resume
+  const handleInterventionSubmit = async () => {
+    console.log('[Chat] Submitting intervention and resuming...');
+    
+    if (!currentSessionId || !interventionText.trim()) {
+      console.warn('[Chat] No intervention text provided');
+      handleResumeProcessing();
+      return;
+    }
+    
+    try {
+      // Add the paused content as a partial assistant message
+      if (pausedStreamContent) {
+        const partialMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: pausedStreamContent,
+          timestamp: new Date(),
+        };
+        onSendMessage(currentSessionId, partialMessage);
+      }
+      
+      // Add user intervention as a new message
+      const interventionMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "user",
+        content: `[Intervention during AI response] ${interventionText}`,
+        timestamp: new Date(),
+        tokenUsage: Math.ceil(interventionText.length / 4),
+      };
+      onSendMessage(currentSessionId, interventionMessage);
+      
+      // Reset pause state
+      setIsPaused(false);
+      setInterventionText("");
+      setPausedStreamContent("");
+      setShowProcessingModal(false);
+      setProcessingElapsed(0);
+      
+      // Mark as typing again to start new request
+      setTypingSessionIds(prev => new Set(prev).add(currentSessionId));
+      requestStartTimesRef.current[currentSessionId] = Date.now();
+      setRequestElapsedTimes(prev => ({ ...prev, [currentSessionId]: 0 }));
+      
+      // Start new timer
+      if (requestIntervalsRef.current[currentSessionId]) {
+        clearInterval(requestIntervalsRef.current[currentSessionId]);
+      }
+      
+      requestIntervalsRef.current[currentSessionId] = setInterval(() => {
+        const startTime = requestStartTimesRef.current[currentSessionId];
+        if (startTime) {
+          setRequestElapsedTimes(prev => ({
+            ...prev,
+            [currentSessionId]: Math.floor((Date.now() - startTime) / 1000)
+          }));
+        }
+      }, 1000);
+      
+      // Continue with AI request using stored context if available
+      const prompt = pausedContext?.userPrompt || interventionText;
+      const options = pausedContext?.options || {
+        approvalMode: approvalMode,
+        workspaceId: workspace.id,
+        sessionId: currentSessionId,
+        enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+      };
+      
+      const aiSettings = pausedContext?.settings || {
+        enableOpenAI: settings.enableOpenAI,
+        openAIApiKey: settings.openAIApiKey,
+        openAIBaseURL: settings.openAIBaseURL,
+        openAIModel: settings.openAIModel,
+        responseMode: responseMode,
+        googleCloudProjectId: googleCloudProjectId,
+        geminiPath: geminiPath,
+      };
+      
+      // Build conversation history including the new intervention
+      if (!currentSession) {
+        console.error('[Chat] No current session found during intervention');
+        return;
+      }
+      
+      const allMessages = currentSession.messages
+        .filter((msg) => msg.role !== "system");
+      
+      const conversationHistoryJson = allMessages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+      
+      const conversationHistory = allMessages
+        .map((msg) => {
+          const role = msg.role === "user" ? "User" : "Assistant";
+          return `${role}: ${msg.content}`;
+        })
+        .join("\n\n");
+      
+      options.conversationHistory = conversationHistory;
+      options.conversationHistoryJson = conversationHistoryJson;
+      
+      // Make new AI request
+      const geminiResponse = await callAI(
+        prompt,
+        workspace.path,
+        options,
+        aiSettings
+      );
+      
+      const aiMessage: ChatMessage = {
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
+        content: geminiResponse.response,
+        timestamp: new Date(),
+        tokenUsage: 0,
+        stats: geminiResponse.stats,
+      };
+      onSendMessage(currentSessionId, aiMessage);
+      
+      // Cleanup
+      try {
+        await cleanupManager.cleanupSession(currentSessionId, workspace.id);
+        console.log(`[Tools] Cleaned up tools after intervention`);
+      } catch (cleanupError) {
+        console.warn('[Tools] Failed to cleanup after intervention:', cleanupError);
+      }
+      
+      // Reset request timer
+      if (requestStartTimesRef.current[currentSessionId]) {
+        delete requestStartTimesRef.current[currentSessionId];
+      }
+    } catch (error) {
+      console.error('[Chat] Error during intervention:', error);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 3).toString(),
+        role: "assistant",
+        content: `Error during intervention: ${error instanceof Error ? error.message : "Unknown error"}`,
+        timestamp: new Date(),
+      };
+      onSendMessage(currentSessionId, errorMessage);
+    } finally {
+      // Remove typing state
+      setTypingSessionIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentSessionId);
+        return newSet;
+      });
+      
+      // Clear elapsed time counter
+      if (requestIntervalsRef.current[currentSessionId]) {
+        clearInterval(requestIntervalsRef.current[currentSessionId]);
+        delete requestIntervalsRef.current[currentSessionId];
+      }
+      
+      setRequestElapsedTimes(prev => {
+        const newTimes = { ...prev };
+        delete newTimes[currentSessionId];
+        return newTimes;
+      });
+      
+      setPausedContext(null);
+    }
+    
+    console.log('[Chat] Intervention completed');
   };
 
   const processCommand = async (command: string, args: string) => {
@@ -845,6 +1087,23 @@ ${args}
         conversationHistory ? "Yes" : "No"
       );
       
+      // Store context for potential pause/resume
+      const aiSettings = {
+        enableOpenAI: settings.enableOpenAI,
+        openAIApiKey: settings.openAIApiKey,
+        openAIBaseURL: settings.openAIBaseURL,
+        openAIModel: settings.openAIModel,
+        responseMode: responseMode,
+        googleCloudProjectId: googleCloudProjectId,
+        geminiPath: geminiPath,
+      };
+      
+      setPausedContext({
+        userPrompt: inputValue,
+        options: options,
+        settings: aiSettings,
+      });
+      
       // Response mode handling: async vs stream
       let geminiResponse;
       if (responseMode === 'stream') {
@@ -861,15 +1120,7 @@ ${args}
           inputValue,
           workspace.path,
           options,
-          {
-            enableOpenAI: settings.enableOpenAI,
-            openAIApiKey: settings.openAIApiKey,
-            openAIBaseURL: settings.openAIBaseURL,
-            openAIModel: settings.openAIModel,
-            responseMode: responseMode,
-            googleCloudProjectId: googleCloudProjectId,
-            geminiPath: geminiPath,
-          },
+          aiSettings,
           // onChunk callback for streaming updates
           (chunk) => {
             if (chunk.type === 'text' && chunk.content) {
@@ -899,15 +1150,7 @@ ${args}
           inputValue,
           workspace.path,
           options,
-          {
-            enableOpenAI: settings.enableOpenAI,
-            openAIApiKey: settings.openAIApiKey,
-            openAIBaseURL: settings.openAIBaseURL,
-            openAIModel: settings.openAIModel,
-            responseMode: responseMode,
-            googleCloudProjectId: googleCloudProjectId,
-            geminiPath: geminiPath,
-          }
+          aiSettings
         );
       }
 
@@ -1662,6 +1905,17 @@ ${args}
                       </div>
                     )}
                   </div>
+                  {!isPaused && (
+                    <div className="streaming-controls">
+                      <button
+                        className="stream-pause-button secondary"
+                        onClick={handlePauseProcessing}
+                        title={t("chat.processing.pause")}
+                      >
+                        ⏸️
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1772,6 +2026,12 @@ ${args}
           message={processingMessage}
           elapsedSeconds={processingElapsed}
           onCancel={handleCancelProcessing}
+          onPause={!isPaused ? handlePauseProcessing : undefined}
+          onResume={isPaused ? handleResumeProcessing : undefined}
+          isPaused={isPaused}
+          interventionText={interventionText}
+          onInterventionChange={setInterventionText}
+          onInterventionSubmit={handleInterventionSubmit}
         />
       )}
 
