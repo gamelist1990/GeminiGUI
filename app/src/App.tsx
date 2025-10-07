@@ -3,7 +3,6 @@ import "./styles/theme.css";
 import "./App.css";
 const WorkspaceSelection = React.lazy(() => import('./pages/WorkspaceSelection')) as any;
 const Chat = React.lazy(() => import('./pages/Chat')) as any;
-const Agent = React.lazy(() => import('./pages/Agent')) as any;
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage')) as any;
 import { useSettings } from "./hooks/useSettings";
 import { useWorkspaces } from "./hooks/useWorkspaces";
@@ -14,7 +13,7 @@ import { documentDir, join } from "@tauri-apps/api/path";
 import { t } from "./utils/i18n";
 import { cleanupManager } from "./utils/cleanupManager";
 
-type View = 'workspace' | 'chat' | 'agent' | 'settings';
+type View = 'workspace' | 'chat' | 'settings';
 
 function App() {
   const { settings, updateSettings, isLoading } = useSettings();
@@ -91,38 +90,22 @@ function App() {
 
   const handleCloseSettings = () => {
     if (currentWorkspace) {
-      // Check if current session is agent mode
-      if (currentSession?.isAgentMode) {
-        setCurrentView('agent');
-      } else {
-        setCurrentView('chat');
-      }
+      setCurrentView('chat');
     } else {
       setCurrentView('workspace');
     }
   };
 
-  // Monitor current session changes and update view accordingly
+  // Monitor current session changes
   useEffect(() => {
-    if (currentSession && currentWorkspace) {
-      // When session changes (e.g., after deletion), ensure we're on the correct view
-      if (currentView === 'chat' && currentSession.isAgentMode) {
-        setCurrentView('agent');
-      } else if (currentView === 'agent' && !currentSession.isAgentMode) {
-        setCurrentView('chat');
-      }
-    }
-  }, [currentSession?.id, currentSession?.isAgentMode, currentWorkspace, currentView]);
+    // No-op: removed agent mode logic
+  }, [currentSession?.id, currentWorkspace, currentView]);
 
-  const handleCreateNewSession = async (isAgentMode?: boolean): Promise<boolean> => {
-    const success = await createNewSession(isAgentMode);
-    // Switch to appropriate view based on mode only when creation succeeded
+  const handleCreateNewSession = async (): Promise<boolean> => {
+    const success = await createNewSession();
+    // Switch to chat view when creation succeeded
     if (success) {
-      if (isAgentMode) {
-        setCurrentView('agent');
-      } else {
-        setCurrentView('chat');
-      }
+      setCurrentView('chat');
     }
     return success;
   };
@@ -142,14 +125,6 @@ function App() {
 
   const handleSwitchSession = (sessionId: string) => {
     setCurrentSessionId(sessionId);
-    
-    // Check if the selected session is agent mode and switch view accordingly
-    const selectedSession = sessions.find(s => s.id === sessionId);
-    if (selectedSession?.isAgentMode) {
-      setCurrentView('agent');
-    } else {
-      setCurrentView('chat');
-    }
   };
 
   if (isLoading || !globalConfig) {
@@ -185,34 +160,6 @@ function App() {
           workspace={currentWorkspace}
           sessions={sessions}
           currentSession={currentSession}
-          currentSessionId={currentSessionId}
-          maxSessionsReached={maxSessionsReached}
-          approvalMode={settings.approvalMode}
-          responseMode={settings.responseMode || 'async'}
-          totalTokens={getTotalTokens()}
-          customApiKey={settings.customApiKey}
-          googleCloudProjectId={settings.googleCloudProjectId}
-          maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
-          globalConfig={globalConfig}
-          settings={settings}
-          onCreateNewSession={handleCreateNewSession}
-          onSwitchSession={handleSwitchSession}
-          onSendMessage={handleSendMessage}
-          onResendMessage={handleResendMessage}
-          onDeleteSession={deleteSession}
-          onRenameSession={renameSession}
-          onCompactSession={handleCompactSession}
-          onBack={handleBackToWorkspace}
-          />
-        </React.Suspense>
-      )}
-
-      {currentView === 'agent' && currentWorkspace && currentSession && (
-        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading agent…</div></div>}>
-          <Agent
-          workspace={currentWorkspace}
-          session={currentSession}
-          sessions={sessions}
           currentSessionId={currentSessionId}
           maxSessionsReached={maxSessionsReached}
           approvalMode={settings.approvalMode}

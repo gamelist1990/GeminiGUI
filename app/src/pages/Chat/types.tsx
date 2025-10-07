@@ -14,7 +14,7 @@ export interface ChatProps {
   maxMessagesBeforeCompact: number;
   globalConfig: any; // Config instance from configAPI
   settings: Settings; // Full settings object for AI provider selection
-  onCreateNewSession: (isAgentMode?: boolean) => Promise<boolean>;
+  onCreateNewSession: () => Promise<boolean>;
   onSwitchSession: (id: string) => void;
   onSendMessage: (sessionId: string, message: ChatMessage) => void;
   onResendMessage: (
