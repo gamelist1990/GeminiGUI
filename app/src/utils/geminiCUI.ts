@@ -271,14 +271,10 @@ export async function callGemini(
 
     // Add modern tool instructions if tools are enabled
     if (options?.enabledTools && options.enabledTools.length > 0) {
-      // Check if agent tools are enabled (indicates agent mode)
-      const isAgentMode = options.enabledTools.includes('update_task_progress') || 
-                          options.enabledTools.includes('send_user_message');
-      
-      const toolInstructions = generateGeminiToolInstructions(options.enabledTools, isAgentMode);
+      const toolInstructions = generateGeminiToolInstructions(options.enabledTools);
       if (toolInstructions) {
         promptSections.push(toolInstructions);
-        internalLog(`Added modern tool instructions for ${options.enabledTools.length} enabled tools (agent mode: ${isAgentMode})`, log);
+        internalLog(`Added modern tool instructions for ${options.enabledTools.length} enabled tools`, log);
       }
     }
 

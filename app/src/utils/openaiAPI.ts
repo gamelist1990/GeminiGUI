@@ -433,31 +433,20 @@ export async function callOpenAI(
       } catch (followUpError) {
         internalLog(`Follow-up request error: ${followUpError}`, log);
         
-        // Fallback: Check if this is Agent mode (has agent-specific tools)
-        const isAgentMode = options.enabledTools?.includes('send_user_message') || 
-                           options.enabledTools?.includes('update_task_progress');
+        // Generate a human-readable summary of tool execution results
+        const successCount = toolExecutionResults.filter(r => r.success).length;
+        const failCount = toolExecutionResults.filter(r => !r.success).length;
         
-        if (isAgentMode) {
-          // In Agent mode, don't show tool execution details
-          // The agent should have used send_user_message but didn't
-          // Return empty string so Agent.tsx doesn't show fallback message
-          finalContent = '';
-          internalLog('Agent mode: No response from follow-up, returning empty', log);
-        } else {
-          // Regular mode: Generate a human-readable summary of tool execution results
-          const successCount = toolExecutionResults.filter(r => r.success).length;
-          const failCount = toolExecutionResults.filter(r => !r.success).length;
-          
-          let summary = `I executed ${toolExecutionResults.length} tool(s) to complete your request:\n\n`;
-          
-          for (const result of toolExecutionResults) {
-            const status = result.success ? '✅' : '❌';
-            summary += `${status} **${result.name}** (${result.executionTime}ms)\n`;
-            if (result.success && result.result) {
-              // Show a brief summary of the result
-              const resultStr = typeof result.result === 'string' 
-                ? result.result 
-                : JSON.stringify(result.result, null, 2);
+        let summary = `I executed ${toolExecutionResults.length} tool(s) to complete your request:\n\n`;
+        
+        for (const result of toolExecutionResults) {
+          const status = result.success ? '✅' : '❌';
+          summary += `${status} **${result.name}** (${result.executionTime}ms)\n`;
+          if (result.success && result.result) {
+            // Show a brief summary of the result
+            const resultStr = typeof result.result === 'string' 
+              ? result.result 
+              : JSON.stringify(result.result, null, 2);
               if (resultStr.length > 100) {
                 summary += `   ${resultStr.substring(0, 100)}...\n`;
               } else {
@@ -469,10 +458,9 @@ export async function callOpenAI(
             summary += '\n';
           }
           
-          summary += `\nSummary: ${successCount} succeeded, ${failCount} failed`;
-          finalContent = summary;
-          internalLog('Using human-readable tool summary as response', log);
-        }
+        summary += `\nSummary: ${successCount} succeeded, ${failCount} failed`;
+        finalContent = summary;
+        internalLog('Using human-readable tool summary as response', log);
       }
     }
     
