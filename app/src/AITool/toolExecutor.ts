@@ -22,14 +22,6 @@ export interface ToolExecutionResult {
 }
 
 /**
- * Agent tool callbacks for UI updates
- */
-export interface AgentToolCallbacks {
-  onUpdateTaskProgress?: (markdownContent: string) => void;
-  onSendUserMessage?: (message: string, messageType: 'info' | 'success' | 'warning' | 'error') => void;
-}
-
-/**
  * Tool execution statistics
  */
 export interface ToolExecutionStats {
@@ -130,18 +122,12 @@ export function getEnabledModernTools(enabledToolNames?: string[]): ModernToolDe
 export async function executeModernTool(
   toolName: string,
   parameters: Record<string, any>,
-  workspacePath: string,
-  agentCallbacks?: AgentToolCallbacks
+  workspacePath: string
 ): Promise<ToolExecutionResult> {
   const startTime = Date.now();
   
   // Remove OriginTool_ prefix if present
   const actualToolName = toolName.replace(/^OriginTool_/, '');
-
-  // Get agent callbacks from window if not provided directly
-  if (!agentCallbacks && (window as any).__agentCallbacks) {
-    agentCallbacks = (window as any).__agentCallbacks;
-  }
 
   try {
     console.log(`[ModernTools] Executing ${actualToolName} with params:`, parameters);
@@ -461,7 +447,6 @@ export function resetToolExecutionStats(): void {
  * This creates a system prompt-like message explaining available tools to Gemini
  * 
  * @param enabledToolNames - Optional list of enabled tool names
- * @param includeAgentTools - Whether to include agent-specific tools
  * @returns Markdown-formatted tool instruction text for Gemini's contents
  */
 export function generateGeminiToolInstructions(enabledToolNames?: string[]): string {
