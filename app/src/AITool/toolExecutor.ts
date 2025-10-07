@@ -22,14 +22,6 @@ export interface ToolExecutionResult {
 }
 
 /**
- * Agent tool callbacks for UI updates
- */
-export interface AgentToolCallbacks {
-  onUpdateTaskProgress?: (markdownContent: string) => void;
-  onSendUserMessage?: (message: string, messageType: 'info' | 'success' | 'warning' | 'error') => void;
-}
-
-/**
  * Tool execution statistics
  */
 export interface ToolExecutionStats {
@@ -110,14 +102,9 @@ const tracker = new ToolExecutionTracker();
 /**
  * Get enabled tools based on user settings
  */
-export function getEnabledModernTools(enabledToolNames?: string[], includeAgentTools: boolean = false): ModernToolDefinition[] {
+export function getEnabledModernTools(enabledToolNames?: string[]): ModernToolDefinition[] {
   const normalizedEnabledNames = enabledToolNames?.map(name => name.replace(/^OriginTool_/, ''));
-  const hasAgentTools = normalizedEnabledNames?.some(name =>
-    name === 'update_task_progress' || name === 'send_user_message'
-  );
-
-  const effectiveIncludeAgentTools = includeAgentTools || Boolean(hasAgentTools);
-  const allTools = getAllTools(effectiveIncludeAgentTools);
+  const allTools = getAllTools();
   
   if (!normalizedEnabledNames || normalizedEnabledNames.length === 0) {
     return allTools;
@@ -135,18 +122,12 @@ export function getEnabledModernTools(enabledToolNames?: string[], includeAgentT
 export async function executeModernTool(
   toolName: string,
   parameters: Record<string, any>,
-  workspacePath: string,
-  agentCallbacks?: AgentToolCallbacks
+  workspacePath: string
 ): Promise<ToolExecutionResult> {
   const startTime = Date.now();
   
   // Remove OriginTool_ prefix if present
   const actualToolName = toolName.replace(/^OriginTool_/, '');
-
-  // Get agent callbacks from window if not provided directly
-  if (!agentCallbacks && (window as any).__agentCallbacks) {
-    agentCallbacks = (window as any).__agentCallbacks;
-  }
 
   try {
     console.log(`[ModernTools] Executing ${actualToolName} with params:`, parameters);
@@ -370,80 +351,6 @@ export async function executeModernTool(
         break;
       }
 
-      // Agent-specific tools
-      case 'update_task_progress': {
-        // Try Rust command first, fallback to callbacks
-        try {
-          const rustResult = await invoke<{markdown_content: string, timestamp: number}>('agent_update_task_progress', {
-            sessionId: (window as any).__agentSessionId || 'default',
-            markdownContent: parameters.markdown_content
-          });
-          
-          // Also trigger callback if available for UI update
-          if (agentCallbacks?.onUpdateTaskProgress) {
-            agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
-          }
-          
-          result = {
-            success: true,
-            message: 'Task progress updated successfully',
-            content: parameters.markdown_content,
-            timestamp: rustResult.timestamp
-          };
-        } catch (err) {
-          // Fallback to callback-only mode
-          if (agentCallbacks?.onUpdateTaskProgress) {
-            agentCallbacks.onUpdateTaskProgress(parameters.markdown_content);
-            result = { 
-              success: true, 
-              message: 'Task progress updated successfully (callback mode)',
-              content: parameters.markdown_content
-            };
-          } else {
-            throw new Error(`Agent tool execution failed: ${err}`);
-          }
-        }
-        break;
-      }
-
-      case 'send_user_message': {
-        // Try Rust command first, fallback to callbacks
-        try {
-          const rustResult = await invoke<{message: string, message_type: string, timestamp: number}>('agent_send_user_message', {
-            sessionId: (window as any).__agentSessionId || 'default',
-            message: parameters.message,
-            messageType: parameters.message_type || 'info'
-          });
-          
-          // Also trigger callback if available for UI update
-          if (agentCallbacks?.onSendUserMessage) {
-            agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
-          }
-          
-          result = { 
-            success: true, 
-            message: 'User message sent successfully',
-            content: parameters.message,
-            type: parameters.message_type,
-            timestamp: rustResult.timestamp
-          };
-        } catch (err) {
-          // Fallback to callback-only mode
-          if (agentCallbacks?.onSendUserMessage) {
-            agentCallbacks.onSendUserMessage(parameters.message, parameters.message_type || 'info');
-            result = { 
-              success: true, 
-              message: 'User message sent successfully (callback mode)',
-              content: parameters.message,
-              type: parameters.message_type
-            };
-          } else {
-            throw new Error(`Agent tool execution failed: ${err}`);
-          }
-        }
-        break;
-      }
-
       default:
         throw new Error(`Unknown tool: ${actualToolName}`);
     }
@@ -481,8 +388,8 @@ export async function executeModernTool(
  * Generate tool definitions for AI consumption
  * Compatible with OpenAI, Anthropic, and Gemini APIs
  */
-export function generateModernToolDefinitions(enabledToolNames?: string[], includeAgentTools: boolean = false): ModernToolDefinition[] {
-  const tools = getEnabledModernTools(enabledToolNames, includeAgentTools);
+export function generateModernToolDefinitions(enabledToolNames?: string[]): ModernToolDefinition[] {
+  const tools = getEnabledModernTools(enabledToolNames);
   
   // Add OriginTool prefix
   return tools.map(tool => ({
@@ -500,10 +407,9 @@ export function generateModernToolDefinitions(enabledToolNames?: string[], inclu
  */
 export async function writeModernToolsJson(
   outputPath: string,
-  enabledToolNames?: string[],
-  includeAgentTools: boolean = false
+  enabledToolNames?: string[]
 ): Promise<void> {
-  const tools = generateModernToolDefinitions(enabledToolNames, includeAgentTools);
+  const tools = generateModernToolDefinitions(enabledToolNames);
   
   const toolsJson = {
     version: '2.0',
@@ -541,11 +447,10 @@ export function resetToolExecutionStats(): void {
  * This creates a system prompt-like message explaining available tools to Gemini
  * 
  * @param enabledToolNames - Optional list of enabled tool names
- * @param includeAgentTools - Whether to include agent-specific tools
  * @returns Markdown-formatted tool instruction text for Gemini's contents
  */
-export function generateGeminiToolInstructions(enabledToolNames?: string[], includeAgentTools: boolean = false): string {
-  const tools = getEnabledModernTools(enabledToolNames, includeAgentTools);
+export function generateGeminiToolInstructions(enabledToolNames?: string[]): string {
+  const tools = getEnabledModernTools(enabledToolNames);
   
   if (tools.length === 0) {
     return '';
@@ -578,20 +483,6 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[], incl
     '',
   ];
   
-  if (includeAgentTools) {
-    instructions.push('**Agent Mode Instructions:**');
-    instructions.push('- You are in AUTONOMOUS Agent mode');
-    instructions.push('- Use update_task_progress tool to keep users informed of your progress');
-    instructions.push('- Use send_user_message tool to communicate with users');
-    instructions.push('- Work independently and make decisions without asking for approval');
-    instructions.push('- Use tools proactively to accomplish tasks');
-    instructions.push('- **EFFICIENCY: Call multiple tools at once when possible** (e.g., update_task_progress + write_file)');
-    instructions.push('- **ERROR HANDLING: If a tool fails, check the error message and try a different approach**');
-    instructions.push('- **VERIFY SUCCESS: Always check tool results before proceeding to the next step**');
-    instructions.push('- **CONTINUATION: Each response counts - make maximum progress by using multiple tools together**');
-    instructions.push('');
-  }
-  
   instructions.push('---', '');
 
   // Group tools by category
@@ -602,8 +493,6 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[], incl
   const dirTools = tools.filter(t => t.function.name.startsWith('list_directory') || 
                                       t.function.name.startsWith('create_directory'));
   const searchTools = tools.filter(t => t.function.name.startsWith('search_'));
-  const agentTools = tools.filter(t => t.function.name.startsWith('update_task_progress') || 
-                                        t.function.name.startsWith('send_user_message'));
 
   // Add file operation tools
   if (fileTools.length > 0) {
@@ -637,20 +526,6 @@ export function generateGeminiToolInstructions(enabledToolNames?: string[], incl
   if (searchTools.length > 0) {
     instructions.push('## 🔍 検索ツール (Search Tools)', '');
     searchTools.forEach(tool => {
-      instructions.push(`### \`${tool.function.name}\``);
-      instructions.push(`**説明:** ${tool.function.description}`);
-      instructions.push('**パラメータ:**');
-      instructions.push('```json');
-      instructions.push(JSON.stringify(tool.function.parameters, null, 2));
-      instructions.push('```');
-      instructions.push('');
-    });
-  }
-
-  // Add agent communication tools
-  if (agentTools.length > 0) {
-    instructions.push('## 🤖 Agent コミュニケーションツール (Agent Communication Tools)', '');
-    agentTools.forEach(tool => {
       instructions.push(`### \`${tool.function.name}\``);
       instructions.push(`**説明:** ${tool.function.description}`);
       instructions.push('**パラメータ:**');

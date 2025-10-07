@@ -12,16 +12,6 @@ export interface ChatSession {
   messages: ChatMessage[];
   tokenUsage: number;
   createdAt: Date;
-  isAgentMode?: boolean; // Whether this is an Agent mode session
-}
-
-export interface AgentTask {
-  id: string;
-  description: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'failed';
-  createdAt: Date;
-  updatedAt: Date;
-  result?: string;
 }
 
 export interface GeminiStats {
@@ -101,7 +91,6 @@ export interface Settings {
   responseMode: 'async' | 'stream'; // Response processing mode
   customApiKey?: string;
   maxMessagesBeforeCompact: number;
-  maxContinuations?: number; // Maximum continuation attempts for agent mode (default: 15)
   geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
   googleCloudProjectId?: string; // Google Cloud Project ID
   geminiPath?: string; // Path to gemini.ps1 script detected from npm -g
