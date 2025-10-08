@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::Path;
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 pub struct DiffHunk {
     old_start: usize,
