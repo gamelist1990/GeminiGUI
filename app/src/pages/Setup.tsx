@@ -554,54 +554,134 @@ const SetupModal: React.FC<SetupModalProps> = ({
 
     if (currentStep === "cloud-setup") {
       return (
-        <div className="cloud-setup-container">
-          <div className="cloud-setup-info">
-            <div className="cloud-setup-title">
-              ⚠️ 手動セットアップが必要です
+        <div className="manual-setup-container">
+          {/* Header Section with Google Cloud Branding */}
+          <div className="manual-setup-header">
+            <div className="manual-setup-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" fill="#4285f4"/>
+                <path d="M10 17l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" fill="white"/>
+              </svg>
             </div>
-            <div className="cloud-setup-description">
-              自動セットアップをキャンセルされました。
-              <br />
-              以下の手順で手動でセットアップしてください:
-              <br />
-              <div className="cloud-setup-steps">
-                1.{" "}
+            <h3 className="manual-setup-title">Google Cloud プロジェクトの設定</h3>
+            <p className="manual-setup-subtitle">
+              Gemini APIを使用するには、Google Cloudプロジェクトの設定が必要です
+            </p>
+          </div>
+
+          {/* Step Cards */}
+          <div className="manual-setup-steps">
+            {/* Step 1 */}
+            <div className="manual-setup-step-card">
+              <div className="step-number">1</div>
+              <div className="step-content">
+                <h4 className="step-title">Google Cloud Consoleにアクセス</h4>
+                <p className="step-description">
+                  Google Cloudの管理画面を開きます
+                </p>
                 <a
                   href="https://console.cloud.google.com/"
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="step-link"
                 >
-                  Google Cloud Console
-                </a>{" "}
-                にアクセス
-                <br />
-                2. 新しいプロジェクトを作成
-                <br />
-                3. Gemini API (generativelanguage.googleapis.com) を有効化
-                <br />
-                4. 環境変数 <code>GOOGLE_CLOUD_PROJECT</code>{" "}
-                にプロジェクトIDを設定
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+                  </svg>
+                  コンソールを開く
+                </a>
               </div>
-              <div className="cloud-setup-hint">
-                💡 ヒント: 「←
-                戻る」ボタンで認証確認に戻り、再度確認すると自動セットアップを選択できます。
+            </div>
+
+            {/* Step 2 */}
+            <div className="manual-setup-step-card">
+              <div className="step-number">2</div>
+              <div className="step-content">
+                <h4 className="step-title">新しいプロジェクトを作成</h4>
+                <p className="step-description">
+                  コンソール上部の「プロジェクトを選択」→「新しいプロジェクト」をクリック
+                </p>
+                <div className="step-note">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                  </svg>
+                  プロジェクト名は任意です（例: gemini-app）
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="manual-setup-step-card">
+              <div className="step-number">3</div>
+              <div className="step-content">
+                <h4 className="step-title">Gemini APIを有効化</h4>
+                <p className="step-description">
+                  「APIとサービス」→「ライブラリ」から以下のAPIを有効にします
+                </p>
+                <code className="step-code">generativelanguage.googleapis.com</code>
+                <div className="step-note">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                  </svg>
+                  検索バーで「Generative Language API」を検索してください
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="manual-setup-step-card">
+              <div className="step-number">4</div>
+              <div className="step-content">
+                <h4 className="step-title">環境変数を設定</h4>
+                <p className="step-description">
+                  プロジェクトIDをコピーして、以下の環境変数に設定します
+                </p>
+                <code className="step-code">GOOGLE_CLOUD_PROJECT</code>
+                <div className="step-note important">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                  </svg>
+                  環境変数は、システムの環境変数またはユーザー環境変数に設定してください
+                </div>
               </div>
             </div>
           </div>
-          <div className="cloud-setup-buttons">
+
+          {/* Help Section */}
+          <div className="manual-setup-help">
+            <div className="help-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/>
+              </svg>
+            </div>
+            <div className="help-content">
+              <p className="help-text">
+                💡 <strong>ヒント:</strong> 「戻る」ボタンで認証確認画面に戻り、自動セットアップを再度試すこともできます
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="manual-setup-actions">
             <button
               className="setup-button setup-button-secondary"
               onClick={() => setCurrentStep("auth-verify")}
               disabled={isProcessing}
             >
-              ← 戻る
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+              戻る
             </button>
             <button
               className="setup-button setup-button-primary"
               onClick={() => setCurrentStep("complete")}
               disabled={isProcessing}
             >
-              完了 →
+              セットアップ完了
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
             </button>
           </div>
         </div>
