@@ -11,6 +11,7 @@ mod tools;
 mod agent;
 
 use std::sync::Arc;
+use tauri::Manager;
 
 //本プロジェクトでは主にRustを一切(登録以外)使わず, Tsxとtsのみで完結させます。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,6 +21,17 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(agent_state)
+        // If ENABLE_DEVTOOLS env var is set, open the main window devtools on startup
+        .setup(|app| {
+            if std::env::var("ENABLE_DEVTOOLS").is_ok() {
+                if let Some(window) = app.get_webview_window("main") {
+                    // Best-effort: try to open devtools for the main window
+                    let _ = window.open_devtools();
+                }
+            }
+
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())

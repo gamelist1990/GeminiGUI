@@ -4,11 +4,10 @@ import * as opener from "@tauri-apps/plugin-opener";
 const ReactMarkdown = React.lazy(
   () => import("react-markdown")
 ) as unknown as any;
-const SyntaxHighlighter = React.lazy(() =>
-  import("react-syntax-highlighter").then((mod) => ({ default: mod.Prism }))
-) as unknown as any;
-// oneDark is relatively small; keep it static import for style reference
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+// dynamic highlighter handled by DynamicSyntaxHighlighter component
+
+// Use a dynamic wrapper component to avoid TDZ/initialization ordering issues in production bundles
+import DynamicSyntaxHighlighter from "../../components/DynamicSyntaxHighlighter";
 
 // Markdown components for syntax highlighting
 export const markdownComponents = {
@@ -29,14 +28,13 @@ export const markdownComponents = {
           <React.Suspense
             fallback={<pre className="code-loading">Loading code…</pre>}
           >
-            <SyntaxHighlighter
-              style={oneDark}
+            <DynamicSyntaxHighlighter
               language={match[1]}
               PreTag="div"
               {...props}
             >
               {String(children).replace(/\\n$/, "")}
-            </SyntaxHighlighter>
+            </DynamicSyntaxHighlighter>
           </React.Suspense>
         );
       }
