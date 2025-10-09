@@ -1,0 +1,175 @@
+/* AISettings.css - AI設定タブのスタイル */
+
+/* Model Selection - モデル選択カード */
+.setting-card .radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Input Fields - APIキー、URL入力など */
+.setting-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  color: #1f2937;
+  background: #f3f4f6;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-weight: 500;
+}
+
+.setting-input:hover {
+  border-color: var(--primary);
+  background: #e5e7eb;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.setting-input[type="password"] {
+  letter-spacing: 0.1em;
+}
+
+.setting-input::placeholder {
+  color: #9ca3af;
+  opacity: 0.8;
+}
+
+/* Setting Description - 説明文 */
+.setting-description {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0 0;
+  line-height: 1.5;
+}
+
+.setting-description.warning {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+}
+
+.setting-description.highlight {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid #10b981;
+}
+
+/* Sub Settings - OpenAI設定内のサブ項目 */
+.sub-setting {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.sub-setting label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.sub-setting .setting-input {
+  margin-bottom: 0.5rem;
+}
+
+/* Toggle Group - OpenAI有効/無効切り替え */
+.toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.toggle-label span {
+  font-size: 1rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Number Input with Suffix - メッセージ数入力 */
+.input-with-suffix {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.setting-input-number {
+  width: 120px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  color: #1f2937;
+  background: #f3f4f6;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.setting-input-number:hover {
+  border-color: var(--primary);
+  background: #e5e7eb;
+}
+
+.setting-input-number:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.input-suffix {
+  font-size: 0.95rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Disabled State - ストリームモード未対応など */
+.radio-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.radio-label.disabled:hover {
+  border-color: var(--border-color);
+  background: var(--bg-primary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sub-setting {
+    padding-top: 0.75rem;
+  }
+
+  .setting-input-number {
+    width: 100px;
+  }
+}

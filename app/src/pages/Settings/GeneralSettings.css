@@ -1,0 +1,145 @@
+/* GeneralSettings.css - 一般設定タブのスタイル */
+
+.settings-category h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Setting Card - 基本カードスタイル */
+.setting-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.setting-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+}
+
+.setting-card .card-header {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #f3f4f6;
+}
+
+.setting-card .card-header h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.setting-card .card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: #f9fafb;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+/* Select Box - 言語選択など */
+.setting-select {
+  width: 100%;
+  max-width: 300px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  color: #1f2937;
+  background: #f3f4f6;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.setting-select:hover {
+  border-color: var(--primary);
+  background: #e5e7eb;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Radio Group - テーマ選択など */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.radio-label:hover {
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.radio-label input[type="radio"]:checked {
+  accent-color: var(--primary);
+}
+
+.radio-label:has(input[type="radio"]:checked) {
+  background: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.radio-label input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.radio-label input[type="radio"]:checked + span {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.radio-label span {
+  color: #4b5563;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .settings-category h2 {
+    font-size: 1.5rem;
+  }
+
+  .setting-card {
+    padding: 1rem;
+  }
+
+  .setting-select {
+    max-width: 100%;
+  }
+}

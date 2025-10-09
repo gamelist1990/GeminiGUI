@@ -9,6 +9,7 @@ const defaultSettings: Settings = {
   theme: 'light',
   approvalMode: 'default',
   model: 'default',
+  responseMode: 'async', // Default to async mode, stream mode is future implementation
   customApiKey: undefined,
   maxMessagesBeforeCompact: 25,
 };

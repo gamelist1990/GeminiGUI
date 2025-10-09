@@ -36,8 +36,24 @@ export function useChatSessions(workspaceId?: string) {
         console.log('useChatSessions: loading sessions for workspaceId:', workspaceId);
         const loaded = await config.loadSessions(workspaceId);
         console.log('useChatSessions: loaded sessions:', loaded.length, 'currentSessionId:', currentSessionId);
-        const finalSessions = loaded.length > 0 ? loaded : [];
+        let finalSessions = loaded.length > 0 ? loaded : [];
         console.log('useChatSessions: finalSessions:', finalSessions.map((s: ChatSession) => ({ id: s.id, messagesCount: s.messages.length })));
+        
+        // Auto-create first session if no sessions exist (0/5 case)
+        if (finalSessions.length === 0) {
+          console.log('useChatSessions: no sessions found, auto-creating first session');
+          const newSession: ChatSession = {
+            id: uuidv4(),
+            name: `Session 1`,
+            messages: [],
+            tokenUsage: 0,
+            createdAt: new Date(),
+          };
+          finalSessions = [newSession];
+          await config.saveSessions(workspaceId, finalSessions);
+          console.log('useChatSessions: auto-created session:', newSession.id);
+        }
+        
         setSessions(finalSessions);
         if (!currentSessionId && finalSessions.length > 0) {
           setCurrentSessionId(finalSessions[0].id);
@@ -58,9 +74,11 @@ export function useChatSessions(workspaceId?: string) {
       return false; // Cannot create more sessions
     }
     
+    const sessionName = `Session ${sessions.length + 1}`;
+    
     const newSession: ChatSession = {
       id: uuidv4(),
-      name: `Session ${sessions.length + 1}`,
+      name: sessionName,
       messages: [],
       tokenUsage: 0,
       createdAt: new Date(),

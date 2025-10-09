@@ -3,7 +3,7 @@ import "./styles/theme.css";
 import "./App.css";
 const WorkspaceSelection = React.lazy(() => import('./pages/WorkspaceSelection')) as any;
 const Chat = React.lazy(() => import('./pages/Chat')) as any;
-const Settings = React.lazy(() => import('./pages/Settings')) as any;
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage')) as any;
 import { useSettings } from "./hooks/useSettings";
 import { useWorkspaces } from "./hooks/useWorkspaces";
 import { useChatSessions } from "./hooks/useChatSessions";
@@ -11,6 +11,7 @@ import { Workspace, ChatMessage } from "./types";
 import { Config } from "./utils/configAPI";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { t } from "./utils/i18n";
+import { cleanupManager } from "./utils/cleanupManager";
 
 type View = 'workspace' | 'chat' | 'settings';
 
@@ -64,20 +65,22 @@ function App() {
   }, [settings.theme, isLoading]);
 
   const handleSelectWorkspace = async (workspace: Workspace) => {
+    // Cleanup previous workspace's temporary files if switching workspaces
+    if (currentWorkspace && currentWorkspace.id !== workspace.id) {
+      console.log(`[App] Switching workspace from ${currentWorkspace.id} to ${workspace.id}`);
+      await cleanupManager.cleanupWorkspace(currentWorkspace.id);
+    }
+    
     setCurrentWorkspace(workspace);
     updateLastOpened(workspace.id);
     addWorkspace(workspace);
-    
-    // Auto-create first session if no sessions exist
-    if (sessions.length === 0) {
-      await createNewSession();
-    }
     
     setCurrentView('chat');
   };
 
   const handleBackToWorkspace = () => {
     setCurrentView('workspace');
+    // Note: We don't cleanup here because user might come back
     setCurrentWorkspace(null);
   };
 
@@ -93,6 +96,20 @@ function App() {
     }
   };
 
+  // Monitor current session changes
+  useEffect(() => {
+    // No-op: removed agent mode logic
+  }, [currentSession?.id, currentWorkspace, currentView]);
+
+  const handleCreateNewSession = async (): Promise<boolean> => {
+    const success = await createNewSession();
+    // Switch to chat view when creation succeeded
+    if (success) {
+      setCurrentView('chat');
+    }
+    return success;
+  };
+
   const handleSendMessage = (sessionId: string, message: ChatMessage) => {
     sendMessage(sessionId, message);
   };
@@ -106,17 +123,15 @@ function App() {
     await compactSession(sessionId);
   };
 
+  const handleSwitchSession = (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+  };
+
   if (isLoading || !globalConfig) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        height: '100vh',
-        backgroundColor: 'var(--background)',
-        color: 'var(--text-primary)'
-      }}>
-        {t('common.loading')}
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <div className="loading-text">{t('common.loading')}</div>
       </div>
     );
   }
@@ -124,7 +139,7 @@ function App() {
   return (
     <>
       {currentView === 'workspace' && (
-        <React.Suspense fallback={<div style={{padding:20}}>Loading…</div>}>
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading…</div></div>}>
           <WorkspaceSelection
             recentWorkspaces={recentWorkspaces}
             favoriteWorkspaces={favoriteWorkspaces}
@@ -132,6 +147,7 @@ function App() {
             onOpenSettings={handleOpenSettings}
             onToggleFavorite={toggleFavorite}
             settings={settings}
+            updateSettings={updateSettings}
             globalConfig={globalConfig}
             setupCheckCompleted={setupCheckCompleted}
             onSetupCheckCompleted={() => setSetupCheckCompleted(true)}
@@ -140,7 +156,7 @@ function App() {
       )}
       
       {currentView === 'chat' && currentWorkspace && (
-        <React.Suspense fallback={<div style={{padding:20}}>Loading chat…</div>}>
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading chat…</div></div>}>
           <Chat
           workspace={currentWorkspace}
           sessions={sessions}
@@ -148,13 +164,15 @@ function App() {
           currentSessionId={currentSessionId}
           maxSessionsReached={maxSessionsReached}
           approvalMode={settings.approvalMode}
+          responseMode={settings.responseMode || 'async'}
           totalTokens={getTotalTokens()}
           customApiKey={settings.customApiKey}
           googleCloudProjectId={settings.googleCloudProjectId}
           maxMessagesBeforeCompact={settings.maxMessagesBeforeCompact}
           globalConfig={globalConfig}
-          onCreateNewSession={createNewSession}
-          onSwitchSession={setCurrentSessionId}
+          settings={settings}
+          onCreateNewSession={handleCreateNewSession}
+          onSwitchSession={handleSwitchSession}
           onSendMessage={handleSendMessage}
           onResendMessage={handleResendMessage}
           onDeleteSession={deleteSession}
@@ -166,11 +184,12 @@ function App() {
       )}
 
       {currentView === 'settings' && (
-        <React.Suspense fallback={<div style={{padding:20}}>Loading settings…</div>}>
-          <Settings
+        <React.Suspense fallback={<div className="loading-container"><div className="loading-spinner"></div><div className="loading-text">Loading settings…</div></div>}>
+          <SettingsPage
           settings={settings}
           onUpdateSettings={updateSettings}
           onClose={handleCloseSettings}
+          globalConfig={globalConfig}
           />
         </React.Suspense>
       )}

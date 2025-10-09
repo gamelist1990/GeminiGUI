@@ -105,6 +105,86 @@ export async function fileExists(path: string): Promise<boolean> {
   return result.toLowerCase() === 'true';
 }
 
+export async function writeBinaryFile(filePath: string, data: Uint8Array | ArrayBuffer): Promise<void> {
+  // Try using the Tauri fs plugin first (preferred). If that fails, fall back
+  // to the PowerShell-based approach. This reduces issues with long file paths
+  // and avoids passing huge strings through command-line arguments.
+  try {
+    const uint8Array = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+
+    // Try to dynamically import @tauri-apps/plugin-fs to avoid hard dependency
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = await import('@tauri-apps/plugin-fs');
+      if (fs) {
+        // plugin-fs.writeFile typically accepts Uint8Array or a ReadableStream
+        const writeFn = (fs as any).writeFile || (fs as any).writeBinaryFile;
+        if (typeof writeFn === 'function') {
+          const toWrite = uint8Array instanceof Uint8Array ? uint8Array : new Uint8Array(uint8Array);
+          await writeFn(filePath, toWrite as any);
+          return;
+        }
+      }
+    } catch (fsImportError) {
+      // plugin may not be available in this runtime - fall through to PowerShell method
+      console.warn('plugin-fs not available or failed, falling back to PowerShell write:', fsImportError);
+    }
+
+    // If we reach here, fallback to PowerShell approach.
+    // Prepare base64 safely in JS, then write through PowerShell in chunks.
+    let base64Data = '';
+    try {
+      const chunkSize = 10000;
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.slice(i, Math.min(i + chunkSize, uint8Array.length));
+        base64Data += btoa(String.fromCharCode.apply(null, Array.from(chunk)));
+      }
+    } catch (encodeError) {
+      throw new Error(`Base64エンコーディング失敗: ${encodeError}`);
+    }
+
+    // Windows: if path is long, prefix with \\\\?\\ to support long paths
+    let safePath = filePath.replace(/'/g, "''");
+    try {
+      if (process.platform === 'win32' || navigator?.userAgent?.includes('Windows')) {
+        // Only prefix if not already using long path prefix
+        if (!safePath.startsWith('\\\\?\\')) {
+          // Convert forward slashes to backslashes for Windows
+          const normalized = safePath.replace(/\//g, '\\\\');
+          safePath = '\\\\?\\' + normalized;
+        }
+      }
+    } catch (e) {
+      // ignore environment detection failures
+    }
+
+    const base64ChunkSize = 8000;
+    const base64Chunks: string[] = [];
+    for (let i = 0; i < base64Data.length; i += base64ChunkSize) {
+      base64Chunks.push(base64Data.slice(i, i + base64ChunkSize));
+    }
+
+    let psScript = '';
+    base64Chunks.forEach((chunk, index) => {
+      const safeChunk = chunk.replace(/'/g, "''");
+      psScript += `$base64_${index} = '${safeChunk}'; `;
+    });
+
+    psScript += `
+      $fullBase64 = $base64_0;
+      ${base64Chunks.slice(1).map((_, index) => `$fullBase64 += $base64_${index + 1};`).join(' ')}
+      [System.IO.File]::WriteAllBytes('${safePath}', [System.Convert]::FromBase64String($fullBase64.Trim()));
+      Write-Output 'success';
+    `;
+
+    await runPowerShellExpectSuccess(psScript);
+
+  } catch (error) {
+    console.error('PowerShell binary write failed:', error);
+    throw new Error(`ファイル保存に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 /**
  * ユーザーPROFILEパスを取得
  *

@@ -4,7 +4,7 @@ import { Workspace, Settings } from '../types';
 import { t } from '../utils/i18n';
 import { geminiCheck } from '../utils/setupAPI';
 import { Config } from '../utils/configAPI';
-import SetupModal from './Setup';
+import ModernSetup from './ModernSetup';
 import './WorkspaceSelection.css';
 
 interface WorkspaceSelectionProps {
@@ -14,6 +14,7 @@ interface WorkspaceSelectionProps {
   onOpenSettings: () => void;
   onToggleFavorite: (id: string) => void;
   settings: Settings; // 設定を受け取る
+  updateSettings: (settings: Partial<Settings>) => void; // 設定更新関数
   globalConfig: Config; // グローバルconfig.jsonを受け取る
   setupCheckCompleted: boolean; // セットアップチェック完了フラグ
   onSetupCheckCompleted: () => void; // セットアップチェック完了コールバック
@@ -26,6 +27,7 @@ export default function WorkspaceSelection({
   onOpenSettings,
   onToggleFavorite,
   settings,
+  updateSettings,
   globalConfig,
   setupCheckCompleted,
   onSetupCheckCompleted,
@@ -34,42 +36,98 @@ export default function WorkspaceSelection({
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [isCheckingSetup, setIsCheckingSetup] = useState(true);
 
-  // Check Gemini CLI on component mount (only once per app session)
+  // Pre-check setup status before rendering loading state
   useEffect(() => {
+    let isComponentMounted = true;
+
+    const preCheckSetup = async () => {
+      try {
+        // If geminiAuth is true OR geminiSetupSkipped is true, skip all setup checks completely
+        if (settings.geminiAuth === true || settings.geminiSetupSkipped === true) {
+          console.log('[Setup] geminiAuth or geminiSetupSkipped is true, skipping all setup checks');
+          if (isComponentMounted) {
+            setIsCheckingSetup(false);
+            onSetupCheckCompleted();
+          }
+          return;
+        }
+
+        // Quick pre-check: see if we already have auth complete status
+        if (setupCheckCompleted) {
+          console.log('[Setup] Already completed, skipping load');
+          if (isComponentMounted) setIsCheckingSetup(false);
+          return;
+        }
+
+        // geminiAuth が false の場合は、必ずフルチェックを実行
+        console.log('[Setup] geminiAuth is false, running full setup check');
+      } catch (error) {
+        console.log('[Setup] Pre-check failed, will run full check');
+      }
+
+      // geminiAuth が false の場合は常にフルチェックを実行
+      if (isComponentMounted) {
+        await checkGeminiSetup();
+      }
+    };
+
     const checkGeminiSetup = async () => {
-      const logCallback = (msg: string) => console.log('[Setup Check]', msg);
+      const logCallback = (msg: string) => console.log('[Setup]', msg);
+
+      // geminiAuth が true OR geminiSetupSkipped が true の場合は完全にスキップ
+      if (settings.geminiAuth === true || settings.geminiSetupSkipped === true) {
+        logCallback('geminiAuth or geminiSetupSkipped is true, skipping all setup checks');
+        setIsCheckingSetup(false);
+        onSetupCheckCompleted();
+        return;
+      }
 
       // 既にチェック済みの場合はスキップ
       if (setupCheckCompleted) {
-        logCallback('Already checked in this app session, skipping');
+        logCallback('認証は既に完了しています。セットアップチェックをスキップします');
         setIsCheckingSetup(false);
         return;
       }
 
+      // セットアップチェックを開始
+      logCallback('Gemini CLI のチェックを開始しています...');
+      
       try {
-        logCallback('Starting setup verification');
         logCallback(`config.geminiAuth: ${settings.geminiAuth}`);
+        logCallback(`config.geminiSetupSkipped: ${settings.geminiSetupSkipped}`);
 
-        // geminiAuthフラグがtrueでも、実際のプロジェクト存在を確認
+        // geminiCheck を実行
         const result = await geminiCheck(logCallback);
 
         logCallback(`Result: ${JSON.stringify(result)}`);
+        logCallback(`Detailed result breakdown:`);
+        logCallback(`  - geminiExists: ${result.geminiExists}`);
+        logCallback(`  - nodeExists: ${result.nodeExists}`);
+        logCallback(`  - isAuthenticated: ${result.isAuthenticated}`);
+        logCallback(`  - hasProject: ${result.hasProject}`);
 
-        // Show setup modal if Gemini CLI is not installed OR not authenticated OR no cloud project
-        if (!result.geminiExists || !result.isAuthenticated) {
-          logCallback('セットアップが必要です (CLI未インストールまたは未認証)');
+        // セットアップが必要な条件をチェック
+        const needsSetup = !result.geminiExists || !result.nodeExists || !result.isAuthenticated || result.hasProject === false;
+        logCallback(`needsSetup calculation: geminiExists=${result.geminiExists}, nodeExists=${result.nodeExists}, isAuthenticated=${result.isAuthenticated}, hasProject=${result.hasProject} => needsSetup=${needsSetup}`);
+
+        if (needsSetup) {
+          logCallback('セットアップが必要なため、SetupModalを表示します');
           setShowSetupModal(true);
-        } else if (result.hasProject === false) {
-          logCallback('セットアップが必要です (Cloud Projectなし)');
-          setShowSetupModal(true);
-        } else if (result.hasProject === true) {
-          logCallback('✓ セットアップは不要です (すべて完了)');
-          // プロジェクトが存在する場合のみセットアップ完了
-          setShowSetupModal(false);
+          // モーダルが完全に表示されるまで待つ
+          await new Promise(resolve => setTimeout(resolve, 100));
         } else {
-          // hasProjectがundefinedの場合（チェック失敗）は念のためセットアップ表示
-          logCallback('プロジェクトチェック結果不明、セットアップを表示');
-          setShowSetupModal(true);
+          logCallback('セットアップは不要です');
+          // セットアップ不要の場合は geminiAuth を true に更新
+          logCallback('geminiAuth を true に更新します');
+          updateSettings({ geminiAuth: true });
+          if (globalConfig) {
+            const config = await globalConfig.loadConfig();
+            if (config) {
+              config.geminiAuth = true;
+              await globalConfig.saveConfig(config);
+              logCallback('geminiAuth を config.json に保存しました');
+            }
+          }
         }
 
         // チェック完了フラグを設定（アプリケーションレベルで保持）
@@ -79,18 +137,30 @@ export default function WorkspaceSelection({
         logCallback(`Failed to check Gemini setup: ${error}`);
         // Show setup modal on error as well
         setShowSetupModal(true);
+        // モーダルが完全に表示されるまで待つ
+        await new Promise(resolve => setTimeout(resolve, 100));
         onSetupCheckCompleted();
       } finally {
         setIsCheckingSetup(false);
       }
     };
 
-    checkGeminiSetup();
-  }, [settings.geminiAuth, setupCheckCompleted, onSetupCheckCompleted]);
+    preCheckSetup();
 
-  const handleSetupComplete = () => {
+    return () => {
+      isComponentMounted = false;
+    }
+  }, [settings.geminiAuth, setupCheckCompleted, onSetupCheckCompleted, globalConfig, settings]);
+
+  const handleSetupComplete = async () => {
     setShowSetupModal(false);
-    // セットアップ完了はconfig.jsonに保存される
+    // セットアップ完了後に設定を再読み込みしてgeminiAuthを更新
+    if (globalConfig) {
+      const updatedSettings = await globalConfig.loadConfig();
+      if (updatedSettings) {
+        updateSettings(updatedSettings);
+      }
+    }
   };
 
   // Filter out favorite workspaces from recent workspaces to avoid duplicates
@@ -132,9 +202,14 @@ export default function WorkspaceSelection({
     }
   };
 
+  // Debug effect for modal state
+  useEffect(() => {
+    console.log('[WorkspaceSelection] Modal state changed - showSetupModal:', showSetupModal, 'isCheckingSetup:', isCheckingSetup);
+  }, [showSetupModal, isCheckingSetup]);
+
   return (
     <div className="workspace-selection">
-      <SetupModal 
+      <ModernSetup 
         isOpen={showSetupModal} 
         onComplete={handleSetupComplete}
         globalConfig={globalConfig}

@@ -1,18 +1,23 @@
 import { useState } from 'react';
-import { Settings as SettingsType } from '../types';
+import { Settings as SettingsType, ToolConfig } from '../types';
 import { t } from '../utils/i18n';
 import SetupModal from './Setup';
-import './Settings.css';
+import { detectGlobalNpmPath } from '../utils/setupAPI';
+import { Config } from '../utils/configAPI';
+import ModernToolSettingsPanel from '../components/ModernToolSettingsPanel';
 
 interface SettingsProps {
   settings: SettingsType;
   onUpdateSettings: (settings: Partial<SettingsType>) => void;
   onClose: () => void;
+  globalConfig?: Config;
 }
 
-export default function Settings({ settings, onUpdateSettings, onClose }: SettingsProps) {
+export default function Settings({ settings, onUpdateSettings, onClose, globalConfig }: SettingsProps) {
   const [localSettings, setLocalSettings] = useState(settings);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const [isDetectingPath, setIsDetectingPath] = useState(false);
+  const [pathDetectionMessage, setPathDetectionMessage] = useState('');
 
   const handleSave = () => {
     onUpdateSettings(localSettings);
@@ -22,7 +27,7 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
   };
 
   const handleCheckGeminiSetup = async () => {
-    // SetupModal を直接開いてチェックを実行
+    // SetupModal を直接開いてチェックを実行（セットアップ確認モード）
     setShowSetupModal(true);
   };
 
@@ -34,15 +39,61 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
     setShowSetupModal(true);
   };
 
-  const handleSetupComplete = () => {
+  const handleSetupComplete = async () => {
     setShowSetupModal(false);
-    // セットアップ完了をローカルストレージに保存
-    localStorage.setItem('geminiSetupCompleted', 'true');
+    // セットアップ完了後に設定を再読み込みしてgeminiAuthを更新
+    if (globalConfig) {
+      const updatedSettings = await globalConfig.loadConfig();
+      if (updatedSettings) {
+        setLocalSettings(updatedSettings);
+        onUpdateSettings(updatedSettings);
+      }
+    }
+  };
+
+  const handleRedetectGeminiPath = async () => {
+    setIsDetectingPath(true);
+    setPathDetectionMessage('gemini.ps1 のパスを検出中...');
+
+    try {
+      const detectedPaths = await detectGlobalNpmPath((msg: string) => {
+        setPathDetectionMessage(msg);
+      });
+
+      if (detectedPaths.npmPath && detectedPaths.hasGeminiCLI) {
+        const geminiPath = `${detectedPaths.npmPath}\\gemini.ps1`;
+        setPathDetectionMessage(`✓ パスを検出: ${geminiPath}`);
+
+        // Update local settings
+        const updatedSettings = { ...localSettings, geminiPath };
+        setLocalSettings(updatedSettings);
+
+        // Save to global config immediately
+        if (globalConfig) {
+          const currentConfig = await globalConfig.loadConfig();
+          if (currentConfig) {
+            currentConfig.geminiPath = geminiPath;
+            await globalConfig.saveConfig(currentConfig);
+            setPathDetectionMessage('✓ パスを保存しました');
+          }
+        }
+
+        setTimeout(() => {
+          setPathDetectionMessage('');
+        }, 3000);
+      } else {
+        setPathDetectionMessage('✗ gemini.ps1 が見つかりませんでした。Gemini CLI がインストールされているか確認してください。');
+      }
+    } catch (error) {
+      setPathDetectionMessage(`✗ エラー: ${error}`);
+    } finally {
+      setIsDetectingPath(false);
+    }
   };
 
   return (
     <div className="settings-page">
-      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} />
+      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} globalConfig={globalConfig} />
       
       <div className="settings-container">
         <div className="settings-header">
@@ -100,6 +151,35 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
             </select>
             <p className="setting-description">
               {t('settings.approvalDescription')}
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">⚡</span>
+              {t('settings.responseMode')}
+            </label>
+            <select
+              className="setting-select"
+              value={localSettings.responseMode || 'async'}
+              onChange={(e) =>
+                setLocalSettings({ ...localSettings, responseMode: e.target.value as 'async' | 'stream' })
+              }
+              disabled={!localSettings.enableOpenAI}
+            >
+              <option value="async">{t('settings.asyncMode')}</option>
+              <option value="stream">{t('settings.streamMode')}</option>
+            </select>
+            <p className="setting-description">
+              {t('settings.responseModeDescription')}
+              {!localSettings.enableOpenAI && (
+                <>
+                  <br />
+                  <span style={{ color: 'var(--vscode-charts-orange)' }}>
+                    {t('settings.streamNotAvailable')}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
@@ -162,6 +242,118 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
             </p>
           </div>
 
+          {/* OpenAI API Support Section */}
+          <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">🤖</span>
+              {t('settings.enableOpenAI')}
+            </label>
+            <div className="theme-options">
+              <button
+                className={`theme-option ${!localSettings.enableOpenAI ? 'active' : ''}`}
+                onClick={() => setLocalSettings({ ...localSettings, enableOpenAI: false })}
+              >
+                ❌ {t('settings.disabled')}
+              </button>
+              <button
+                className={`theme-option ${localSettings.enableOpenAI ? 'active' : ''}`}
+                onClick={() => setLocalSettings({ ...localSettings, enableOpenAI: true })}
+              >
+                ✅ {t('settings.enabled')}
+              </button>
+            </div>
+            <p className="setting-description">
+              {t('settings.openAIDescription')}
+            </p>
+          </div>
+
+          {localSettings.enableOpenAI && (
+            <>
+              <div className="setting-group api-key-group">
+                <label className="setting-label">
+                  <span className="label-icon">🔑</span>
+                  {t('settings.openAIApiKey')}
+                </label>
+                <input
+                  type="password"
+                  className="setting-input"
+                  placeholder={t('settings.openAIApiKeyPlaceholder')}
+                  value={localSettings.openAIApiKey || ''}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, openAIApiKey: e.target.value })
+                  }
+                />
+                <p className="setting-description">
+                  {t('settings.openAIApiKeyDescription')}
+                  <br />
+                  <small>{t('settings.openAIApiKeyNote')}</small>
+                </p>
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-label">
+                  <span className="label-icon">🌐</span>
+                  {t('settings.openAIBaseURL')}
+                </label>
+                <input
+                  type="text"
+                  className="setting-input"
+                  placeholder="https://api.openai.com/v1"
+                  value={localSettings.openAIBaseURL || ''}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, openAIBaseURL: e.target.value })
+                  }
+                />
+                <p className="setting-description">
+                  {t('settings.openAIBaseURLDescription')}
+                  <br />
+                  <small>{t('settings.openAIBaseURLNote')}</small>
+                </p>
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-label">
+                  <span className="label-icon">🎯</span>
+                  {t('settings.openAIModel')}
+                </label>
+                <input
+                  type="text"
+                  className="setting-input"
+                  placeholder="gpt-3.5-turbo"
+                  value={localSettings.openAIModel || ''}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, openAIModel: e.target.value })
+                  }
+                />
+                <p className="setting-description">
+                  {t('settings.openAIModelDescription')}
+                  <br />
+                  <small>{t('settings.openAIModelNote')}</small>
+                </p>
+              </div>
+
+              <div className="setting-group">
+                <label className="setting-label">
+                  <span className="label-icon">⚡</span>
+                  {t('settings.responseMode')}
+                </label>
+                <select
+                  className="setting-select"
+                  value={localSettings.responseMode || 'async'}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, responseMode: e.target.value as 'async' | 'stream' })
+                  }
+                >
+                  <option value="async">{t('settings.asyncMode')}</option>
+                  <option value="stream">{t('settings.streamMode')}</option>
+                </select>
+                <p className="setting-description">
+                  {t('settings.openAIStreamDescription')}
+                </p>
+              </div>
+            </>
+          )}
+
           <div className="setting-group compact-group">
             <label className="setting-label">
               <span className="label-icon">💬</span>
@@ -184,6 +376,48 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
               {t('settings.cleanupDescription')}
               <br />
               <small>{t('settings.cleanupReason')}</small>
+            </p>
+          </div>
+
+          <div className="setting-group">
+            <label className="setting-label">
+              <span className="label-icon">📍</span>
+              Gemini CLI パス設定
+            </label>
+            <div className="setting-action" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text"
+                className="setting-input"
+                placeholder="C:\\path\\to\\gemini.ps1"
+                value={localSettings.geminiPath || ''}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, geminiPath: e.target.value })
+                }
+                style={{ flex: 1, minWidth: '300px' }}
+              />
+              <button
+                className="action-button secondary"
+                onClick={handleRedetectGeminiPath}
+                disabled={isDetectingPath}
+                title="自動的にgemini.ps1のパスを検出して設定"
+              >
+                {isDetectingPath ? '検出中...' : '🔍 自動検出'}
+              </button>
+            </div>
+            {pathDetectionMessage && (
+              <p className="setting-description" style={{ 
+                color: pathDetectionMessage.includes('✓') ? 'var(--vscode-charts-green)' : 
+                       pathDetectionMessage.includes('✗') ? 'var(--vscode-charts-red)' : 
+                       'var(--text-secondary)'
+              }}>
+                {pathDetectionMessage}
+              </p>
+            )}
+            <p className="setting-description">
+              gemini.ps1 スクリプトへのフルパスを指定してください。
+              「自動検出」ボタンでnpmのグローバルインストールパスから自動的に検出できます。
+              <br />
+              <small>※ パスが正しくないと「Command failed with code 1」エラーが発生します</small>
             </p>
           </div>
 
@@ -217,6 +451,25 @@ export default function Settings({ settings, onUpdateSettings, onClose }: Settin
                 </>
               )}
             </p>
+          </div>
+
+          {/* Tool Settings Section */}
+          <div className="setting-group">
+            <label className="setting-label">🛠️ Tool Settings</label>
+            <p className="setting-description">
+              Manage AI tools that extend capabilities during chat sessions. 
+              Modern tools use Rust/Tauri for safe and efficient execution.
+            </p>
+            <ModernToolSettingsPanel
+              enabledTools={localSettings.enabledTools || []}
+              tools={localSettings.tools || []}
+              onUpdateEnabledTools={(enabledTools: string[]) => 
+                setLocalSettings({ ...localSettings, enabledTools })
+              }
+              onUpdateTools={(tools: ToolConfig[]) =>
+                setLocalSettings({ ...localSettings, tools })
+              }
+            />
           </div>
 
           <div className="setting-group">

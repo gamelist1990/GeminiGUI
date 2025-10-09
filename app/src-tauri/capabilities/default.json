@@ -4,6 +4,16 @@
   "description": "Capability for the main window",
   "windows": ["main"],
   "permissions": [
+    "http:allow-fetch",
+    "http:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://localhost:*" },
+        { "url": "https://*" },
+        { "url": "http://*" }
+      ]
+    },
     "core:default",
     "opener:default",
     "fs:default",
@@ -14,17 +24,32 @@
     "fs:allow-read-dir",
     "fs:allow-mkdir",
     "fs:allow-write-text-file",
+    "fs:allow-write-file",
+    "fs:allow-write",
+    "fs:allow-copy-file",
     "fs:scope-document-recursive",
     {
       "identifier": "fs:scope",
       "allow": [
+        { "path": "*" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$HOME/**" },
         { "path": "$HOME/.gemini" },
         { "path": "$HOME/.gemini/*" },
         { "path": "$HOME/.gemini/**" },
         { "path": "$DOWNLOAD/*" },
         { "path": "$DOWNLOAD/**" },
         { "path": "$DESKTOP/*" },
-        { "path": "$DESKTOP/**" }
+        { "path": "$DESKTOP/**" },
+        { "path": "$RESOURCE" },
+        { "path": "$RESOURCE/*" },
+        { "path": "$RESOURCE/**" },
+        { "path": "$TEMP" },
+        { "path": "$TEMP/*" },
+        { "path": "$TEMP/**" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/*" },
+        { "path": "$APPDATA/**" }
       ]
     },
     "notification:default",
@@ -34,13 +59,28 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
+          "name": "curl",
+          "cmd": "curl",
+          "args": true
+        },
+        {
           "name": "cmd",
           "cmd": "cmd",
           "args": true
         },
-         {
+        {
           "name": "powershell.exe",
           "cmd": "powershell.exe",
+          "args": true
+        },
+        {
+          "name": "python",
+          "cmd": "python",
+          "args": true
+        },
+        {
+          "name": "python3",
+          "cmd": "python3",
           "args": true
         }
       ]
