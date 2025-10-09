@@ -57,6 +57,18 @@ export class Config {
 
   private async buildDefaultSettings(): Promise<Settings> {
     const language = await detectDefaultLanguage();
+    
+    // Import modern tools to get all tool names
+    const { getAllToolNames } = await import('../AITool/modernTools');
+    const allToolNames = getAllToolNames();
+    
+    // Create default tools config with all tools enabled
+    const defaultTools: ToolConfig[] = allToolNames.map(toolName => ({
+      name: toolName,
+      enabled: true, // デフォルトですべて有効
+      lastChecked: new Date().toISOString()
+    }));
+    
     return {
       language,
       theme: 'light',
@@ -66,7 +78,8 @@ export class Config {
       maxMessagesBeforeCompact: 25,
       geminiAuth: false,
       googleCloudProjectId: undefined, // Google Cloud Project IDのデフォルト値
-      tools: [], // Empty tools array by default
+      tools: defaultTools, // すべてのツールをデフォルトで有効化
+      enabledTools: allToolNames, // enabledToolsも初期化
     };
   }
 

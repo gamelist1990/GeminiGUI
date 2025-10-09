@@ -66,24 +66,22 @@ export default function SettingsPage({ settings, onUpdateSettings, onClose, glob
     const newSettings = { ...localSettings, ...updates };
     setLocalSettings(newSettings);
     setHasUnsavedChanges(true);
-    
-    // ツール設定の変更は即座に保存（toolsとenabledToolsの両方が含まれる場合のみ）
-    if ('tools' in updates && 'enabledTools' in updates) {
-      console.log('[Settings] Tool configuration changed, saving immediately...', {
-        tools: updates.tools?.length,
-        enabledTools: updates.enabledTools?.length
-      });
-      onUpdateSettings(newSettings);
-      setHasUnsavedChanges(false);
-    }
+    console.log('[Settings] Setting changed (not saved yet):', Object.keys(updates));
   };
 
   const handleSave = () => {
+    console.log('[Settings] Saving all settings...', localSettings);
     onUpdateSettings(localSettings);
     setHasUnsavedChanges(false);
-    onClose();
-    // Reload to apply language changes
-    window.location.reload();
+    
+    // 言語設定が変更された場合のみリロード
+    if (localSettings.language !== settings.language) {
+      console.log('[Settings] Language changed, reloading...');
+      onClose();
+      window.location.reload();
+    } else {
+      onClose();
+    }
   };
 
   const handleCancel = () => {

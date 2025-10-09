@@ -4,7 +4,7 @@ import { Workspace, Settings } from '../types';
 import { t } from '../utils/i18n';
 import { geminiCheck } from '../utils/setupAPI';
 import { Config } from '../utils/configAPI';
-import SetupModal from './Setup';
+import ModernSetup from './ModernSetup';
 import './WorkspaceSelection.css';
 
 interface WorkspaceSelectionProps {
@@ -42,9 +42,9 @@ export default function WorkspaceSelection({
 
     const preCheckSetup = async () => {
       try {
-        // If geminiAuth is true, skip all setup checks completely
-        if (settings.geminiAuth === true) {
-          console.log('[Setup] geminiAuth is true, skipping all setup checks');
+        // If geminiAuth is true OR geminiSetupSkipped is true, skip all setup checks completely
+        if (settings.geminiAuth === true || settings.geminiSetupSkipped === true) {
+          console.log('[Setup] geminiAuth or geminiSetupSkipped is true, skipping all setup checks');
           if (isComponentMounted) {
             setIsCheckingSetup(false);
             onSetupCheckCompleted();
@@ -74,9 +74,9 @@ export default function WorkspaceSelection({
     const checkGeminiSetup = async () => {
       const logCallback = (msg: string) => console.log('[Setup]', msg);
 
-      // geminiAuth が true の場合は完全にスキップ
-      if (settings.geminiAuth === true) {
-        logCallback('geminiAuth is true, skipping all setup checks');
+      // geminiAuth が true OR geminiSetupSkipped が true の場合は完全にスキップ
+      if (settings.geminiAuth === true || settings.geminiSetupSkipped === true) {
+        logCallback('geminiAuth or geminiSetupSkipped is true, skipping all setup checks');
         setIsCheckingSetup(false);
         onSetupCheckCompleted();
         return;
@@ -94,6 +94,7 @@ export default function WorkspaceSelection({
       
       try {
         logCallback(`config.geminiAuth: ${settings.geminiAuth}`);
+        logCallback(`config.geminiSetupSkipped: ${settings.geminiSetupSkipped}`);
 
         // geminiCheck を実行
         const result = await geminiCheck(logCallback);
@@ -208,7 +209,7 @@ export default function WorkspaceSelection({
 
   return (
     <div className="workspace-selection">
-      <SetupModal 
+      <ModernSetup 
         isOpen={showSetupModal} 
         onComplete={handleSetupComplete}
         globalConfig={globalConfig}

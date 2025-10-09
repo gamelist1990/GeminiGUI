@@ -92,6 +92,7 @@ export interface Settings {
   customApiKey?: string;
   maxMessagesBeforeCompact: number;
   geminiAuth?: boolean; // Gemini認証とCloud設定が完了しているか
+  geminiSetupSkipped?: boolean; // ユーザーがGeminiセットアップをスキップしたか
   googleCloudProjectId?: string; // Google Cloud Project ID
   geminiPath?: string; // Path to gemini.ps1 script detected from npm -g
   // OpenAI API Support

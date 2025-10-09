@@ -76,12 +76,8 @@ export const ToolsSettings: React.FC<ToolsSettingsProps> = ({ settings, onUpdate
                 enabledTools={settings.enabledTools || []}
                 tools={settings.tools || []}
                 onUpdateEnabledTools={(enabledTools: string[]) => {
-                  // enabledToolsとtoolsを同時に更新
-                  const updatedTools = (settings.tools || []).map(tool => ({
-                    ...tool,
-                    enabled: enabledTools.includes(tool.name)
-                  }));
-                  onUpdateSettings({ enabledTools, tools: updatedTools });
+                  // enabledToolsのみを更新（toolsは別途onUpdateToolsで処理される）
+                  onUpdateSettings({ enabledTools });
                 }}
                 onUpdateTools={(tools: ToolConfig[]) => {
                   // toolsとenabledToolsを同時に更新

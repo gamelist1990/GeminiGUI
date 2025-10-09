@@ -23,7 +23,6 @@ interface ModernToolSettingsPanelProps {
 export default function ModernToolSettingsPanel({ 
   enabledTools,
   tools,
-  onUpdateEnabledTools,
   onUpdateTools 
 }: ModernToolSettingsPanelProps) {
   const [initialized, setInitialized] = useState(false);
@@ -45,6 +44,9 @@ export default function ModernToolSettingsPanel({
     const existingToolsMap = new Map(tools.map(t => [t.name, t]));
     const allToolNames = getAllToolNames();
     
+    // 既存の設定が空の場合（初回起動時）、すべてを有効にする
+    const isFirstTime = tools.length === 0;
+    
     const syncedTools: ToolConfig[] = allToolNames.map(toolName => {
       const existing = existingToolsMap.get(toolName);
       if (existing) {
@@ -54,7 +56,7 @@ export default function ModernToolSettingsPanel({
           lastChecked: new Date().toISOString()
         };
       } else {
-        // New tool - default to enabled
+        // New tool - default to enabled (初回起動時もここに該当)
         return {
           name: toolName,
           enabled: true, // デフォルトで有効化
@@ -63,17 +65,20 @@ export default function ModernToolSettingsPanel({
       }
     });
     
-    // Update tools config
+    // Update tools config only (ToolsSettings will sync enabledTools automatically)
     onUpdateTools(syncedTools);
     
-    // Update enabledTools
-    const newEnabledTools = syncedTools
-      .filter(t => t.enabled)
-      .map(t => t.name);
-    onUpdateEnabledTools(newEnabledTools);
+    console.log('[ModernToolSettingsPanel] Synced tools:', {
+      isFirstTime,
+      totalTools: syncedTools.length,
+      enabledCount: syncedTools.filter(t => t.enabled).length,
+      tools: syncedTools
+    });
   };
 
   const handleToggleTool = (toolName: string) => {
+    console.log('[ModernToolSettingsPanel] Toggle tool:', toolName);
+    
     // Find the tool or create it
     const existingTool = tools.find(t => t.name === toolName);
     const newEnabledState = existingTool ? !existingTool.enabled : true;
@@ -102,20 +107,28 @@ export default function ModernToolSettingsPanel({
       .filter(t => t.enabled)
       .map(t => t.name);
     
-    // Update both configs at once
+    console.log('[ModernToolSettingsPanel] Updated state:', {
+      toolName,
+      newEnabledState,
+      totalEnabled: newEnabledTools.length,
+      enabledTools: newEnabledTools
+    });
+    
+    // Update only tools (ToolsSettings will sync enabledTools automatically)
     onUpdateTools(updatedTools);
-    onUpdateEnabledTools(newEnabledTools);
   };
 
   const handleToggleAll = (enabled: boolean) => {
+    console.log('[ModernToolSettingsPanel] Toggle all:', enabled);
+    
     const updatedTools = getAllToolNames().map(toolName => ({
       name: toolName,
       enabled,
       lastChecked: new Date().toISOString()
     }));
     
+    // Update only tools (ToolsSettings will sync enabledTools automatically)
     onUpdateTools(updatedTools);
-    onUpdateEnabledTools(enabled ? getAllToolNames() : []);
   };
 
   const isToolEnabled = (toolName: string): boolean => {

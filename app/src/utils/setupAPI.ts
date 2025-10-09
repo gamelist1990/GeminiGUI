@@ -20,7 +20,14 @@ export interface VerifyAuthResult {
 }
 
 /**
- * Gemini CLI と Node.js の存在チェック
+ * Gemini CLI と Node.js の存在チェック（段階的な順序で実行）
+ * 
+ * チェック順序:
+ * 1. Node.js の存在確認 → なければエラーで停止
+ * 2. npm -g list で Gemini CLI パッケージの存在確認 → なければインストール推奨
+ * 3. Gemini CLI の実行ファイル (gemini.ps1) の存在確認 → なければエラー
+ * 4. 認証状態の確認 (google_accounts.json)
+ * 5. Google Cloud Project の確認
  */
 export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
   const result: CheckResult = {
@@ -39,57 +46,41 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
       if (settings?.geminiAuth === true) {
         log('✓ config.jsonで既に認証済みと記録されています');
         result.isAuthenticated = true;
-        // 認証済みの場合はファイルシステムチェックをスキップ
-        log(t('setup.logs.nodeCheck'));
-        const nodeCheck = await Command.create('powershell.exe', [
-          '-Command',
-          'node --version',
-        ]).execute();
-
-        if (nodeCheck.code === 0) {
-          result.nodeExists = true;
-          log(`${t('setup.logs.nodeFound')} ${nodeCheck.stdout.trim()}`);
-        } else {
-          log(t('setup.logs.nodeNotFound'));
-          return result;
-        }
-
-        // Gemini CLI の存在確認 - npmパッケージの存在を確認
-        log(t('setup.logs.geminiCheck'));
-        const detectedPaths = await detectGlobalNpmPath(log);
-        if (detectedPaths.hasGeminiCLI) {
-          result.geminiExists = true;
-          log(t('setup.logs.geminiFound'));
+        result.nodeExists = true;
+        result.geminiExists = true;
+        
+        // 認証済みの場合でもプロジェクトチェックは実行
+        log('Google Cloud Projectの存在を確認しています...');
+        try {
+          const hasProject = await hasCloudProject(log);
+          result.hasProject = hasProject;
+          log(`hasCloudProject result: ${hasProject}`);
           
-          // Google Cloud Projectの存在チェック
-          log('Google Cloud Projectの存在を確認しています...');
-          try {
-            const hasProject = await hasCloudProject(log);
-            result.hasProject = hasProject;
-            log(`hasCloudProject result: ${hasProject}`);
-            
-            if (hasProject) {
-              log('✓ Google Cloud Projectが見つかりました');
-            } else {
-              log('⚠️ Google Cloud Projectが見つかりません');
-            }
-          } catch (error) {
-            log(`⚠️ プロジェクトチェックエラー: ${error}`);
-            result.hasProject = false;
+          if (hasProject) {
+            log('✓ Google Cloud Projectが見つかりました');
+          } else {
+            log('⚠️ Google Cloud Projectが見つかりません');
           }
-        } else {
-          log(t('setup.logs.geminiNotFound'));
+        } catch (error) {
+          log(`⚠️ プロジェクトチェックエラー: ${error}`);
+          result.hasProject = false;
         }
         
-        log(`${t('setup.logs.checkComplete')} ${result.geminiExists}, nodeExists: ${result.nodeExists}, isAuthenticated: ${result.isAuthenticated}`);
+        log(`${t('setup.logs.checkComplete')} geminiExists: ${result.geminiExists}, nodeExists: ${result.nodeExists}, isAuthenticated: ${result.isAuthenticated}`);
         return result;
       }
     } catch (configError) {
       log(`⚠️ config.jsonの読み込みに失敗しました。ファイルシステムチェックを続行します: ${configError}`);
     }
 
-    // Node.js の存在確認
-    log(t('setup.logs.nodeCheck'));
+    // ========================================
+    // ステップ 1: Node.js の存在確認
+    // ========================================
+    log('');
+    log('========================================');
+    log('ステップ 1/5: Node.js の確認');
+    log('========================================');
+    
     const nodeCheck = await Command.create('powershell.exe', [
       '-Command',
       'node --version',
@@ -97,67 +88,189 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
 
     if (nodeCheck.code === 0) {
       result.nodeExists = true;
-      log(`${t('setup.logs.nodeFound')} ${nodeCheck.stdout.trim()}`);
+      const nodeVersion = nodeCheck.stdout.trim();
+      log(`✓ Node.js が見つかりました (バージョン: ${nodeVersion})`);
+      log('');
     } else {
-      log(t('setup.logs.nodeNotFound'));
+      log('✗ Node.js がインストールされていません');
+      log('');
+      log('【エラー】Node.js が必要です');
+      log('以下の手順でインストールしてください:');
+      log('1. 「Node.js をインストール」ボタンをクリック');
+      log('2. 公式サイトからインストーラーをダウンロード');
+      log('3. インストール後、このアプリを再起動');
+      log('');
       return result;
     }
 
-    // Gemini CLI (npmパッケージ) の存在確認
-    log(t('setup.logs.geminiCheck'));
-    const detectedPaths = await detectGlobalNpmPath(log);
-    if (detectedPaths.hasGeminiCLI) {
-      result.geminiExists = true;
-      log(t('setup.logs.geminiFound'));
-      
-      // 認証状態の確認 - google_accounts.json の存在チェック（PowerShellで実行）
-      log(t('setup.logs.authCheck'));
-      const authCheckCommand = await Command.create('powershell.exe', [
-        '-Command',
-        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Test-Path "$env:USERPROFILE\\.gemini\\google_accounts.json"',
-      ]).execute();
+    // ========================================
+    // ステップ 2: npm -g list で Gemini CLI パッケージの確認
+    // ========================================
+    log('========================================');
+    log('ステップ 2/5: Gemini CLI パッケージの確認');
+    log('========================================');
+    
+    const npmListCommand = await Command.create('powershell.exe', [
+      '-Command',
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm -g list',
+    ]).execute();
 
-      if (authCheckCommand.code === 0) {
-        const testResult = authCheckCommand.stdout.trim();
-        log(`認証チェック結果: "${testResult}"`);
-        if (testResult === 'True') {
-          result.isAuthenticated = true;
-          log(t('setup.logs.authConfirmed'));
-          
-          // 認証済みの場合、Google Cloud Projectの存在もチェック
-          log('Google Cloud Projectの存在を確認しています...');
-          try {
-            const hasProject = await hasCloudProject(log);
-            result.hasProject = hasProject;
-            
-            if (hasProject) {
-              log('✓ Google Cloud Projectが見つかりました');
-            } else {
-              log('⚠️ Google Cloud Projectが見つかりません');
-            }
-          } catch (error) {
-            log(`⚠️ プロジェクトチェックエラー: ${error}`);
-            result.hasProject = false;
-          }
-        } else {
-          log(t('setup.logs.authRequired'));
-        }
-      } else {
-        log(`✗ 認証ファイルの確認に失敗しました (終了コード: ${authCheckCommand.code})`);
-        if (authCheckCommand.stderr) {
-          log(`エラー出力: ${authCheckCommand.stderr}`);
+    if (npmListCommand.code !== 0) {
+      log('✗ npm -g list の実行に失敗しました');
+      log(`エラー: ${npmListCommand.stderr || '不明なエラー'}`);
+      log('');
+      return result;
+    }
+
+    const npmListOutput = npmListCommand.stdout || '';
+    
+    // npmのグローバルインストールパスを取得
+    let npmGlobalPath: string | undefined;
+    try {
+      const lines = npmListOutput.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length > 0) {
+        const firstLine = lines[0];
+        // Windows絶対パスまたは"npm"で終わるパスを検出
+        if (/^[A-Za-z]:\\/.test(firstLine) || firstLine.endsWith('\\npm') || firstLine.endsWith('/npm')) {
+          npmGlobalPath = firstLine;
+          log(`📂 npmグローバルパス: ${npmGlobalPath}`);
         }
       }
-    } else {
-      // Gemini CLI が見つからない場合は nodeNotFound ではなく専用メッセージを表示
-      log(t('setup.logs.geminiNotFound'));
+    } catch (err) {
+      log(`⚠️ npmパスの解析に失敗: ${err}`);
     }
+
+    const hasGeminiPackage = npmListOutput.includes('@google/gemini-cli');
+    
+    if (hasGeminiPackage) {
+      log('✓ @google/gemini-cli パッケージが見つかりました');
+      
+      // バージョン情報を表示
+      const versionMatch = npmListOutput.match(/@google\/gemini-cli@([\d.]+)/);
+      if (versionMatch) {
+        log(`📦 バージョン: ${versionMatch[1]}`);
+      }
+      log('');
+    } else {
+      log('✗ @google/gemini-cli パッケージがインストールされていません');
+      log('');
+      log('【エラー】Gemini CLI が必要です');
+      log('「Gemini CLI をインストール」ボタンをクリックしてインストールしてください');
+      log('');
+      return result;
+    }
+
+    // ========================================
+    // ステップ 3: gemini.ps1 実行ファイルの存在確認
+    // ========================================
+    log('========================================');
+    log('ステップ 3/5: gemini.ps1 実行ファイルの確認');
+    log('========================================');
+    
+    if (!npmGlobalPath) {
+      log('⚠️ npmグローバルパスが特定できませんでした');
+      log('gemini.ps1 の存在確認をスキップします');
+      log('');
+    } else {
+      const geminiPs1Path = `${npmGlobalPath}\\gemini.ps1`;
+      log(`📍 確認パス: ${geminiPs1Path}`);
+      
+      const geminiPs1Check = await Command.create('powershell.exe', [
+        '-Command',
+        `Test-Path "${geminiPs1Path}"`,
+      ]).execute();
+
+      if (geminiPs1Check.code === 0 && geminiPs1Check.stdout.trim() === 'True') {
+        log('✓ gemini.ps1 が見つかりました');
+        result.geminiExists = true;
+        log('');
+      } else {
+        log('✗ gemini.ps1 が見つかりません');
+        log('');
+        log('【エラー】Gemini CLI の実行ファイルが見つかりません');
+        log('以下の可能性があります:');
+        log('1. インストールが不完全');
+        log('2. PATHが正しく設定されていない');
+        log('');
+        log('対処方法:');
+        log('- npm install -g @google/gemini-cli を再実行');
+        log('- PowerShellを再起動');
+        log('');
+        return result;
+      }
+    }
+
+    // ========================================
+    // ステップ 4: 認証状態の確認
+    // ========================================
+    log('========================================');
+    log('ステップ 4/5: 認証状態の確認');
+    log('========================================');
+    
+    const authCheckCommand = await Command.create('powershell.exe', [
+      '-Command',
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Test-Path "$env:USERPROFILE\\.gemini\\google_accounts.json"',
+    ]).execute();
+
+    if (authCheckCommand.code === 0) {
+      const testResult = authCheckCommand.stdout.trim();
+      if (testResult === 'True') {
+        result.isAuthenticated = true;
+        log('✓ 認証済み (google_accounts.json が存在)');
+        log('');
+      } else {
+        log('✗ 未認証 (google_accounts.json が存在しません)');
+        log('「認証を開始」ボタンをクリックして認証を完了してください');
+        log('');
+        return result;
+      }
+    } else {
+      log(`✗ 認証ファイルの確認に失敗 (終了コード: ${authCheckCommand.code})`);
+      if (authCheckCommand.stderr) {
+        log(`エラー: ${authCheckCommand.stderr}`);
+      }
+      log('');
+      return result;
+    }
+
+    // ========================================
+    // ステップ 5: Google Cloud Project の確認
+    // ========================================
+    log('========================================');
+    log('ステップ 5/5: Google Cloud Project の確認');
+    log('========================================');
+    
+    try {
+      const hasProject = await hasCloudProject(log);
+      result.hasProject = hasProject;
+      
+      if (hasProject) {
+        log('✓ Google Cloud Project が見つかりました');
+      } else {
+        log('⚠️ Google Cloud Project が見つかりません');
+        log('プロジェクトの設定が必要です');
+      }
+      log('');
+    } catch (error) {
+      log(`⚠️ プロジェクトチェックエラー: ${error}`);
+      result.hasProject = false;
+      log('');
+    }
+
   } catch (error) {
     log(`${t('setup.logs.checkError')} ${error}`);
     throw error;
   }
 
-  log(`${t('setup.logs.checkComplete')} ${result.geminiExists}, nodeExists: ${result.nodeExists}, isAuthenticated: ${result.isAuthenticated}`);
+  log('========================================');
+  log('チェック完了');
+  log('========================================');
+  log(`✓ Node.js: ${result.nodeExists ? '有効' : '無効'}`);
+  log(`✓ Gemini CLI: ${result.geminiExists ? '有効' : '無効'}`);
+  log(`✓ 認証: ${result.isAuthenticated ? '完了' : '未完了'}`);
+  log(`✓ Cloud Project: ${result.hasProject === true ? '有効' : result.hasProject === false ? '無効' : '不明'}`);
+  log('');
+  
   return result;
 }
 
@@ -424,7 +537,9 @@ export const setupGemini = {
 
 /**
  * npm -g list を実行してグローバルインストールパスとGemini CLIの存在を確認
- * 見つからない場合は自動的にインストールを試行
+ * 
+ * @returns npmPath: npmグローバルインストールパス
+ * @returns hasGeminiCLI: Gemini CLIパッケージが見つかったかどうか
  */
 export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?: string; hasGeminiCLI: boolean }> {
   try {
@@ -432,7 +547,7 @@ export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?
       log('npm -g list を実行してグローバルインストールパスを検知しています...');
     }
 
-    // まず `npm -g list` を実行して、出力からグローバル npm パスとパッケージ一覧を取得する
+    // npm -g list を実行
     const npmListCommand = await Command.create('powershell.exe', [
       '-Command',
       '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm -g list',
@@ -446,105 +561,52 @@ export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?
       return { hasGeminiCLI: false };
     }
 
-    const npmListOutputInitial = npmListCommand.stdout || '';
+    const npmListOutput = npmListCommand.stdout || '';
 
-    // npm -g list の先頭行にプレフィックス（グローバルパス）が出力されることがあるため解析する
-    let npmPrefix: string | undefined = undefined;
-    try {
-      const lines = npmListOutputInitial.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      if (lines.length > 0) {
-        const firstLine = lines[0];
-        if (/^[A-Za-z]:\\/.test(firstLine) || firstLine.endsWith('\\npm') || firstLine.endsWith('/npm')) {
-          npmPrefix = firstLine;
-          if (log) log(`✓ npm prefix detected in initial 'npm -g list' output: ${npmPrefix}`);
-        }
-      }
-    } catch (err) {
-      if (log) log(`npm -g list 出力の解析に失敗しました: ${err}`);
-    }
-
-    // パッケージ一覧は先の実行結果を使う（`npmListOutputInitial`）
-    if (log) {
-      log('Gemini CLI の存在を確認しています...');
-    }
-
-    const npmListOutput = npmListOutputInitial;
-
-    // Some npm versions print the global prefix as the first line of `npm -g list` output
-    // e.g.:
-    // C:\Users\issei\AppData\Roaming\npm
-    // ├── @google/gemini-cli@0.8.1
-    // If `npm config get prefix` did not return a usable prefix, try to parse it here.
-    let detectedPrefixFromList: string | undefined = undefined;
+    // npm -g list の先頭行からグローバルパスを抽出
+    let npmGlobalPath: string | undefined = undefined;
     try {
       const lines = npmListOutput.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       if (lines.length > 0) {
         const firstLine = lines[0];
-        // Heuristics: Windows absolute path or path that ends with "\\npm" or "/npm"
+        // Windows絶対パスまたは"npm"で終わるパスを検出
         if (/^[A-Za-z]:\\/.test(firstLine) || firstLine.endsWith('\\npm') || firstLine.endsWith('/npm')) {
-          detectedPrefixFromList = firstLine;
-          if (log) log(`✓ npm prefix detected in 'npm -g list' output: ${detectedPrefixFromList}`);
+          npmGlobalPath = firstLine;
+          if (log) {
+            log(`✓ npmグローバルパス: ${npmGlobalPath}`);
+          }
         }
       }
     } catch (err) {
-      if (log) log(`npm -g list 出力の解析に失敗しました: ${err}`);
+      if (log) {
+        log(`⚠️ npm -g list 出力の解析に失敗: ${err}`);
+      }
     }
 
+    // @google/gemini-cli パッケージの存在確認
     const hasGeminiCLI = npmListOutput.includes('@google/gemini-cli');
 
     if (log) {
       if (hasGeminiCLI) {
-        log('✓ @google/gemini-cli がインストールされていることを確認しました');
-        // バージョン情報も表示
+        log('✓ @google/gemini-cli パッケージが見つかりました');
+        
+        // バージョン情報を表示
         const versionMatch = npmListOutput.match(/@google\/gemini-cli@([\d.]+)/);
         if (versionMatch) {
           log(`📦 バージョン: ${versionMatch[1]}`);
         }
-      } else {
-        log('✗ @google/gemini-cli がインストールされていません');
-        log('自動的にインストールを開始します...');
-
-        // 自動インストールを実行
-        const installCommand = await Command.create('powershell.exe', [
-          '-Command',
-          '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm install -g @google/gemini-cli',
-        ]).execute();
-
-        if (installCommand.code === 0) {
-          log('✓ @google/gemini-cli のインストールが完了しました');
-          if (installCommand.stdout) {
-            log(`インストール出力: ${installCommand.stdout.trim()}`);
-          }
-          // インストール成功したので再度確認
-          const verifyCommand = await Command.create('powershell.exe', [
-            '-Command',
-            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm -g list',
-          ]).execute();
-
-          if (verifyCommand.code === 0 && verifyCommand.stdout.includes('@google/gemini-cli')) {
-            log('✓ インストールの確認が完了しました');
-            return { npmPath: npmPrefix, hasGeminiCLI: true };
-          } else {
-            log('⚠️ インストールは完了しましたが、確認に失敗しました');
-            return { npmPath: npmPrefix, hasGeminiCLI: false };
-          }
-        } else {
-          const errorMsg = installCommand.stderr || 'インストールに失敗しました';
-          log(`✗ 自動インストールに失敗しました: ${errorMsg}`);
-          log('手動で以下のコマンドを実行してください: npm install -g @google/gemini-cli');
-          return { npmPath: npmPrefix, hasGeminiCLI: false };
+        
+        // gemini.ps1の期待パスを表示
+        if (npmGlobalPath) {
+          const expectedGeminiPath = `${npmGlobalPath}\\gemini.ps1`;
+          log(`📍 gemini.ps1 の期待パス: ${expectedGeminiPath}`);
         }
+      } else {
+        log('✗ @google/gemini-cli パッケージが見つかりません');
       }
     }
 
-  const npmPath = npmPrefix ? npmPrefix : detectedPrefixFromList ? detectedPrefixFromList : undefined;
-
-    if (log && npmPath && hasGeminiCLI) {
-      const expectedGeminiPath = `${npmPath}\\gemini.ps1`;
-      log(`📍 gemini.ps1 の期待パス: ${expectedGeminiPath}`);
-    }
-
-    return { npmPath, hasGeminiCLI };
+    return { npmPath: npmGlobalPath, hasGeminiCLI };
   } catch (error) {
     if (log) {
       log(`npmパスの検知中にエラーが発生しました: ${error}`);

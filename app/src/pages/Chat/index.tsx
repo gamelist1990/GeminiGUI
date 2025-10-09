@@ -134,10 +134,14 @@ export default function Chat({
         // Load from global config only
         const config = await globalConfig.loadConfig();
         const loadedGeminiPath = config?.geminiPath;
+        const enableOpenAI = config?.enableOpenAI;
 
         setGeminiPath(loadedGeminiPath);
 
-        if (!loadedGeminiPath) {
+        // OpenAI使用時はGeminiパスエラーを表示しない
+        if (enableOpenAI) {
+          setGeminiPathError("");
+        } else if (!loadedGeminiPath) {
           setGeminiPathError(t("chat.errors.geminiPathMissing"));
         } else {
           setGeminiPathError("");
@@ -145,7 +149,12 @@ export default function Chat({
       } catch (error) {
         console.error("Failed to load geminiPath from global config:", error);
         setGeminiPath(undefined);
-        setGeminiPathError(t("chat.errors.configLoadFailed"));
+        
+        // OpenAI使用時はエラーを表示しない
+        const config = await globalConfig.loadConfig();
+        if (!config?.enableOpenAI) {
+          setGeminiPathError(t("chat.errors.configLoadFailed"));
+        }
       }
     };
 
