@@ -35,6 +35,11 @@ const SetupModal: React.FC<SetupModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+  // Debug effect for modal open state
+  useEffect(() => {
+    console.log('[SetupModal] isOpen changed:', isOpen);
+  }, [isOpen]);
+
   // Config APIインスタンス（ワークスペース用またはグローバル）
   const configAPI = workspaceId
     ? new Config(`${workspaceId}\\.geminiconfig`)
@@ -57,11 +62,12 @@ const SetupModal: React.FC<SetupModalProps> = ({
 
   useEffect(() => {
     if (isOpen && currentStep === "checking") {
-      // モーダルが開いてから少し待ってから処理を開始
-      // アプリケーション起動時の自動チェックの場合はより長めに待つ
+      // モーダルが開いてから処理を開始
+      // モーダルのレンダリングを確実に完了させるため少し待つ
       const timer = setTimeout(() => {
+        console.log('[SetupModal] Starting performCheck after modal render');
         performCheck();
-      }, 500); // 500ms待つ
+      }, 300); // 300ms待つ（UIスレッドの確実な更新を保証）
       return () => clearTimeout(timer);
     } else if (!isOpen) {
       // モーダルが閉じられたら状態をリセット
@@ -284,8 +290,16 @@ const SetupModal: React.FC<SetupModalProps> = ({
                   addLog(t('setup.logs.authAndProjectSaved'));
                   addLog("✓ 設定を保存しました");
                   addLog(`✓ プロジェクトID: ${envSetupResult.projectId}`);
+                  addLog(`✓ geminiAuth: ${settings.geminiAuth}`);
                   addLog("今後、このセットアップは不要です");
+                  console.log('[Setup] Successfully saved geminiAuth=true and projectId to config');
+                } else {
+                  console.error('[Setup] Failed to load settings for saving geminiAuth');
+                  addLog('⚠️ 設定の読み込みに失敗しました');
                 }
+              } else {
+                console.error('[Setup] configAPI is not available');
+                addLog('⚠️ 設定APIが利用できません');
               }
               
               addLog(t('setup.logs.movingToComplete'));
@@ -361,11 +375,17 @@ const SetupModal: React.FC<SetupModalProps> = ({
                     addLog('[Setup] geminiAuth and googleCloudProjectId saved successfully');
                     addLog("✓ 設定を保存しました");
                     addLog(`✓ プロジェクトID: ${autoResult.projectId}`);
+                    addLog(`✓ geminiAuth: ${settings.geminiAuth}`);
                     addLog("✓ 今後、このセットアップは不要です");
                     addLog("");
+                    console.log('[Setup] Auto setup: Successfully saved geminiAuth=true and projectId to config');
+                  } else {
+                    console.error('[Setup] Auto setup: Failed to load settings');
+                    addLog('⚠️ 設定の読み込みに失敗しました');
                   }
                 } else {
                   console.warn('[Setup] configAPI not available, cannot save geminiAuth');
+                  addLog('⚠️ 設定APIが利用できません');
                 }
 
                 addLog("🎉 すべてのセットアップが完了しました!");
@@ -427,8 +447,16 @@ const SetupModal: React.FC<SetupModalProps> = ({
               settings.geminiAuth = true;
               await configAPI.saveConfig(settings);
               addLog("✓ 設定を保存しました");
+              addLog(`✓ geminiAuth: ${settings.geminiAuth}`);
               addLog("今後、このセットアップは不要です");
+              console.log('[Setup] Successfully saved geminiAuth=true to config (no project check)');
+            } else {
+              console.error('[Setup] Failed to load settings for saving geminiAuth (no project check)');
+              addLog('⚠️ 設定の読み込みに失敗しました');
             }
+          } else {
+            console.error('[Setup] configAPI is not available (no project check)');
+            addLog('⚠️ 設定APIが利用できません');
           }
           
           addLog(t('setup.logs.movingToComplete'));

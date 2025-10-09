@@ -43,7 +43,7 @@ export default function WorkspaceSelection({
     const preCheckSetup = async () => {
       try {
         // If geminiAuth is true, skip all setup checks completely
-        if (settings.geminiAuth) {
+        if (settings.geminiAuth === true) {
           console.log('[Setup] geminiAuth is true, skipping all setup checks');
           if (isComponentMounted) {
             setIsCheckingSetup(false);
@@ -59,24 +59,13 @@ export default function WorkspaceSelection({
           return;
         }
 
-        // If we have config and auth settings, do a quick validation
-        if (globalConfig) {
-          try {
-            const config = await globalConfig.loadConfig();
-            if (config?.googleCloudProjectId) {
-              console.log('[Setup] Pre-check: googleCloudProjectId found, auth complete');
-              if (isComponentMounted) setIsCheckingSetup(false);
-              return;
-            }
-          } catch (configError) {
-            console.log('[Setup] Pre-check: config error, will run full check');
-          }
-        }
+        // geminiAuth が false の場合は、必ずフルチェックを実行
+        console.log('[Setup] geminiAuth is false, running full setup check');
       } catch (error) {
         console.log('[Setup] Pre-check failed, will run full check');
       }
 
-      // If pre-check didn't trigger return, proceed with full check
+      // geminiAuth が false の場合は常にフルチェックを実行
       if (isComponentMounted) {
         await checkGeminiSetup();
       }
@@ -86,7 +75,7 @@ export default function WorkspaceSelection({
       const logCallback = (msg: string) => console.log('[Setup]', msg);
 
       // geminiAuth が true の場合は完全にスキップ
-      if (settings.geminiAuth) {
+      if (settings.geminiAuth === true) {
         logCallback('geminiAuth is true, skipping all setup checks');
         setIsCheckingSetup(false);
         onSetupCheckCompleted();
@@ -100,30 +89,13 @@ export default function WorkspaceSelection({
         return;
       }
 
-      // 事前チェック: 設定から認証状態を確認
+      // セットアップチェックを開始
       logCallback('Gemini CLI のチェックを開始しています...');
-      try {
-        // googleCloudProjectId が設定されている場合のみスキップ
-        if (globalConfig) {
-          try {
-            const config = await globalConfig.loadConfig();
-            if (config?.googleCloudProjectId) {
-              logCallback('googleCloudProjectId が設定されています。セットアップを完了と見なします');
-              setIsCheckingSetup(false);
-              return; // チェックを完全にスキップ
-            }
-          } catch (configError) {
-            logCallback(`設定読み込みエラー: ${configError}`);
-          }
-        }
-      } catch (error) {
-        logCallback(`事前チェックエラー: ${error}`);
-      }
-
+      
       try {
         logCallback(`config.geminiAuth: ${settings.geminiAuth}`);
 
-        // geminiAuthフラグがtrueでも、実際のプロジェクト存在を確認
+        // geminiCheck を実行
         const result = await geminiCheck(logCallback);
 
         logCallback(`Result: ${JSON.stringify(result)}`);
@@ -135,6 +107,7 @@ export default function WorkspaceSelection({
 
         // セットアップが必要な条件をチェック
         const needsSetup = !result.geminiExists || !result.nodeExists || !result.isAuthenticated || result.hasProject === false;
+        logCallback(`needsSetup calculation: geminiExists=${result.geminiExists}, nodeExists=${result.nodeExists}, isAuthenticated=${result.isAuthenticated}, hasProject=${result.hasProject} => needsSetup=${needsSetup}`);
 
         if (needsSetup) {
           logCallback('セットアップが必要なため、SetupModalを表示します');
@@ -143,6 +116,17 @@ export default function WorkspaceSelection({
           await new Promise(resolve => setTimeout(resolve, 100));
         } else {
           logCallback('セットアップは不要です');
+          // セットアップ不要の場合は geminiAuth を true に更新
+          logCallback('geminiAuth を true に更新します');
+          updateSettings({ geminiAuth: true });
+          if (globalConfig) {
+            const config = await globalConfig.loadConfig();
+            if (config) {
+              config.geminiAuth = true;
+              await globalConfig.saveConfig(config);
+              logCallback('geminiAuth を config.json に保存しました');
+            }
+          }
         }
 
         // チェック完了フラグを設定（アプリケーションレベルで保持）
@@ -216,6 +200,11 @@ export default function WorkspaceSelection({
       setIsOpening(false);
     }
   };
+
+  // Debug effect for modal state
+  useEffect(() => {
+    console.log('[WorkspaceSelection] Modal state changed - showSetupModal:', showSetupModal, 'isCheckingSetup:', isCheckingSetup);
+  }, [showSetupModal, isCheckingSetup]);
 
   return (
     <div className="workspace-selection">

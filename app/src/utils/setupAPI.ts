@@ -432,30 +432,7 @@ export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?
       log('npm -g list を実行してグローバルインストールパスを検知しています...');
     }
 
-    // npm config get prefix でグローバルnpmパスを取得
-    const npmConfigCommand = await Command.create('powershell.exe', [
-      '-Command',
-      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm config get prefix',
-    ]).execute();
-
-    if (npmConfigCommand.code !== 0) {
-      const errorMsg = npmConfigCommand.stderr || 'npm config get prefixの実行に失敗しました';
-      if (log) {
-        log(`✗ npmグローバルパス検知エラー: ${errorMsg}`);
-      }
-      return { hasGeminiCLI: false };
-    }
-
-    const npmPrefix = npmConfigCommand.stdout.trim();
-    if (log && npmPrefix) {
-      log(`✓ npmグローバルインストールパスを検知: ${npmPrefix}`);
-    }
-
-    // npm -g list を実行してパッケージリストを取得し、@google/gemini-cliの存在を確認
-    if (log) {
-      log('Gemini CLI の存在を確認しています...');
-    }
-
+    // まず `npm -g list` を実行して、出力からグローバル npm パスとパッケージ一覧を取得する
     const npmListCommand = await Command.create('powershell.exe', [
       '-Command',
       '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm -g list',
@@ -466,10 +443,53 @@ export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?
       if (log) {
         log(`✗ npmパッケージリスト取得エラー: ${errorMsg}`);
       }
-      return { npmPath: npmPrefix, hasGeminiCLI: false };
+      return { hasGeminiCLI: false };
     }
 
-    const npmListOutput = npmListCommand.stdout;
+    const npmListOutputInitial = npmListCommand.stdout || '';
+
+    // npm -g list の先頭行にプレフィックス（グローバルパス）が出力されることがあるため解析する
+    let npmPrefix: string | undefined = undefined;
+    try {
+      const lines = npmListOutputInitial.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length > 0) {
+        const firstLine = lines[0];
+        if (/^[A-Za-z]:\\/.test(firstLine) || firstLine.endsWith('\\npm') || firstLine.endsWith('/npm')) {
+          npmPrefix = firstLine;
+          if (log) log(`✓ npm prefix detected in initial 'npm -g list' output: ${npmPrefix}`);
+        }
+      }
+    } catch (err) {
+      if (log) log(`npm -g list 出力の解析に失敗しました: ${err}`);
+    }
+
+    // パッケージ一覧は先の実行結果を使う（`npmListOutputInitial`）
+    if (log) {
+      log('Gemini CLI の存在を確認しています...');
+    }
+
+    const npmListOutput = npmListOutputInitial;
+
+    // Some npm versions print the global prefix as the first line of `npm -g list` output
+    // e.g.:
+    // C:\Users\issei\AppData\Roaming\npm
+    // ├── @google/gemini-cli@0.8.1
+    // If `npm config get prefix` did not return a usable prefix, try to parse it here.
+    let detectedPrefixFromList: string | undefined = undefined;
+    try {
+      const lines = npmListOutput.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length > 0) {
+        const firstLine = lines[0];
+        // Heuristics: Windows absolute path or path that ends with "\\npm" or "/npm"
+        if (/^[A-Za-z]:\\/.test(firstLine) || firstLine.endsWith('\\npm') || firstLine.endsWith('/npm')) {
+          detectedPrefixFromList = firstLine;
+          if (log) log(`✓ npm prefix detected in 'npm -g list' output: ${detectedPrefixFromList}`);
+        }
+      }
+    } catch (err) {
+      if (log) log(`npm -g list 出力の解析に失敗しました: ${err}`);
+    }
+
     const hasGeminiCLI = npmListOutput.includes('@google/gemini-cli');
 
     if (log) {
@@ -517,7 +537,7 @@ export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?
       }
     }
 
-    const npmPath = npmPrefix ? npmPrefix : undefined;
+  const npmPath = npmPrefix ? npmPrefix : detectedPrefixFromList ? detectedPrefixFromList : undefined;
 
     if (log && npmPath && hasGeminiCLI) {
       const expectedGeminiPath = `${npmPath}\\gemini.ps1`;
