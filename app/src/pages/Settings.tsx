@@ -27,7 +27,7 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
   };
 
   const handleCheckGeminiSetup = async () => {
-    // SetupModal を直接開いてチェックを実行
+    // SetupModal を直接開いてチェックを実行（セットアップ確認モード）
     setShowSetupModal(true);
   };
 
@@ -39,10 +39,16 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
     setShowSetupModal(true);
   };
 
-  const handleSetupComplete = () => {
+  const handleSetupComplete = async () => {
     setShowSetupModal(false);
-    // セットアップ完了をローカルストレージに保存
-    localStorage.setItem('geminiSetupCompleted', 'true');
+    // セットアップ完了後に設定を再読み込みしてgeminiAuthを更新
+    if (globalConfig) {
+      const updatedSettings = await globalConfig.loadConfig();
+      if (updatedSettings) {
+        setLocalSettings(updatedSettings);
+        onUpdateSettings(updatedSettings);
+      }
+    }
   };
 
   const handleRedetectGeminiPath = async () => {
@@ -87,7 +93,7 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
 
   return (
     <div className="settings-page">
-      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} />
+      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} globalConfig={globalConfig} />
       
       <div className="settings-container">
         <div className="settings-header">

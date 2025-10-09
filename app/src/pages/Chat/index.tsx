@@ -4,7 +4,11 @@ import { ChatMessage } from "../../types";
 import { t } from "../../utils/i18n";
 import { formatElapsedTime, formatNumber } from "../../utils/storage";
 import { callAI, GeminiOptions } from "../../utils/geminiCUI";
-import { scanWorkspace, getSuggestions, parseIncludes } from "../../utils/workspace";
+import {
+  scanWorkspace,
+  getSuggestions,
+  parseIncludes,
+} from "../../utils/workspace";
 import * as fsPlugin from "@tauri-apps/plugin-fs";
 import { ChatProps } from "./types";
 import ProcessingModal from "./ProcessingModal";
@@ -45,8 +49,12 @@ export default function Chat({
   const [streamingMessage, setStreamingMessage] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   // Track typing state per session
-  const [typingSessionIds, setTypingSessionIds] = useState<Set<string>>(new Set());
-  const isTyping = currentSessionId ? typingSessionIds.has(currentSessionId) : false;
+  const [typingSessionIds, setTypingSessionIds] = useState<Set<string>>(
+    new Set()
+  );
+  const isTyping = currentSessionId
+    ? typingSessionIds.has(currentSessionId)
+    : false;
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionName, setEditingSessionName] = useState("");
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
@@ -73,7 +81,7 @@ export default function Chat({
   useEffect(() => {
     return () => {
       // Clear all active request intervals
-      Object.values(requestIntervalsRef.current).forEach(interval => {
+      Object.values(requestIntervalsRef.current).forEach((interval) => {
         if (interval) {
           clearInterval(interval);
         }
@@ -92,16 +100,18 @@ export default function Chat({
   const [processingElapsed, setProcessingElapsed] = useState(0);
   const [showCompactWarning, setShowCompactWarning] = useState(false);
   // Track request elapsed time per session
-  const [requestElapsedTimes, setRequestElapsedTimes] = useState<Record<string, number>>({});
+  const [requestElapsedTimes, setRequestElapsedTimes] = useState<
+    Record<string, number>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Track request start time per session
   const requestStartTimesRef = useRef<Record<string, number>>({});
   const requestIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
-  
+
   // AbortController for cancelling AI requests
   const abortControllerRef = useRef<AbortController | null>(null);
-  
+
   // Pause/Resume state management
   const [isPaused, setIsPaused] = useState(false);
   const [interventionText, setInterventionText] = useState("");
@@ -167,7 +177,9 @@ export default function Chat({
     if (workspace?.path) {
       const cleanupTemp = async () => {
         try {
-          console.log(`[Chat] Cleaning up leftover GeminiTemp in workspace: ${workspace.path}`);
+          console.log(
+            `[Chat] Cleaning up leftover GeminiTemp in workspace: ${workspace.path}`
+          );
           await cleanupManager.cleanupWorkspaceGeminiTemp(workspace.path);
           console.log(`[Chat] GeminiTemp cleanup completed successfully`);
         } catch (error) {
@@ -327,102 +339,107 @@ export default function Chat({
 
   // Handle cancellation of AI processing
   const handleCancelProcessing = () => {
-    console.log('[Chat] Cancelling AI processing...');
-    
+    console.log("[Chat] Cancelling AI processing...");
+
     // Abort the ongoing request if exists
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    
+
     // Clear any pending intervals
     const allIntervals = Object.values(requestIntervalsRef.current);
-    allIntervals.forEach(interval => {
+    allIntervals.forEach((interval) => {
       if (interval) clearInterval(interval);
     });
-    
+
     // Reset processing state
     setShowProcessingModal(false);
     setProcessingElapsed(0);
-    
+
     // Reset pause/resume state
     setIsPaused(false);
     setInterventionText("");
     setPausedStreamContent("");
     setPausedContext(null);
-    
-    console.log('[Chat] AI processing cancelled');
+
+    console.log("[Chat] AI processing cancelled");
   };
-  
+
   // Handle pause of AI processing
   const handlePauseProcessing = () => {
-    console.log('[Chat] Pausing AI processing...');
-    
+    console.log("[Chat] Pausing AI processing...");
+
     // Set paused state
     setIsPaused(true);
-    
+
     // Store current streaming content
     if (isStreaming) {
       setPausedStreamContent(streamingMessage);
       setIsStreaming(false); // Stop streaming display
-      console.log('[Chat] Stored streaming content:', streamingMessage.substring(0, 100) + '...');
+      console.log(
+        "[Chat] Stored streaming content:",
+        streamingMessage.substring(0, 100) + "..."
+      );
     }
-    
+
     // Abort the ongoing request to pause it
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    
+
     // Show processing modal for intervention if not already shown
     if (!showProcessingModal) {
       setShowProcessingModal(true);
       setProcessingMessage(t("chat.processing.paused"));
     }
-    
-    console.log('[Chat] AI processing paused');
+
+    console.log("[Chat] AI processing paused");
   };
-  
+
   // Handle resume of AI processing without intervention
   const handleResumeProcessing = () => {
-    console.log('[Chat] Resuming AI processing without intervention...');
-    
+    console.log("[Chat] Resuming AI processing without intervention...");
+
     // Reset pause state
     setIsPaused(false);
     setInterventionText("");
-    
+
     // For now, close the modal since we cannot truly resume the stream
     // In a full implementation, this would require backend support for stateful streams
     setShowProcessingModal(false);
     setProcessingElapsed(0);
-    
+
     // Restore any paused content as a partial response
     if (pausedStreamContent && currentSessionId) {
       const partialMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: pausedStreamContent + "\n\n_[Response was paused and could not be resumed]_",
+        content:
+          pausedStreamContent +
+          "\n\n_[Response was paused and could not be resumed]_",
         timestamp: new Date(),
       };
       onSendMessage(currentSessionId, partialMessage);
     }
-    
+
     setPausedStreamContent("");
     setPausedContext(null);
-    
-    console.log('[Chat] AI processing resume completed (partial)');
+
+    console.log("[Chat] AI processing resume completed (partial)");
   };
-  
+
   // Handle intervention submission and resume
   const handleInterventionSubmit = async () => {
-    console.log('[Chat] Submitting intervention and resuming...');
-    
+    console.log("[Chat] Submitting intervention and resuming...");
+
     if (!currentSessionId || !interventionText.trim()) {
-      console.warn('[Chat] No intervention text provided');
+      console.warn("[Chat] No intervention text provided");
       handleResumeProcessing();
       return;
     }
-    
+
     try {
       // Add the paused content as a partial assistant message
       if (pausedStreamContent) {
@@ -434,7 +451,7 @@ export default function Chat({
         };
         onSendMessage(currentSessionId, partialMessage);
       }
-      
+
       // Add user intervention as a new message
       const interventionMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -444,43 +461,46 @@ export default function Chat({
         tokenUsage: Math.ceil(interventionText.length / 4),
       };
       onSendMessage(currentSessionId, interventionMessage);
-      
+
       // Reset pause state
       setIsPaused(false);
       setInterventionText("");
       setPausedStreamContent("");
       setShowProcessingModal(false);
       setProcessingElapsed(0);
-      
+
       // Mark as typing again to start new request
-      setTypingSessionIds(prev => new Set(prev).add(currentSessionId));
+      setTypingSessionIds((prev) => new Set(prev).add(currentSessionId));
       requestStartTimesRef.current[currentSessionId] = Date.now();
-      setRequestElapsedTimes(prev => ({ ...prev, [currentSessionId]: 0 }));
-      
+      setRequestElapsedTimes((prev) => ({ ...prev, [currentSessionId]: 0 }));
+
       // Start new timer
       if (requestIntervalsRef.current[currentSessionId]) {
         clearInterval(requestIntervalsRef.current[currentSessionId]);
       }
-      
+
       requestIntervalsRef.current[currentSessionId] = setInterval(() => {
         const startTime = requestStartTimesRef.current[currentSessionId];
         if (startTime) {
-          setRequestElapsedTimes(prev => ({
+          setRequestElapsedTimes((prev) => ({
             ...prev,
-            [currentSessionId]: Math.floor((Date.now() - startTime) / 1000)
+            [currentSessionId]: Math.floor((Date.now() - startTime) / 1000),
           }));
         }
       }, 1000);
-      
+
       // Continue with AI request using stored context if available
       const prompt = pausedContext?.userPrompt || interventionText;
       const options = pausedContext?.options || {
         approvalMode: approvalMode,
         workspaceId: workspace.id,
         sessionId: currentSessionId,
-        enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+        enabledTools:
+          settings.enabledTools && settings.enabledTools.length > 0
+            ? settings.enabledTools
+            : undefined,
       };
-      
+
       const aiSettings = pausedContext?.settings || {
         enableOpenAI: settings.enableOpenAI,
         openAIApiKey: settings.openAIApiKey,
@@ -490,31 +510,32 @@ export default function Chat({
         googleCloudProjectId: googleCloudProjectId,
         geminiPath: geminiPath,
       };
-      
+
       // Build conversation history including the new intervention
       if (!currentSession) {
-        console.error('[Chat] No current session found during intervention');
+        console.error("[Chat] No current session found during intervention");
         return;
       }
-      
-      const allMessages = currentSession.messages
-        .filter((msg) => msg.role !== "system");
-      
+
+      const allMessages = currentSession.messages.filter(
+        (msg) => msg.role !== "system"
+      );
+
       const conversationHistoryJson = allMessages.map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
-      
+
       const conversationHistory = allMessages
         .map((msg) => {
           const role = msg.role === "user" ? "User" : "Assistant";
           return `${role}: ${msg.content}`;
         })
         .join("\n\n");
-      
+
       options.conversationHistory = conversationHistory;
       options.conversationHistoryJson = conversationHistoryJson;
-      
+
       // Make new AI request
       const geminiResponse = await callAI(
         prompt,
@@ -522,7 +543,7 @@ export default function Chat({
         options,
         aiSettings
       );
-      
+
       const aiMessage: ChatMessage = {
         id: (Date.now() + 2).toString(),
         role: "assistant",
@@ -532,52 +553,57 @@ export default function Chat({
         stats: geminiResponse.stats,
       };
       onSendMessage(currentSessionId, aiMessage);
-      
+
       // Cleanup
       try {
         await cleanupManager.cleanupSession(currentSessionId, workspace.id);
         console.log(`[Tools] Cleaned up tools after intervention`);
       } catch (cleanupError) {
-        console.warn('[Tools] Failed to cleanup after intervention:', cleanupError);
+        console.warn(
+          "[Tools] Failed to cleanup after intervention:",
+          cleanupError
+        );
       }
-      
+
       // Reset request timer
       if (requestStartTimesRef.current[currentSessionId]) {
         delete requestStartTimesRef.current[currentSessionId];
       }
     } catch (error) {
-      console.error('[Chat] Error during intervention:', error);
+      console.error("[Chat] Error during intervention:", error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 3).toString(),
         role: "assistant",
-        content: `Error during intervention: ${error instanceof Error ? error.message : "Unknown error"}`,
+        content: `Error during intervention: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
         timestamp: new Date(),
       };
       onSendMessage(currentSessionId, errorMessage);
     } finally {
       // Remove typing state
-      setTypingSessionIds(prev => {
+      setTypingSessionIds((prev) => {
         const newSet = new Set(prev);
         newSet.delete(currentSessionId);
         return newSet;
       });
-      
+
       // Clear elapsed time counter
       if (requestIntervalsRef.current[currentSessionId]) {
         clearInterval(requestIntervalsRef.current[currentSessionId]);
         delete requestIntervalsRef.current[currentSessionId];
       }
-      
-      setRequestElapsedTimes(prev => {
+
+      setRequestElapsedTimes((prev) => {
         const newTimes = { ...prev };
         delete newTimes[currentSessionId];
         return newTimes;
       });
-      
+
       setPausedContext(null);
     }
-    
-    console.log('[Chat] Intervention completed');
+
+    console.log("[Chat] Intervention completed");
   };
 
   const processCommand = async (command: string, args: string) => {
@@ -643,14 +669,17 @@ export default function Chat({
             conversationHistoryJson: historyJson,
             workspaceId: workspace.id,
             sessionId: currentSessionId,
-            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+            enabledTools:
+              settings.enabledTools && settings.enabledTools.length > 0
+                ? settings.enabledTools
+                : undefined,
           },
           {
             enableOpenAI: settings.enableOpenAI,
             openAIApiKey: settings.openAIApiKey,
             openAIBaseURL: settings.openAIBaseURL,
             openAIModel: settings.openAIModel,
-            responseMode: 'async', // Always use async for summary
+            responseMode: "async", // Always use async for summary
             googleCloudProjectId: googleCloudProjectId,
             geminiPath: geminiPath,
           }
@@ -658,13 +687,16 @@ export default function Chat({
 
         clearInterval(interval);
         setShowProcessingModal(false);
-        
+
         // Cleanup tools after compact
         try {
           await cleanupManager.cleanupSession(currentSessionId, workspace.id);
           console.log(`[Tools] Cleaned up tools after /compact`);
         } catch (cleanupError) {
-          console.warn('[Tools] Failed to cleanup after /compact:', cleanupError);
+          console.warn(
+            "[Tools] Failed to cleanup after /compact:",
+            cleanupError
+          );
         }
 
         // Validate response
@@ -756,7 +788,9 @@ export default function Chat({
         let initPrompt = "";
 
         if (hadExistingGemini) {
-          initPrompt = `${basePrompt}\n\nAn existing Gemini.md file is already present. Review the current content enclosed between <current_gemini_md> markers, then update it to reflect the latest project state. Preserve useful insights, expand missing sections, and correct any outdated information. Produce a full replacement for Gemini.md.\n\n<current_gemini_md>\n${normalizedExistingContent || "(The file is currently empty.)"}\n</current_gemini_md>`;
+          initPrompt = `${basePrompt}\n\nAn existing Gemini.md file is already present. Review the current content enclosed between <current_gemini_md> markers, then update it to reflect the latest project state. Preserve useful insights, expand missing sections, and correct any outdated information. Produce a full replacement for Gemini.md.\n\n<current_gemini_md>\n${
+            normalizedExistingContent || "(The file is currently empty.)"
+          }\n</current_gemini_md>`;
         } else {
           initPrompt = `${basePrompt}\n\nNo Gemini.md file exists yet. Explore the workspace with the available tools and create a comprehensive Gemini.md from scratch.`;
         }
@@ -769,14 +803,17 @@ export default function Chat({
             model: "gemini-2.5-flash",
             customApiKey: customApiKey,
             includeDirectories: ["."], // Allow the model to inspect the workspace structure via tools
-            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+            enabledTools:
+              settings.enabledTools && settings.enabledTools.length > 0
+                ? settings.enabledTools
+                : undefined,
           },
           {
             enableOpenAI: settings.enableOpenAI,
             openAIApiKey: settings.openAIApiKey,
             openAIBaseURL: settings.openAIBaseURL,
             openAIModel: settings.openAIModel,
-            responseMode: 'async',
+            responseMode: "async",
             googleCloudProjectId: googleCloudProjectId,
             geminiPath: geminiPath,
           }
@@ -784,13 +821,13 @@ export default function Chat({
 
         clearInterval(interval);
         setShowProcessingModal(false);
-        
+
         // Cleanup tools after init
         try {
           await cleanupManager.cleanupSession(currentSessionId, workspace.id);
           console.log(`[Tools] Cleaned up tools after /init`);
         } catch (cleanupError) {
-          console.warn('[Tools] Failed to cleanup after /init:', cleanupError);
+          console.warn("[Tools] Failed to cleanup after /init:", cleanupError);
         }
 
         // Check if AI actually created or updated the file using tools
@@ -887,14 +924,17 @@ ${args}
             approvalMode: approvalMode,
             model: "gemini-2.5-flash", // Use fast model
             customApiKey: customApiKey,
-            enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+            enabledTools:
+              settings.enabledTools && settings.enabledTools.length > 0
+                ? settings.enabledTools
+                : undefined,
           },
           {
             enableOpenAI: settings.enableOpenAI,
             openAIApiKey: settings.openAIApiKey,
             openAIBaseURL: settings.openAIBaseURL,
             openAIModel: settings.openAIModel,
-            responseMode: 'async',
+            responseMode: "async",
             googleCloudProjectId: googleCloudProjectId,
             geminiPath: geminiPath,
           }
@@ -902,13 +942,16 @@ ${args}
 
         clearInterval(interval);
         setShowProcessingModal(false);
-        
+
         // Cleanup tools after improve
         try {
           await cleanupManager.cleanupSession(currentSessionId, workspace.id);
           console.log(`[Tools] Cleaned up tools after /improve`);
         } catch (cleanupError) {
-          console.warn('[Tools] Failed to cleanup after /improve:', cleanupError);
+          console.warn(
+            "[Tools] Failed to cleanup after /improve:",
+            cleanupError
+          );
         }
 
         // Set the improved message directly to the input field
@@ -1012,14 +1055,14 @@ ${args}
     };
 
     // Mark as typing/request-in-flight for this specific session
-    setTypingSessionIds(prev => new Set(prev).add(currentSessionId));
+    setTypingSessionIds((prev) => new Set(prev).add(currentSessionId));
 
     // Send the user message so it appears in the UI immediately
     onSendMessage(currentSessionId, userMessage);
     setInputValue("");
     // start timer for this specific session
     requestStartTimesRef.current[currentSessionId] = Date.now();
-    setRequestElapsedTimes(prev => ({ ...prev, [currentSessionId]: 0 }));
+    setRequestElapsedTimes((prev) => ({ ...prev, [currentSessionId]: 0 }));
 
     // Clear any existing interval for this session
     if (requestIntervalsRef.current[currentSessionId]) {
@@ -1030,16 +1073,16 @@ ${args}
     requestIntervalsRef.current[currentSessionId] = setInterval(() => {
       const startTime = requestStartTimesRef.current[currentSessionId];
       if (startTime) {
-        setRequestElapsedTimes(prev => ({
+        setRequestElapsedTimes((prev) => ({
           ...prev,
-          [currentSessionId]: Math.floor((Date.now() - startTime) / 1000)
+          [currentSessionId]: Math.floor((Date.now() - startTime) / 1000),
         }));
       }
     }, 1000);
 
     try {
       // Modern tool system handles tools automatically - no setup needed
-      
+
       // Parse includes from input with workspace items for directory verification
       const { includes, directories } = parseIncludes(
         inputValue,
@@ -1049,8 +1092,9 @@ ${args}
       // Build conversation history for context
       // Exclude system messages (summaries) and include all user/assistant messages
       // This ensures the AI has access to the full conversation context
-      const allMessages = currentSession.messages
-        .filter((msg) => msg.role !== "system");
+      const allMessages = currentSession.messages.filter(
+        (msg) => msg.role !== "system"
+      );
 
       const conversationHistoryJson = allMessages.map((msg) => ({
         role: msg.role,
@@ -1079,14 +1123,17 @@ ${args}
         workspaceId: workspace.id,
         sessionId: currentSessionId,
         // Add tool support
-        enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+        enabledTools:
+          settings.enabledTools && settings.enabledTools.length > 0
+            ? settings.enabledTools
+            : undefined,
       };
 
       console.log(
         "Sending message with conversation history:",
         conversationHistory ? "Yes" : "No"
       );
-      
+
       // Store context for potential pause/resume
       const aiSettings = {
         enableOpenAI: settings.enableOpenAI,
@@ -1097,24 +1144,24 @@ ${args}
         googleCloudProjectId: googleCloudProjectId,
         geminiPath: geminiPath,
       };
-      
+
       setPausedContext({
         userPrompt: inputValue,
         options: options,
         settings: aiSettings,
       });
-      
+
       // Response mode handling: async vs stream
       let geminiResponse;
-      if (responseMode === 'stream') {
+      if (responseMode === "stream") {
         // Stream mode - real-time response streaming
-        console.log('Using stream mode with real-time updates');
-        
+        console.log("Using stream mode with real-time updates");
+
         // Initialize streaming state
         setStreamingMessage("");
         setIsStreaming(true);
         let hasReceivedFirstChunk = false;
-        
+
         // Call AI with streaming callback
         geminiResponse = await callAI(
           inputValue,
@@ -1123,24 +1170,24 @@ ${args}
           aiSettings,
           // onChunk callback for streaming updates
           (chunk) => {
-            if (chunk.type === 'text' && chunk.content) {
+            if (chunk.type === "text" && chunk.content) {
               // Mark that we've received first chunk
               if (!hasReceivedFirstChunk) {
                 hasReceivedFirstChunk = true;
-                console.log('First chunk received, starting stream display');
+                console.log("First chunk received, starting stream display");
               }
               // Append chunk to streaming message
-              setStreamingMessage(prev => prev + chunk.content);
-            } else if (chunk.type === 'done') {
-              console.log('Stream completed');
+              setStreamingMessage((prev) => prev + chunk.content);
+            } else if (chunk.type === "done") {
+              console.log("Stream completed");
               setIsStreaming(false);
-            } else if (chunk.type === 'error') {
-              console.error('Stream error:', chunk.error);
+            } else if (chunk.type === "error") {
+              console.error("Stream error:", chunk.error);
               setIsStreaming(false);
             }
           }
         );
-        
+
         // Clear streaming state after completion
         setStreamingMessage("");
         setIsStreaming(false);
@@ -1180,7 +1227,7 @@ ${args}
         await cleanupManager.cleanupSession(currentSessionId, workspace.id);
         console.log(`[Tools] Cleaned up tools for session ${currentSessionId}`);
       } catch (cleanupError) {
-        console.warn('[Tools] Failed to cleanup tools:', cleanupError);
+        console.warn("[Tools] Failed to cleanup tools:", cleanupError);
       }
 
       // Reset request timer for this session
@@ -1199,7 +1246,7 @@ ${args}
         // Try to parse JSON error messages
         let parsedError: any = null;
         try {
-          if (errMessage.startsWith('{')) {
+          if (errMessage.startsWith("{")) {
             parsedError = JSON.parse(errMessage);
           }
         } catch (e) {
@@ -1208,19 +1255,23 @@ ${args}
 
         // Check for quota exceeded error (429)
         if (
-          parsedError?.type === 'QuotaExceededError' ||
+          parsedError?.type === "QuotaExceededError" ||
           parsedError?.code === 429 ||
-          errMessage.includes('Quota exceeded') ||
-          errMessage.includes('429') ||
-          errMessage.includes('RATE_LIMIT_EXCEEDED')
+          errMessage.includes("Quota exceeded") ||
+          errMessage.includes("429") ||
+          errMessage.includes("RATE_LIMIT_EXCEEDED")
         ) {
-          const metric = parsedError?.metric || 'API requests';
-          const details = parsedError?.details || 'リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。';
-          
+          const metric = parsedError?.metric || "API requests";
+          const details =
+            parsedError?.details ||
+            "リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。";
+
           const quotaErrorMessage: ChatMessage = {
             id: (Date.now() + 2).toString(),
             role: "assistant",
-            content: `⚠️ **APIクォータ制限エラー (429)**\n\n**問題:** ${parsedError?.message || `APIクォータ制限に達しました: ${metric}`}\n\n**詳細:**\n${details}\n\n**対処方法:**\n1. ⏰ **時間をおいて再試行** - 数時間後に再度お試しください（通常は翌日にリセットされます）\n2. 🔑 **別のAPIキーを使用** - 設定画面から別のGoogle Cloud APIキーを設定してください\n3. 📊 **使用量を確認** - [Google Cloud Console](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas) でクォータの使用状況を確認できます\n4. 📈 **クォータ制限の引き上げ** - 必要に応じて[こちら](https://cloud.google.com/docs/quotas/help/request_increase)からクォータの引き上げをリクエストできます\n\n**ヒント:**\n- 💡 リクエスト数を減らすために、より簡潔なプロンプトを使用してください\n- 💡 会話履歴が長い場合は \`/compact\` コマンドで圧縮してください`,
+            content: `⚠️ **APIクォータ制限エラー (429)**\n\n**問題:** ${
+              parsedError?.message || `APIクォータ制限に達しました: ${metric}`
+            }\n\n**詳細:**\n${details}\n\n**対処方法:**\n1. ⏰ **時間をおいて再試行** - 数時間後に再度お試しください（通常は翌日にリセットされます）\n2. 🔑 **別のAPIキーを使用** - 設定画面から別のGoogle Cloud APIキーを設定してください\n3. 📊 **使用量を確認** - [Google Cloud Console](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas) でクォータの使用状況を確認できます\n4. 📈 **クォータ制限の引き上げ** - 必要に応じて[こちら](https://cloud.google.com/docs/quotas/help/request_increase)からクォータの引き上げをリクエストできます\n\n**ヒント:**\n- 💡 リクエスト数を減らすために、より簡潔なプロンプトを使用してください\n- 💡 会話履歴が長い場合は \`/compact\` コマンドで圧縮してください`,
             timestamp: new Date(),
           };
           onSendMessage(currentSessionId, quotaErrorMessage);
@@ -1272,7 +1323,7 @@ ${args}
       onSendMessage(currentSessionId, errorMessage);
     } finally {
       // Remove typing state for this specific session
-      setTypingSessionIds(prev => {
+      setTypingSessionIds((prev) => {
         const newSet = new Set(prev);
         newSet.delete(currentSessionId);
         return newSet;
@@ -1283,7 +1334,7 @@ ${args}
         delete requestIntervalsRef.current[currentSessionId];
       }
       // Clear the elapsed time for this session
-      setRequestElapsedTimes(prev => {
+      setRequestElapsedTimes((prev) => {
         const newTimes = { ...prev };
         delete newTimes[currentSessionId];
         return newTimes;
@@ -1330,11 +1381,7 @@ ${args}
         parts.push(text.substring(lastIndex, matchIndex));
       }
       parts.push(
-        React.createElement(
-          "strong",
-          { key: `strong-${idx}` },
-          match[1]
-        )
+        React.createElement("strong", { key: `strong-${idx}` }, match[1])
       );
       lastIndex = regex.lastIndex;
       idx++;
@@ -1515,29 +1562,41 @@ ${args}
                         // If it's a user message, call Gemini API with the new content
                         if (newMessage.role === "user") {
                           // Mark as typing for this specific session
-                          setTypingSessionIds(prev => new Set(prev).add(currentSessionId));
+                          setTypingSessionIds((prev) =>
+                            new Set(prev).add(currentSessionId)
+                          );
                           // Start timer for resend request for this specific session
-                          requestStartTimesRef.current[currentSessionId] = Date.now();
-                          setRequestElapsedTimes(prev => ({ ...prev, [currentSessionId]: 0 }));
+                          requestStartTimesRef.current[currentSessionId] =
+                            Date.now();
+                          setRequestElapsedTimes((prev) => ({
+                            ...prev,
+                            [currentSessionId]: 0,
+                          }));
 
                           // Clear any existing interval for this session
                           if (requestIntervalsRef.current[currentSessionId]) {
-                            clearInterval(requestIntervalsRef.current[currentSessionId]);
+                            clearInterval(
+                              requestIntervalsRef.current[currentSessionId]
+                            );
                           }
 
                           // Start elapsed time counter for this specific session
-                          requestIntervalsRef.current[currentSessionId] = setInterval(() => {
-                            const startTime = requestStartTimesRef.current[currentSessionId];
-                            if (startTime) {
-                              setRequestElapsedTimes(prev => ({
-                                ...prev,
-                                [currentSessionId]: Math.floor((Date.now() - startTime) / 1000)
-                              }));
-                            }
-                          }, 1000);
+                          requestIntervalsRef.current[currentSessionId] =
+                            setInterval(() => {
+                              const startTime =
+                                requestStartTimesRef.current[currentSessionId];
+                              if (startTime) {
+                                setRequestElapsedTimes((prev) => ({
+                                  ...prev,
+                                  [currentSessionId]: Math.floor(
+                                    (Date.now() - startTime) / 1000
+                                  ),
+                                }));
+                              }
+                            }, 1000);
                           try {
                             // Modern tool system handles tools automatically - no setup needed
-                            
+
                             const { includes, directories } = parseIncludes(
                               newMessage.content,
                               workspaceItems
@@ -1551,7 +1610,7 @@ ${args}
                             const previousMessages = currentSession.messages
                               .slice(0, messageIndex)
                               .filter((msg) => msg.role !== "system");
-                              // Include all previous messages for full context
+                            // Include all previous messages for full context
 
                             const conversationHistoryJson =
                               previousMessages.map((msg) => ({
@@ -1587,25 +1646,29 @@ ${args}
                               workspaceId: workspace.id,
                               sessionId: currentSessionId,
                               // Add tool support for resend
-                              enabledTools: settings.enabledTools && settings.enabledTools.length > 0 ? settings.enabledTools : undefined,
+                              enabledTools:
+                                settings.enabledTools &&
+                                settings.enabledTools.length > 0
+                                  ? settings.enabledTools
+                                  : undefined,
                             };
 
                             console.log(
                               "Resending message with conversation history:",
                               conversationHistory ? "Yes" : "No"
                             );
-                            
+
                             let geminiResponse;
-                            
+
                             // Use streaming mode if enabled
-                            if (responseMode === 'stream') {
-                              console.log('Resending with stream mode');
-                              
+                            if (responseMode === "stream") {
+                              console.log("Resending with stream mode");
+
                               // Initialize streaming state
                               setStreamingMessage("");
                               setIsStreaming(true);
                               let hasReceivedFirstChunk = false;
-                              
+
                               // Call AI with streaming callback
                               geminiResponse = await callAI(
                                 newMessage.content,
@@ -1622,23 +1685,30 @@ ${args}
                                 },
                                 // onChunk callback for streaming updates
                                 (chunk) => {
-                                  if (chunk.type === 'text' && chunk.content) {
+                                  if (chunk.type === "text" && chunk.content) {
                                     // Mark that we've received first chunk
                                     if (!hasReceivedFirstChunk) {
                                       hasReceivedFirstChunk = true;
-                                      console.log('Resend: First chunk received');
+                                      console.log(
+                                        "Resend: First chunk received"
+                                      );
                                     }
-                                    setStreamingMessage(prev => prev + chunk.content);
-                                  } else if (chunk.type === 'done') {
-                                    console.log('Resend stream completed');
+                                    setStreamingMessage(
+                                      (prev) => prev + chunk.content
+                                    );
+                                  } else if (chunk.type === "done") {
+                                    console.log("Resend stream completed");
                                     setIsStreaming(false);
-                                  } else if (chunk.type === 'error') {
-                                    console.error('Resend stream error:', chunk.error);
+                                  } else if (chunk.type === "error") {
+                                    console.error(
+                                      "Resend stream error:",
+                                      chunk.error
+                                    );
                                     setIsStreaming(false);
                                   }
                                 }
                               );
-                              
+
                               // Clear streaming state
                               setStreamingMessage("");
                               setIsStreaming(false);
@@ -1775,57 +1845,81 @@ ${args}
                               };
                               onSendMessage(currentSessionId, aiMessage);
                             }
-                            
+
                             // Cleanup tools for resend
                             try {
-                              await cleanupManager.cleanupSession(currentSessionId, workspace.id);
-                              console.log(`[Tools] Cleaned up tools after resend for session ${currentSessionId}`);
+                              await cleanupManager.cleanupSession(
+                                currentSessionId,
+                                workspace.id
+                              );
+                              console.log(
+                                `[Tools] Cleaned up tools after resend for session ${currentSessionId}`
+                              );
                             } catch (cleanupError) {
-                              console.warn('[Tools] Failed to cleanup tools after resend:', cleanupError);
+                              console.warn(
+                                "[Tools] Failed to cleanup tools after resend:",
+                                cleanupError
+                              );
                             }
                           } catch (error) {
                             console.error("Error calling Gemini:", error);
-                            
+
                             // Try to parse and detect quota errors
                             let showedCustomError = false;
                             try {
-                              const errObj = error && typeof error === "object" ? (error as any) : null;
-                              const errMessage = errObj?.message || String(error);
-                              
+                              const errObj =
+                                error && typeof error === "object"
+                                  ? (error as any)
+                                  : null;
+                              const errMessage =
+                                errObj?.message || String(error);
+
                               // Try to parse JSON error messages
                               let parsedError: any = null;
                               try {
-                                if (errMessage.startsWith('{')) {
+                                if (errMessage.startsWith("{")) {
                                   parsedError = JSON.parse(errMessage);
                                 }
                               } catch (e) {
                                 // Not a JSON error, continue with string parsing
                               }
-                              
+
                               // Check for quota exceeded error (429)
                               if (
-                                parsedError?.type === 'QuotaExceededError' ||
+                                parsedError?.type === "QuotaExceededError" ||
                                 parsedError?.code === 429 ||
-                                errMessage.includes('Quota exceeded') ||
-                                errMessage.includes('429') ||
-                                errMessage.includes('RATE_LIMIT_EXCEEDED')
+                                errMessage.includes("Quota exceeded") ||
+                                errMessage.includes("429") ||
+                                errMessage.includes("RATE_LIMIT_EXCEEDED")
                               ) {
-                                const metric = parsedError?.metric || 'API requests';
-                                const details = parsedError?.details || 'リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。';
-                                
+                                const metric =
+                                  parsedError?.metric || "API requests";
+                                const details =
+                                  parsedError?.details ||
+                                  "リクエストの上限に達しました。しばらく時間をおいてから再試行するか、別のAPIキーを使用してください。";
+
                                 const quotaErrorMessage: ChatMessage = {
                                   id: (Date.now() + 3).toString(),
                                   role: "assistant",
-                                  content: `⚠️ **APIクォータ制限エラー (429)**\n\n**問題:** ${parsedError?.message || `APIクォータ制限に達しました: ${metric}`}\n\n**詳細:**\n${details}\n\n**対処方法:**\n1. ⏰ **時間をおいて再試行** - 数時間後に再度お試しください（通常は翌日にリセットされます）\n2. 🔑 **別のAPIキーを使用** - 設定画面から別のGoogle Cloud APIキーを設定してください\n3. 📊 **使用量を確認** - [Google Cloud Console](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas) でクォータの使用状況を確認できます\n4. 📈 **クォータ制限の引き上げ** - 必要に応じて[こちら](https://cloud.google.com/docs/quotas/help/request_increase)からクォータの引き上げをリクエストできます\n\n**ヒント:**\n- 💡 リクエスト数を減らすために、より簡潔なプロンプトを使用してください\n- 💡 会話履歴が長い場合は \`/compact\` コマンドで圧縮してください`,
+                                  content: `⚠️ **APIクォータ制限エラー (429)**\n\n**問題:** ${
+                                    parsedError?.message ||
+                                    `APIクォータ制限に達しました: ${metric}`
+                                  }\n\n**詳細:**\n${details}\n\n**対処方法:**\n1. ⏰ **時間をおいて再試行** - 数時間後に再度お試しください（通常は翌日にリセットされます）\n2. 🔑 **別のAPIキーを使用** - 設定画面から別のGoogle Cloud APIキーを設定してください\n3. 📊 **使用量を確認** - [Google Cloud Console](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas) でクォータの使用状況を確認できます\n4. 📈 **クォータ制限の引き上げ** - 必要に応じて[こちら](https://cloud.google.com/docs/quotas/help/request_increase)からクォータの引き上げをリクエストできます\n\n**ヒント:**\n- 💡 リクエスト数を減らすために、より簡潔なプロンプトを使用してください\n- 💡 会話履歴が長い場合は \`/compact\` コマンドで圧縮してください`,
                                   timestamp: new Date(),
                                 };
-                                onSendMessage(currentSessionId, quotaErrorMessage);
+                                onSendMessage(
+                                  currentSessionId,
+                                  quotaErrorMessage
+                                );
                                 showedCustomError = true;
                               }
                             } catch (parseErr) {
-                              console.error("Error parsing error for quota detection:", parseErr);
+                              console.error(
+                                "Error parsing error for quota detection:",
+                                parseErr
+                              );
                             }
-                            
+
                             // Show default error message if no custom error was shown
                             if (!showedCustomError) {
                               const errorMessage: ChatMessage = {
@@ -1843,18 +1937,22 @@ ${args}
                             }
                           } finally {
                             // Remove typing state for this specific session
-                            setTypingSessionIds(prev => {
+                            setTypingSessionIds((prev) => {
                               const newSet = new Set(prev);
                               newSet.delete(currentSessionId);
                               return newSet;
                             });
                             // Clear the elapsed time counter for this specific session
                             if (requestIntervalsRef.current[currentSessionId]) {
-                              clearInterval(requestIntervalsRef.current[currentSessionId]);
-                              delete requestIntervalsRef.current[currentSessionId];
+                              clearInterval(
+                                requestIntervalsRef.current[currentSessionId]
+                              );
+                              delete requestIntervalsRef.current[
+                                currentSessionId
+                              ];
                             }
                             // Clear the elapsed time for this session
-                            setRequestElapsedTimes(prev => {
+                            setRequestElapsedTimes((prev) => {
                               const newTimes = { ...prev };
                               delete newTimes[currentSessionId];
                               return newTimes;
@@ -1885,7 +1983,11 @@ ${args}
                       // Show streaming content with Markdown rendering (using shared components)
                       // Use useMemo or key to prevent unnecessary re-renders
                       <>
-                        <React.Suspense fallback={<div className="stream-loader">Loading...</div>}>
+                        <React.Suspense
+                          fallback={
+                            <div className="stream-loader">Loading...</div>
+                          }
+                        >
                           <ReactMarkdown components={markdownComponents}>
                             {streamingMessage}
                           </ReactMarkdown>
@@ -2003,7 +2105,7 @@ ${args}
             <button
               className="send-button primary"
               onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping}
+              disabled={!inputValue.trim() || isTyping}
             >
               ➤
             </button>
@@ -2038,7 +2140,10 @@ ${args}
           <div className="warning-content">
             <span className="warning-icon">⚠️</span>
             <span className="warning-text">
-              {t("chat.compactWarning.messageCountExceeded").replace("{maxMessagesBeforeCompact}", maxMessagesBeforeCompact.toString())}
+              {t("chat.compactWarning.messageCountExceeded").replace(
+                "{maxMessagesBeforeCompact}",
+                maxMessagesBeforeCompact.toString()
+              )}
               <br />
               {renderWithStrong(t("chat.compactWarning.recommendCompactOrNew"))}
             </span>

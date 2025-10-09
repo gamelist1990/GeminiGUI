@@ -147,6 +147,7 @@ function App() {
             onOpenSettings={handleOpenSettings}
             onToggleFavorite={toggleFavorite}
             settings={settings}
+            updateSettings={updateSettings}
             globalConfig={globalConfig}
             setupCheckCompleted={setupCheckCompleted}
             onSetupCheckCompleted={() => setSetupCheckCompleted(true)}

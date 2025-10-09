@@ -168,7 +168,8 @@
         "noSessionAvailable": "No sessions available for export",
         "successPdf": "Conversation history exported to PDF successfully",
         "successTxt": "Conversation history exported to text file successfully",
-        "error": "Failed to export conversation history"
+        "error": "Failed to export conversation history",
+        "exportToJSON": "Export to JSON" // New translation key for English
       }
     },
     "role": {

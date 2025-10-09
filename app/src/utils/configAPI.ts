@@ -44,11 +44,13 @@ async function detectDefaultLanguage(): Promise<Language> {
 export class Config {
   private baseDir: string;
   private configFile: string;
+  private configBackupFile: string;
   private chatlistDir: string;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
     this.configFile = `${this.baseDir}\\config.json`;
+    this.configBackupFile = `${this.baseDir}\\config.backup.json`;
     // store chat sessions under Chatrequest/<workspaceId>/<sessionId>.json
     this.chatlistDir = `${this.baseDir}\\Chatrequest`;
   }
@@ -66,6 +68,88 @@ export class Config {
       googleCloudProjectId: undefined, // Google Cloud Project IDのデフォルト値
       tools: [], // Empty tools array by default
     };
+  }
+
+  /**
+   * Validate and clean JSON content before parsing
+   * @param jsonContent Raw JSON string content
+   * @returns Cleaned JSON string
+   */
+  private cleanJsonContent(jsonContent: string): string {
+    // Remove BOM if present
+    if (jsonContent.charCodeAt(0) === 0xFEFF) {
+      jsonContent = jsonContent.slice(1);
+    }
+    
+    // Remove any null characters or other control characters except newlines and tabs
+    jsonContent = jsonContent.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    
+    // Trim whitespace
+    jsonContent = jsonContent.trim();
+    
+    return jsonContent;
+  }
+
+  /**
+   * Safely parse JSON with error recovery
+   * @param jsonContent JSON string to parse
+   * @returns Parsed object or null if parsing fails
+   */
+  private safeJsonParse(jsonContent: string): any | null {
+    try {
+      const cleanedContent = this.cleanJsonContent(jsonContent);
+      
+      if (!cleanedContent || cleanedContent.length === 0) {
+        console.warn('[Config] Empty JSON content detected');
+        return null;
+      }
+      
+      return JSON.parse(cleanedContent);
+    } catch (error) {
+      console.error('[Config] JSON parse error:', error);
+      console.error('[Config] Problematic JSON content (first 500 chars):', jsonContent.substring(0, 500));
+      return null;
+    }
+  }
+
+  /**
+   * Create backup of current config file
+   */
+  private async createConfigBackup(): Promise<void> {
+    try {
+      const configExists = await exists(this.configFile);
+      if (configExists) {
+        const content = await readTextFile(this.configFile);
+        await writeTextFile(this.configBackupFile, content);
+        console.log('[Config] Backup created successfully');
+      }
+    } catch (error) {
+      console.warn('[Config] Failed to create backup:', error);
+    }
+  }
+
+  /**
+   * Restore config from backup if available
+   */
+  private async restoreFromBackup(): Promise<Settings | null> {
+    try {
+      const backupExists = await exists(this.configBackupFile);
+      if (backupExists) {
+        console.log('[Config] Attempting to restore from backup');
+        const backupContent = await readTextFile(this.configBackupFile);
+        const parsedBackup = this.safeJsonParse(backupContent);
+        
+        if (parsedBackup) {
+          console.log('[Config] Successfully restored from backup');
+          // Save the restored backup as the main config
+          await this.saveConfig(parsedBackup);
+          return parsedBackup;
+        }
+      }
+    } catch (error) {
+      console.warn('[Config] Failed to restore from backup:', error);
+    }
+    return null;
   }
 
   /**
@@ -116,25 +200,59 @@ export class Config {
     }
   }
 
-  // Save settings to config.json
+  // Save settings to config.json with atomic write and backup
   async saveConfig(settings: Settings): Promise<void> {
     await this.ensureDir(this.baseDir);
+    
+    // Create backup before saving new config
+    await this.createConfigBackup();
+    
     const json = JSON.stringify(settings, null, 2);
+    
+    // Verify JSON is valid before writing
+    try {
+      JSON.parse(json);
+    } catch (error) {
+      throw new Error(`[Config] Generated invalid JSON: ${error}`);
+    }
+    
     await writeTextFile(this.configFile, json);
+    console.log('[Config] Configuration saved successfully');
   }
 
-  // Load settings from config.json
+  // Load settings from config.json with enhanced error recovery
   async loadConfig(): Promise<Settings | null> {
     try {
       const existsConfig = await exists(this.configFile);
       if (!existsConfig) {
+        console.log('[Config] Config file does not exist, creating default');
         const defaultSettings = await this.buildDefaultSettings();
         await this.saveConfig(defaultSettings);
         return defaultSettings;
       }
+      
       const json = await readTextFile(this.configFile);
-      const parsedSettings = JSON.parse(json);
-      // デフォルト設定と読み込んだ設定をmerge (既存フィールドは上書き保持)
+      console.log('[Config] Raw config file length:', json.length);
+      
+      const parsedSettings = this.safeJsonParse(json);
+      
+      if (!parsedSettings) {
+        console.warn('[Config] Failed to parse config file, attempting backup recovery');
+        
+        // Try to restore from backup
+        const restoredSettings = await this.restoreFromBackup();
+        if (restoredSettings) {
+          return restoredSettings;
+        }
+        
+        // If backup also fails, create new default config
+        console.warn('[Config] Backup recovery failed, creating new default config');
+        const defaultSettings = await this.buildDefaultSettings();
+        await this.saveConfig(defaultSettings);
+        return defaultSettings;
+      }
+      
+      // Merge with default settings to ensure all required fields are present
       const defaultSettings = await this.buildDefaultSettings();
       const finalSettings = { ...defaultSettings, ...parsedSettings };
       
@@ -143,22 +261,31 @@ export class Config {
         finalSettings.tools = await this.validateAndCleanupTools(finalSettings.tools);
       }
       
+      console.log('[Config] Configuration loaded successfully');
       return finalSettings;
+      
     } catch (error: any) {
-      console.error('Failed to load config:', error);
-      // No local fallback available; try to ensure base dir and create default config file
-      // Try to ensure base dir and create default config, if possible
+      console.error('[Config] Failed to load config:', error);
+      
+      // Try to restore from backup first
+      const restoredSettings = await this.restoreFromBackup();
+      if (restoredSettings) {
+        return restoredSettings;
+      }
+      
+      // Last resort: create fresh default config
       try {
         await this.ensureDir(this.baseDir);
         const defaultSettings = await this.buildDefaultSettings();
         try {
           await writeTextFile(this.configFile, JSON.stringify(defaultSettings, null, 2));
+          console.log('[Config] Created fresh default configuration');
         } catch (err) {
-          console.warn('Could not write default config file, but returning defaults:', err);
+          console.warn('[Config] Could not write default config file, but returning defaults:', err);
         }
         return defaultSettings;
       } catch (err) {
-        console.error('Failed to recover config by creating defaults:', err);
+        console.error('[Config] Failed to recover config by creating defaults:', err);
         return null;
       }
     }

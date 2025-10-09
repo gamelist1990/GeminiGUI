@@ -57,13 +57,26 @@ const SetupModal: React.FC<SetupModalProps> = ({
 
   useEffect(() => {
     if (isOpen && currentStep === "checking") {
-      performCheck();
+      // モーダルが開いてから少し待ってから処理を開始
+      // アプリケーション起動時の自動チェックの場合はより長めに待つ
+      const timer = setTimeout(() => {
+        performCheck();
+      }, 500); // 500ms待つ
+      return () => clearTimeout(timer);
+    } else if (!isOpen) {
+      // モーダルが閉じられたら状態をリセット
+      setCurrentStep("checking");
+      setLogs([]);
+      setCanProceed(false);
+      setIsProcessing(false);
     }
   }, [isOpen]);
 
   const performCheck = async () => {
     setIsProcessing(true);
     addLog(t("setup.logs.checkingStart"));
+    addLog("Gemini CLI のセットアップを確認しています...");
+    addLog(""); // 空行を追加して読みやすくする
 
     try {
       // If config indicates auth is already completed, skip running the full geminiCheck

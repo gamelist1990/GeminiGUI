@@ -54,14 +54,10 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
           return result;
         }
 
-        // Gemini CLI の存在確認
+        // Gemini CLI の存在確認 - npmパッケージの存在を確認
         log(t('setup.logs.geminiCheck'));
-        const geminiCheck = await Command.create('powershell.exe', [
-          '-Command',
-          'Get-Command gemini -ErrorAction SilentlyContinue',
-        ]).execute();
-
-        if (geminiCheck.code === 0 && geminiCheck.stdout.trim()) {
+        const detectedPaths = await detectGlobalNpmPath(log);
+        if (detectedPaths.hasGeminiCLI) {
           result.geminiExists = true;
           log(t('setup.logs.geminiFound'));
           
@@ -70,6 +66,7 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
           try {
             const hasProject = await hasCloudProject(log);
             result.hasProject = hasProject;
+            log(`hasCloudProject result: ${hasProject}`);
             
             if (hasProject) {
               log('✓ Google Cloud Projectが見つかりました');
@@ -106,14 +103,10 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
       return result;
     }
 
-    // Gemini CLI (ps1) の存在確認
+    // Gemini CLI (npmパッケージ) の存在確認
     log(t('setup.logs.geminiCheck'));
-    const geminiCheck = await Command.create('powershell.exe', [
-      '-Command',
-      'Get-Command gemini -ErrorAction SilentlyContinue',
-    ]).execute();
-
-    if (geminiCheck.code === 0 && geminiCheck.stdout.trim()) {
+    const detectedPaths = await detectGlobalNpmPath(log);
+    if (detectedPaths.hasGeminiCLI) {
       result.geminiExists = true;
       log(t('setup.logs.geminiFound'));
       
@@ -121,7 +114,7 @@ export async function geminiCheck(log: LogFunction): Promise<CheckResult> {
       log(t('setup.logs.authCheck'));
       const authCheckCommand = await Command.create('powershell.exe', [
         '-Command',
-        'Test-Path "$env:USERPROFILE\\.gemini\\google_accounts.json"',
+        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Test-Path "$env:USERPROFILE\\.gemini\\google_accounts.json"',
       ]).execute();
 
       if (authCheckCommand.code === 0) {
@@ -197,7 +190,7 @@ export const setupGemini = {
 
       const installCommand = await Command.create('powershell.exe', [
         '-Command',
-        'npm install -g @google/gemini-cli',
+        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm install -g @google/gemini-cli',
       ]).execute();
 
       if (installCommand.code === 0) {
@@ -431,6 +424,7 @@ export const setupGemini = {
 
 /**
  * npm -g list を実行してグローバルインストールパスとGemini CLIの存在を確認
+ * 見つからない場合は自動的にインストールを試行
  */
 export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?: string; hasGeminiCLI: boolean }> {
   try {
@@ -438,38 +432,88 @@ export async function detectGlobalNpmPath(log?: LogFunction): Promise<{ npmPath?
       log('npm -g list を実行してグローバルインストールパスを検知しています...');
     }
 
-    // npm -g list を実行してグローバルnpmパスを取得
-    const npmListCommand = await Command.create('powershell.exe', [
+    // npm config get prefix でグローバルnpmパスを取得
+    const npmConfigCommand = await Command.create('powershell.exe', [
       '-Command',
-      'npm config get prefix',
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm config get prefix',
     ]).execute();
 
-    if (npmListCommand.code !== 0) {
-      const errorMsg = npmListCommand.stderr || 'npm config get prefixの実行に失敗しました';
+    if (npmConfigCommand.code !== 0) {
+      const errorMsg = npmConfigCommand.stderr || 'npm config get prefixの実行に失敗しました';
       if (log) {
         log(`✗ npmグローバルパス検知エラー: ${errorMsg}`);
       }
       return { hasGeminiCLI: false };
     }
 
-    const npmPrefix = npmListCommand.stdout.trim();
+    const npmPrefix = npmConfigCommand.stdout.trim();
     if (log && npmPrefix) {
       log(`✓ npmグローバルインストールパスを検知: ${npmPrefix}`);
     }
 
-    // npm -g listを実行して@google/gemini-cliの存在を確認
-    const geminiCheckCommand = await Command.create('powershell.exe', [
+    // npm -g list を実行してパッケージリストを取得し、@google/gemini-cliの存在を確認
+    if (log) {
+      log('Gemini CLI の存在を確認しています...');
+    }
+
+    const npmListCommand = await Command.create('powershell.exe', [
       '-Command',
-      'npm list -g @google/gemini-cli',
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm -g list',
     ]).execute();
 
-    const hasGeminiCLI = geminiCheckCommand.code === 0 && !geminiCheckCommand.stderr.includes('empty');
+    if (npmListCommand.code !== 0) {
+      const errorMsg = npmListCommand.stderr || 'npm -g listの実行に失敗しました';
+      if (log) {
+        log(`✗ npmパッケージリスト取得エラー: ${errorMsg}`);
+      }
+      return { npmPath: npmPrefix, hasGeminiCLI: false };
+    }
+
+    const npmListOutput = npmListCommand.stdout;
+    const hasGeminiCLI = npmListOutput.includes('@google/gemini-cli');
 
     if (log) {
       if (hasGeminiCLI) {
         log('✓ @google/gemini-cli がインストールされていることを確認しました');
+        // バージョン情報も表示
+        const versionMatch = npmListOutput.match(/@google\/gemini-cli@([\d.]+)/);
+        if (versionMatch) {
+          log(`📦 バージョン: ${versionMatch[1]}`);
+        }
       } else {
         log('✗ @google/gemini-cli がインストールされていません');
+        log('自動的にインストールを開始します...');
+
+        // 自動インストールを実行
+        const installCommand = await Command.create('powershell.exe', [
+          '-Command',
+          '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm install -g @google/gemini-cli',
+        ]).execute();
+
+        if (installCommand.code === 0) {
+          log('✓ @google/gemini-cli のインストールが完了しました');
+          if (installCommand.stdout) {
+            log(`インストール出力: ${installCommand.stdout.trim()}`);
+          }
+          // インストール成功したので再度確認
+          const verifyCommand = await Command.create('powershell.exe', [
+            '-Command',
+            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; npm -g list',
+          ]).execute();
+
+          if (verifyCommand.code === 0 && verifyCommand.stdout.includes('@google/gemini-cli')) {
+            log('✓ インストールの確認が完了しました');
+            return { npmPath: npmPrefix, hasGeminiCLI: true };
+          } else {
+            log('⚠️ インストールは完了しましたが、確認に失敗しました');
+            return { npmPath: npmPrefix, hasGeminiCLI: false };
+          }
+        } else {
+          const errorMsg = installCommand.stderr || 'インストールに失敗しました';
+          log(`✗ 自動インストールに失敗しました: ${errorMsg}`);
+          log('手動で以下のコマンドを実行してください: npm install -g @google/gemini-cli');
+          return { npmPath: npmPrefix, hasGeminiCLI: false };
+        }
       }
     }
 

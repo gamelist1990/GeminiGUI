@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Settings } from '../../types';
 import { t } from '../../utils/i18n';
 import SetupModal from '../Setup';
-import { geminiCheck, detectGlobalNpmPath } from '../../utils/setupAPI';
+import { detectGlobalNpmPath } from '../../utils/setupAPI';
 import './SystemSettings.css';
 
 interface SystemSettingsProps {
@@ -22,17 +22,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpda
     try {
       setIsChecking(true);
       setSetupCheckStatus(null);
-      const setupState = await geminiCheck(() => {});
-      
-      if (setupState.geminiExists) {
-        setSetupCheckStatus(t('settings.setupOk'));
-      } else {
-        setShowSetupModal(true);
-      }
+      // セットアップ確認モードでSetupModalを開く
+      setShowSetupModal(true);
+      // モーダルが完全に表示されるまで待つ
+      await new Promise(resolve => setTimeout(resolve, 200));
     } catch (error) {
       setSetupCheckStatus(t('settings.setupCheckError'));
       console.error('Setup check error:', error);
-    } finally {
       setIsChecking(false);
     }
   };
@@ -138,10 +134,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpda
         <div className="card-content">
           <button 
             onClick={handleCheckSetup}
-            disabled={isChecking}
+            disabled={isChecking || showSetupModal}
             className="setting-button"
           >
-            {isChecking ? '確認中...' : t('settings.checkSetup')}
+            {isChecking || showSetupModal ? '確認中...' : t('settings.checkSetup')}
           </button>
           {setupCheckStatus && (
             <p className={`setting-description ${setupCheckStatus.includes('✓') ? 'highlight' : 'warning'}`}>
@@ -173,8 +169,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpda
           isOpen={showSetupModal}
           onComplete={() => {
             setShowSetupModal(false);
-            handleCheckSetup();
+            setIsChecking(false);
+            setSetupCheckStatus('セットアップ確認が完了しました。');
           }}
+          globalConfig={globalConfig}
         />
       )}
     </div>

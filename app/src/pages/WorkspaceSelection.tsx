@@ -14,6 +14,7 @@ interface WorkspaceSelectionProps {
   onOpenSettings: () => void;
   onToggleFavorite: (id: string) => void;
   settings: Settings; // 設定を受け取る
+  updateSettings: (settings: Partial<Settings>) => void; // 設定更新関数
   globalConfig: Config; // グローバルconfig.jsonを受け取る
   setupCheckCompleted: boolean; // セットアップチェック完了フラグ
   onSetupCheckCompleted: () => void; // セットアップチェック完了コールバック
@@ -26,6 +27,7 @@ export default function WorkspaceSelection({
   onOpenSettings,
   onToggleFavorite,
   settings,
+  updateSettings,
   globalConfig,
   setupCheckCompleted,
   onSetupCheckCompleted,
@@ -125,22 +127,22 @@ export default function WorkspaceSelection({
         const result = await geminiCheck(logCallback);
 
         logCallback(`Result: ${JSON.stringify(result)}`);
+        logCallback(`Detailed result breakdown:`);
+        logCallback(`  - geminiExists: ${result.geminiExists}`);
+        logCallback(`  - nodeExists: ${result.nodeExists}`);
+        logCallback(`  - isAuthenticated: ${result.isAuthenticated}`);
+        logCallback(`  - hasProject: ${result.hasProject}`);
 
-        // Show setup modal if Gemini CLI is not installed OR not authenticated OR no cloud project
-        if (!result.geminiExists || !result.isAuthenticated) {
-          logCallback('セットアップが必要です (CLI未インストールまたは未認証)');
+        // セットアップが必要な条件をチェック
+        const needsSetup = !result.geminiExists || !result.nodeExists || !result.isAuthenticated || result.hasProject === false;
+
+        if (needsSetup) {
+          logCallback('セットアップが必要なため、SetupModalを表示します');
           setShowSetupModal(true);
-        } else if (result.hasProject === false) {
-          logCallback('セットアップが必要です (Cloud Projectなし)');
-          setShowSetupModal(true);
-        } else if (result.hasProject === true) {
-          logCallback('✓ セットアップは不要です (すべて完了)');
-          // プロジェクトが存在する場合のみセットアップ完了
-          setShowSetupModal(false);
+          // モーダルが完全に表示されるまで待つ
+          await new Promise(resolve => setTimeout(resolve, 100));
         } else {
-          // hasProjectがundefinedの場合（チェック失敗）は念のためセットアップ表示
-          logCallback('プロジェクトチェック結果不明、セットアップを表示');
-          setShowSetupModal(true);
+          logCallback('セットアップは不要です');
         }
 
         // チェック完了フラグを設定（アプリケーションレベルで保持）
@@ -150,6 +152,8 @@ export default function WorkspaceSelection({
         logCallback(`Failed to check Gemini setup: ${error}`);
         // Show setup modal on error as well
         setShowSetupModal(true);
+        // モーダルが完全に表示されるまで待つ
+        await new Promise(resolve => setTimeout(resolve, 100));
         onSetupCheckCompleted();
       } finally {
         setIsCheckingSetup(false);
@@ -163,9 +167,15 @@ export default function WorkspaceSelection({
     }
   }, [settings.geminiAuth, setupCheckCompleted, onSetupCheckCompleted, globalConfig, settings]);
 
-  const handleSetupComplete = () => {
+  const handleSetupComplete = async () => {
     setShowSetupModal(false);
-    // セットアップ完了はconfig.jsonに保存される
+    // セットアップ完了後に設定を再読み込みしてgeminiAuthを更新
+    if (globalConfig) {
+      const updatedSettings = await globalConfig.loadConfig();
+      if (updatedSettings) {
+        updateSettings(updatedSettings);
+      }
+    }
   };
 
   // Filter out favorite workspaces from recent workspaces to avoid duplicates
