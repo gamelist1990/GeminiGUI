@@ -8,7 +8,7 @@ applyTo: '**'
 - 目標: ユーザー要求を満たすために最小限かつ安全な手順でタスクを完遂し、成果を分かりやすく報告すること
 - 優先順位: 「安全」「最小権限」「ワークスペース境界の順守」を常に最優先
 - 透明性: 何を、なぜ、どうやって実行するかを各ステップで簡潔に記録し、意思決定理由を一文で明示
-- 安全策: 機密情報は表示しない（取り扱い方のみ指示）。外部ネットワーク/実ファイル操作/環境変更は事前にユーザーの明示的許可が必須。ファイル/フォルダの削除や移動などの実ファイル操作を行う場合は、必ずWindowsのPowerShell（powershell.exe）コマンドを使用することを明示してください。例: powershell.exe -Command "Remove-Item -Recurse -Force 'C:\path\to\target'" や powershell.exe -Command "Move-Item 'C:\src\file' 'C:\dst\file'" のように、実行コマンドをpowershell.exe経由で示すこと。法的・倫理的に問題のある要求は即時に拒否し、理由を説明
+ファイル/フォルダの削除や移動などの実ファイル操作を行う場合は、必ずWindowsのPowerShell（powershell.exe）コマンドを使用することを明示してください。例: powershell.exe -Command "Remove-Item -Recurse -Force 'C:\path\to\target'" や powershell.exe -Command "Move-Item 'C:\src\file' 'C:\dst\file'" のように
 
 # 手順と基準
 
@@ -157,3 +157,36 @@ applyTo: '**'
 - 機密情報: 値を表示しない。保管・設定方法のみ記述
 - 法令・倫理: 違法、有害、ライセンス違反が疑われる場合は理由を添えて拒否し、代替案や安全な方針を提案
 - 不確実性: 情報が不足する場合は仮定を置かず、必須の確認質問を優先（最大3つ）。非ブロッキングな詳細は後続で詰める
+
+# 逐一TODO更新ルール（必須・追加）
+
+- 目的: 各タスク完了時に必ずリポジトリ内のTODO一覧を更新し、作業状況を即時反映することで管理漏れを防止します。
+- 適用範囲: すべてのタスク実行サイクル（設計→実装→テスト→ドキュメント等）。Agentはタスク完了後に以下の手順を実行すること。
+
+必須手順（最小権限での運用）
+1. TODO一覧ファイルの更新
+   - 所定のファイル: CurrentTODO.md を使用（存在しない場合は作成）。
+   - 行形式（例）:
+     - [x] T<ID>: 短い説明 — 完了者: <actor> — 完了日時: <ISO8601>
+     - [ ] T<ID>: 短い説明 — 担当: <actor> — 期限: <date>
+2. 変更ファイル内のTODOコメント更新
+   - 修正したファイルに残るTODOコメントは「DONE:」や「RESOLVED:」でマークし、必要なら短い注記を追加する。
+3. コミットとプッシュ（操作をする場合はユーザー許可が必要）
+   - コミットメッセージ例: "TODO: T<ID> completed — <short description>"
+   - 実ファイル操作を行う際は、必ず PowerShell を使って明示的にコマンドを実行する（例は下記）。
+
+PowerShellでの更新例（例示 — 実行前にユーザー承認を得ること）
+- TODO.md に完了行を追加する（簡易例）:
+  powershell.exe -Command "$t = (Get-Date).ToString('s'); Add-Content -Path '.github/TODO.md' -Value \"- [x] T1: 実装API — 完了者: whoami — 完了日時: $t\""
+
+- ファイル内TODOコメントを置換する例（ファイル内の "TODO: T1" を "DONE: T1" に置換）:
+  powershell.exe -Command "(Get-Content 'src/path/to/file.ts') -replace 'TODO: T1','DONE: T1' | Set-Content 'src/path/to/file.ts'"
+
+運用上の注意
+- 実際にリポジトリを変更する前に必ずユーザーの許可を得ること（Agentの安全策・最小権限方針）。
+- TODO更新はタスクの結論（完了/保留/中止）を明記し、誰がいつ行ったかを記録すること。
+- 自動化スクリプトを作る場合は、コミット前に差分の確認を必須にすること。
+
+テンプレート: .github/TODO.md（例）
+- [ ] T1: 設計レビュー — 担当: alice — 期限: 2025-10-12
+- [x] T2: API実装 — 完了者: bob — 完了日時: 2025-10-08T14:23:00

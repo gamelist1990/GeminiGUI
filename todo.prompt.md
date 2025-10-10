@@ -1,48 +1,57 @@
-## GeminiGUI 設定画面 UI アップデート TODOリスト
+## バグ調査およびクロスプラットフォーム互換性向上タスク
 
-### 概要
-GeminiGUI プロジェクトの設定画面において、古いセットアップ UI が表示される問題を解決し、新しい UI デザインへ完全に移行してください。古い UI コンポーネントや関連コードはすべて削除し、最新の UI/UX ガイドラインに準拠した設定画面を実装します。
-
----
-
-### Phase 1: 現状調査・計画
-
-- [ ] `app` ディレクトリ内の設定画面関連ファイル（例: `app/src/settings`, `app/src/components/Settings*` など）を特定し、古い UI 実装箇所をリストアップする
-- [ ] 新しい設定画面のUI仕様・デザインガイドラインを `docs/` または `README.md` にまとめる（必要に応じて）
-
-### Phase 2: 新UI実装
-
-- [ ] `app/src/components/Settings*` または該当するファイルで新しいUIコンポーネントを作成・既存のものをアップデート
-  - TypeScript/React（または使用中のフレームワーク）で最新UIを実装
-  - 必要に応じて `app/src/styles/` のCSSも更新
-- [ ] 古いUIコンポーネント・スタイル・ロジックをすべて削除
-  - 例: `app/src/components/OldSettings*` など
-- [ ] 設定画面のルーティングや表示ロジック（例: `app/src/App.tsx` や `app/src/routes/`）を新UIに合わせて修正
-
-### Phase 3: 統合・テスト
-
-- [ ] 新しい設定画面の動作確認（全プラットフォーム: Windows, macOS, Linux）
-- [ ] 既存のユニットテスト・E2Eテスト（例: `app/tests/`）を新UIに合わせて修正・追加
-- [ ] 古いUIが一切表示されないことを確認
-
-### Phase 4: ドキュメント・レビュー
-
-- [ ] 新しい設定画面の使い方・仕様を `docs/` または `README.md` に追記
-- [ ] コードレビューを実施し、不要な依存やコードが残っていないか確認
+以下の手順に従い、GeminiGUIプロジェクト内の潜在的なバグ（Null Pointer例外を含む）や、他のPC・異なる環境で発生しうる問題を特定・修正してください。TypeScript、Rust、Pythonの各主要コンポーネントを対象とします。
 
 ---
 
-#### 受け入れ基準
+### Phase 1: 調査・分析
 
-- 設定画面で新しいUIのみが表示され、古いUI要素・コードが完全に削除されている
-- 主要な機能・設定項目が新UIで正しく動作する
-- ドキュメントが最新状態に更新されている
-- すべてのテストがパスしている
+- [ ] `app/` ディレクトリ内のTypeScript/JavaScriptコードで、未初期化変数やNull/Undefinedアクセスの可能性がある箇所を静的解析ツール（例: `tsc`, `eslint`）で検出
+- [ ] Rustコード（`Tool/` ディレクトリ等）に対し、`cargo check` および `clippy` を用いてNull参照や未処理のエラーを洗い出し
+- [ ] Pythonスクリプト（例: `proxy_server.py`）に対し、`mypy` や `pylint` で型安全性・例外処理漏れを確認
+- [ ] OS依存パスや環境変数、ファイルアクセス権限など、クロスプラットフォームで問題となりうる箇所を全体でリストアップ
+
+#### Acceptance Criteria
+- 静的解析レポートを `docs/bug_report.md` にまとめる
+- 各言語ごとに主要な問題点を箇条書きで記載
 
 ---
 
-#### 参考
+### Phase 2: 修正・改善
 
-- 設定画面の既存実装: `app/src/components/Settings*`, `app/src/App.tsx`
-- ドキュメント: `docs/`, `README.md`
-- スタイル: `app/src/styles/`
+- [ ] `app/` 配下のTypeScriptコードで、NullチェックやOptional Chaining（`?.`）の追加、型定義の厳格化を実施
+- [ ] Rustコードで `Option` や `Result` の適切な利用、`unwrap()` の排除、エラーハンドリングの強化
+- [ ] Pythonコードで `None` チェック、例外処理（`try/except`）の追加、型アノテーションの明示
+- [ ] OS依存コード（パス結合、ファイル操作等）を `pathlib`（Python）、`std::path`（Rust）、`path` モジュール（Node.js）等で抽象化
+- [ ] 必要に応じて `.venv/` や依存パッケージのバージョン固定（`requirements-proxy.txt`、`package.json`等）を見直し
+
+#### Acceptance Criteria
+- 主要なNull Pointer例外・未初期化変数アクセスが全て修正されている
+- クロスプラットフォームでの動作に影響するコードが抽象化・修正されている
+
+---
+
+### Phase 3: テスト・検証
+
+- [ ] 各修正箇所に対し、ユニットテスト・統合テストを追加（`app/`、`Tool/`、`proxy_server.py`等）
+- [ ] Windows, macOS, Linuxの各環境で主要機能の動作確認
+- [ ] テスト結果・動作確認内容を `docs/bug_report.md` に追記
+
+#### Acceptance Criteria
+- すべてのテストがパスし、主要機能が各OSで正常動作すること
+
+---
+
+### Phase 4: ドキュメント更新
+
+- [ ] 修正内容・既知の制約事項を `README.md` および `docs/bug_report.md` に明記
+- [ ] 必要に応じて `TauriPlugin.md` など関連ドキュメントも更新
+
+#### Acceptance Criteria
+- ドキュメントに修正内容・再発防止策・クロスプラットフォーム対応状況が明記されている
+
+---
+
+**備考:**  
+各タスクの進捗・課題は `docs/bug_report.md` に随時記録してください。  
+修正は必ずブランチを分けて行い、プルリクエスト時にレビュワーが再現・検証できるようにしてください。
