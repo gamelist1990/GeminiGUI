@@ -291,12 +291,40 @@ export default function Chat({
 
   // Handle command and file suggestions
   useEffect(() => {
-    const text = inputValue.substring(0, cursorPosition);
-    const lastWord = text.split(/\s/).pop() || '';
+    const text = inputValue;
+    const cursorPos = cursorPosition;
+    
+    // Find the current word at cursor position for commands and file suggestions
+    let currentWordStart = cursorPos - 1;
+    let currentWordEnd = cursorPos;
+    let foundPrefix = '';
+    let query = '';
+
+    // Look backwards to find # or / prefix
+    while (currentWordStart >= 0) {
+      const char = text[currentWordStart];
+      if (char === '#' || char === '/') {
+        foundPrefix = char;
+        break;
+      }
+      if (char === ' ' || char === '\n') {
+        break; // Hit whitespace, no prefix found
+      }
+      currentWordStart--;
+    }
+
+    if (foundPrefix) {
+      // Extract query after the prefix
+      const queryStart = currentWordStart + 1;
+      let queryEnd = cursorPos;
+      while (queryEnd < text.length && text[queryEnd] !== ' ' && text[queryEnd] !== '\n' && text[queryEnd] !== '#' && text[queryEnd] !== '/') {
+        queryEnd++;
+      }
+      query = text.substring(queryStart, queryEnd).toLowerCase();
+    }
 
     // Command suggestions
-    if (lastWord.startsWith('/')) {
-      const query = lastWord.substring(1).toLowerCase();
+    if (foundPrefix === '/') {
       const commands = ['compact', 'fixchat', 'init'];
       const filtered = commands.filter(cmd => cmd.startsWith(query));
       setCommandSuggestions(filtered);
@@ -304,8 +332,7 @@ export default function Chat({
       setShowFileSuggestions(false);
     }
     // File suggestions
-    else if (lastWord.startsWith('#')) {
-      const query = lastWord.substring(1).toLowerCase(); // Remove # for matching
+    else if (foundPrefix === '#') {
       // Debounced workspace rescan to refresh suggestions in real-time when typing '#'
       if (scanDebounceRef.current) clearTimeout(scanDebounceRef.current);
       scanDebounceRef.current = setTimeout(() => {
@@ -357,15 +384,44 @@ export default function Chat({
     const text = inputValue;
     const cursorPos = cursorPosition;
 
-    // Find the start of the current word (command or file)
-    let wordStart = cursorPos - 1;
-    while (wordStart >= 0 && text[wordStart] !== ' ' && text[wordStart] !== '\n') {
-      wordStart--;
+    let wordStart = cursorPos;
+    let wordEnd = cursorPos;
+
+    // For commands starting with /
+    if (suggestion.startsWith('/')) {
+      // Find the start of the command (look backwards for /)
+      wordStart = cursorPos - 1;
+      while (wordStart >= 0 && text[wordStart] !== '/' && text[wordStart] !== ' ' && text[wordStart] !== '\n') {
+        wordStart--;
+      }
+      if (wordStart >= 0 && text[wordStart] === '/') {
+        // Include the / in the replacement
+      } else {
+        wordStart = cursorPos; // No / found, insert at cursor
+      }
     }
-    wordStart++;
+    // For file suggestions starting with #
+    else if (suggestion.startsWith('#')) {
+      // Find the start of the # tag (look backwards for #)
+      wordStart = cursorPos - 1;
+      while (wordStart >= 0 && text[wordStart] !== '#' && text[wordStart] !== ' ' && text[wordStart] !== '\n') {
+        wordStart--;
+      }
+      if (wordStart >= 0 && text[wordStart] === '#') {
+        // Include the # in the replacement
+      } else {
+        wordStart = cursorPos; // No # found, insert at cursor
+      }
+
+      // Find the end of the current word (look forwards for whitespace)
+      wordEnd = cursorPos;
+      while (wordEnd < text.length && text[wordEnd] !== ' ' && text[wordEnd] !== '\n') {
+        wordEnd++;
+      }
+    }
 
     const before = text.substring(0, wordStart);
-    const after = text.substring(cursorPos);
+    const after = text.substring(wordEnd);
     // Suggestion already includes the prefix (# or /)
     const newText = before + suggestion + ' ' + after;
 
