@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Settings } from '../../types';
 import { t } from '../../utils/i18n';
-import SetupModal from '../Setup';
+import ModernSetup from '../ModernSetup';
 import { detectGlobalNpmPath } from '../../utils/setupAPI';
 import './SystemSettings.css';
 
@@ -165,7 +165,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpda
 
       {/* Setup Modal */}
       {showSetupModal && (
-        <SetupModal 
+        <ModernSetup 
           isOpen={showSetupModal}
           onComplete={() => {
             setShowSetupModal(false);

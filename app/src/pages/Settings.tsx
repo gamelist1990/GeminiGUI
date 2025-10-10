@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Settings as SettingsType, ToolConfig } from '../types';
 import { t } from '../utils/i18n';
-import SetupModal from './Setup';
+import ModernSetup from './ModernSetup';
 import { detectGlobalNpmPath } from '../utils/setupAPI';
 import { Config } from '../utils/configAPI';
 import ModernToolSettingsPanel from '../components/ModernToolSettingsPanel';
@@ -27,7 +27,7 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
   };
 
   const handleCheckGeminiSetup = async () => {
-    // SetupModal を直接開いてチェックを実行（セットアップ確認モード）
+    // ModernSetup を開いてセットアップ確認モードで表示
     setShowSetupModal(true);
   };
 
@@ -93,7 +93,7 @@ export default function Settings({ settings, onUpdateSettings, onClose, globalCo
 
   return (
     <div className="settings-page">
-      <SetupModal isOpen={showSetupModal} onComplete={handleSetupComplete} globalConfig={globalConfig} />
+      <ModernSetup isOpen={showSetupModal} onComplete={handleSetupComplete} globalConfig={globalConfig} />
       
       <div className="settings-container">
         <div className="settings-header">
